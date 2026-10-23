@@ -1,0 +1,175 @@
+using System;
+using UnityEngine;
+
+namespace SpatialMAS.Core
+{
+    /// <summary>
+    /// Central event and command bus that decouples External OSC controllers, Built-in Scenarios,
+    /// XR Hand/Head interactions, Spatial Audio, and CSV Telemetry Logging.
+    /// Both External OSC and Internal Scenarios drive the world through this unified contract.
+    /// </summary>
+    public class SimulationCommandBus
+    {
+        // --- Agent Lifecycle & State Commands ---
+        public event Action<AgentShapeType, AgentMovementMode, int, float, string, int> OnInstantiateAgents;
+        public event Action<AgentShapeType, AgentMovementMode, float, string, int, int[]> OnAddAgents;
+        public event Action<int[]> OnRemoveAgents; // null or empty = remove all
+        public event Action<int, Vector3> OnSetAgentPositionUnity;
+        public event Action<Vector3[]> OnSetBatchAgentPositionsUnity;
+        public event Action<int, Color> OnSetAgentColor;
+        public event Action<Color[]> OnSetBatchAgentColors;
+        public event Action<int, bool> OnSetAgentInteractable;
+
+        // --- Local Communication Commands ---
+        public event Action<string, int, float, float, object[]> OnTriggerLocalComm;
+
+        // --- Audio & DSP Synth Commands ---
+        public event Action<int, bool> OnSetAgentMute; // agentId = -1 means mute/unmute all
+        public event Action<int, int, int, int> OnSetAgentSynthNote; // id, noteAction (1/0), midiNote, velocity
+        public event Action<int, int, float> OnSetAgentSynthParam;   // id, ccId, value
+        public event Action<int, int, int, float> OnSetAgentAudioBank; // id, clipIndex, playAction, gain
+
+        // --- Boundary & Environment Commands ---
+        public event Action<int, AgentShapeType, Vector3, float> OnAddBoundaryUnity;
+        public event Action<int, Vector3, float> OnUpdateBoundaryUnity;
+        public event Action<int> OnRemoveBoundary; // id = -1 means remove all
+        public event Action<int, Vector3, Vector3, float> OnSetArrowUnity;
+        public event Action<int> OnRemoveArrow; // id = -1 means remove all
+
+        // --- Audio Listener Commands ---
+        public event Action<Vector3> OnSetListenerPositionUnity;
+        public event Action<Quaternion> OnSetListenerRotationUnity;
+        public event Action<bool> OnSetListenerLockedToHead;
+
+        // --- SpatialMAS v2 XR & Scenario Commands ---
+        public event Action<XRDisplayMode> OnSetXRDisplayMode;
+        public event Action<float> OnSetWorldScale;
+        public event Action<Vector3> OnSetOriginOffset;
+        public event Action<bool, float, float> OnConfigureUserRepeller;
+        public event Action<int> OnLoadScenario;
+        public event Action<string, float> OnSetScenarioParam;
+        public event Action<bool> OnSetRecordingState;
+        public event Action<string, int, float> OnTestAliveReceived;
+
+        // --- Outgoing World Feedback Events (World/XR -> OSC Client & Scenarios & Logger) ---
+        public event Action<int, Vector3> OnAgentMovedByUserUnity;
+        public event Action<int, int, int> OnAgentTouchEvent; // agentId, touchState (1/0), otherAgentId (-1 if user)
+        public event Action<string, int, int, float, object[]> OnLocalCommDeliveredUnity;
+        public event Action<int, int> OnBoundaryTouchedEvent; // agentId, boundaryId
+        public event Action<Vector3, Quaternion> OnUserHeadPoseSampledUnity;
+        public event Action<int, Vector3, bool> OnUserHandPoseSampledUnity; // hand (0=L,1=R), posUnity, isPinching
+
+        // --- Raw Traffic Logging Hook ---
+        public event Action<string, string, string> OnOscTrafficLogged; // direction ("IN"/"OUT"), address, formattedArgs
+
+        // Dispatch Helpers
+        public void InstantiateAgents(AgentShapeType shape, AgentMovementMode movMode, int count, float scaleMeters, string remoteIp, int remotePort)
+            => OnInstantiateAgents?.Invoke(shape, movMode, count, scaleMeters, remoteIp, remotePort);
+
+        public void AddAgents(AgentShapeType shape, AgentMovementMode movMode, float scaleMeters, string remoteIp, int remotePort, int[] ids)
+            => OnAddAgents?.Invoke(shape, movMode, scaleMeters, remoteIp, remotePort, ids);
+
+        public void RemoveAgents(int[] ids = null)
+            => OnRemoveAgents?.Invoke(ids);
+
+        public void SetAgentPositionUnity(int id, Vector3 posUnity)
+            => OnSetAgentPositionUnity?.Invoke(id, posUnity);
+
+        public void SetBatchAgentPositionsUnity(Vector3[] positionsUnity)
+            => OnSetBatchAgentPositionsUnity?.Invoke(positionsUnity);
+
+        public void SetAgentColor(int id, Color color)
+            => OnSetAgentColor?.Invoke(id, color);
+
+        public void SetBatchAgentColors(Color[] colors)
+            => OnSetBatchAgentColors?.Invoke(colors);
+
+        public void SetAgentInteractable(int id, bool interactable)
+            => OnSetAgentInteractable?.Invoke(id, interactable);
+
+        public void TriggerLocalComm(string msgType, int senderId, float rangeMeters, float latencySec, object[] extraArgs)
+            => OnTriggerLocalComm?.Invoke(msgType, senderId, rangeMeters, latencySec, extraArgs);
+
+        public void SetAgentMute(int id, bool mute)
+            => OnSetAgentMute?.Invoke(id, mute);
+
+        public void SetAgentSynthNote(int id, int noteAction, int midiNote, int velocity)
+            => OnSetAgentSynthNote?.Invoke(id, noteAction, midiNote, velocity);
+
+        public void SetAgentSynthParam(int id, int ccId, float value)
+            => OnSetAgentSynthParam?.Invoke(id, ccId, value);
+
+        public void SetAgentAudioBank(int id, int clipIndex, int playAction, float gain)
+            => OnSetAgentAudioBank?.Invoke(id, clipIndex, playAction, gain);
+
+        public void AddBoundaryUnity(int id, AgentShapeType shape, Vector3 posUnity, float radiusOrHalfExtentMeters)
+            => OnAddBoundaryUnity?.Invoke(id, shape, posUnity, radiusOrHalfExtentMeters);
+
+        public void UpdateBoundaryUnity(int id, Vector3 posUnity, float radiusOrHalfExtentMeters)
+            => OnUpdateBoundaryUnity?.Invoke(id, posUnity, radiusOrHalfExtentMeters);
+
+        public void RemoveBoundary(int id = -1)
+            => OnRemoveBoundary?.Invoke(id);
+
+        public void SetArrowUnity(int id, Vector3 startUnity, Vector3 endUnity, float widthMeters)
+            => OnSetArrowUnity?.Invoke(id, startUnity, endUnity, widthMeters);
+
+        public void RemoveArrow(int id = -1)
+            => OnRemoveArrow?.Invoke(id);
+
+        public void SetListenerPositionUnity(Vector3 posUnity)
+            => OnSetListenerPositionUnity?.Invoke(posUnity);
+
+        public void SetListenerRotationUnity(Quaternion rotUnity)
+            => OnSetListenerRotationUnity?.Invoke(rotUnity);
+
+        public void SetListenerLockedToHead(bool locked)
+            => OnSetListenerLockedToHead?.Invoke(locked);
+
+        public void SetXRDisplayMode(XRDisplayMode mode)
+            => OnSetXRDisplayMode?.Invoke(mode);
+
+        public void SetWorldScale(float scale)
+            => OnSetWorldScale?.Invoke(scale);
+
+        public void SetOriginOffset(Vector3 offsetMeters)
+            => OnSetOriginOffset?.Invoke(offsetMeters);
+
+        public void ConfigureUserRepeller(bool enabled, float radiusMeters, float force)
+            => OnConfigureUserRepeller?.Invoke(enabled, radiusMeters, force);
+
+        public void LoadScenario(int scenarioIndex)
+            => OnLoadScenario?.Invoke(scenarioIndex);
+
+        public void SetScenarioParam(string paramName, float value)
+            => OnSetScenarioParam?.Invoke(paramName, value);
+
+        public void SetRecordingState(bool recording)
+            => OnSetRecordingState?.Invoke(recording);
+
+        public void NotifyTestAlive(string ip, int port, float testNum)
+            => OnTestAliveReceived?.Invoke(ip, port, testNum);
+
+        // Feedback Emitters
+        public void EmitAgentMovedByUserUnity(int id, Vector3 posUnity)
+            => OnAgentMovedByUserUnity?.Invoke(id, posUnity);
+
+        public void EmitAgentTouch(int id, int touchState, int otherAgentId = -1)
+            => OnAgentTouchEvent?.Invoke(id, touchState, otherAgentId);
+
+        public void EmitLocalCommDeliveredUnity(string msgType, int senderId, int receiverId, float distanceMeters, object[] extraArgs)
+            => OnLocalCommDeliveredUnity?.Invoke(msgType, senderId, receiverId, distanceMeters, extraArgs);
+
+        public void EmitBoundaryTouched(int agentId, int boundaryId)
+            => OnBoundaryTouchedEvent?.Invoke(agentId, boundaryId);
+
+        public void EmitUserHeadPoseUnity(Vector3 posUnity, Quaternion rotUnity)
+            => OnUserHeadPoseSampledUnity?.Invoke(posUnity, rotUnity);
+
+        public void EmitUserHandPoseUnity(int handIndex, Vector3 posUnity, bool isPinching)
+            => OnUserHandPoseSampledUnity?.Invoke(handIndex, posUnity, isPinching);
+
+        public void LogOscTraffic(string direction, string address, string formattedArgs)
+            => OnOscTrafficLogged?.Invoke(direction, address, formattedArgs);
+    }
+}

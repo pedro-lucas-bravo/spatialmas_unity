@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b3a4785d09ec284ebd2a46367e89af2, type: 3}
+  m_Name: SpatialMASConfig
+  m_EditorClassIdentifier: SpatialMAS.Runtime::SpatialMAS.Core.SpatialMASConfig
+  oscListenPort: 6011
+  defaultRemoteIp: 127.0.0.1
+  defaultRemotePort: 6012
+  udpReceiveBufferSize: 1048576
+  httpLogServerPort: 8080
+  autoStartRecording: 1
+  telemetrySampleRateHz: 50
+  worldScale: 0.2
+  originOffset: {x: 0, y: 1.2, z: 0.8}
+  defaultXRMode: 0
+  targetRefreshRate: 90
+  lockAudioListenerToHead: 1
+  streamUserPoseOverOsc: 1
+  enableUserRepellerField: 1
+  userRepellerRadiusMeters: 0.65
+  userRepellerForce: 1.5
+  startupScenarioIndex: 0

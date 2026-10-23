@@ -1,0 +1,49 @@
+{
+    "name": "SpatialMAS.Runtime",
+    "rootNamespace": "SpatialMAS",
+    "references": [
+        "UnityEngine.UI",
+        "Unity.Collections",
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.XR.CoreUtils",
+        "Unity.XR.Management",
+        "Unity.XR.OpenXR",
+        "Unity.XR.OpenXR.Features.Meta",
+        "Unity.XR.Interaction.Toolkit",
+        "Unity.XR.Hands",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.xr.meta-openxr",
+            "expression": "1.0.0",
+            "define": "SPATIALMAS_META_OPENXR"
+        },
+        {
+            "name": "com.unity.xr.hands",
+            "expression": "1.0.0",
+            "define": "SPATIALMAS_XR_HANDS"
+        },
+        {
+            "name": "com.unity.xr.interaction.toolkit",
+            "expression": "3.0.0",
+            "define": "SPATIALMAS_XRI"
+        },
+        {
+            "name": "com.unity.xr.arfoundation",
+            "expression": "5.0.0",
+            "define": "SPATIALMAS_ARFOUNDATION"
+        }
+    ],
+    "noEngineReferences": false
+}
