@@ -1,4 +1,4 @@
-name: SpatialMAS Multiplatform Unity 6 CI/CD
+name: SpatialMAS Lightweight CI (Zero-Secret Checks)
 
 on:
   push:
@@ -7,102 +7,67 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:
 
+# Heavy Unity Engine tests (EditMode/PlayMode) and Multiplatform Builds (Quest 3 APK / VisionOS / Desktop)
+# are executed locally via the Unity CLI (`unity command test run` / `unity command build run`)
+# to avoid requiring Unity license secrets or heavy Docker images in GitHub Actions.
+
 jobs:
+  unity-project-integrity:
+    name: Verify Unity Assets, .meta Pairing & JSON/ASMDEF Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Packages/manifest.json and .asmdef JSON Syntax
+        run: |
+          python3 -m json.tool Packages/manifest.json > /dev/null
+          for asmdef in $(find Assets/_SpatialMAS -name "*.asmdef"); do
+            echo "Validating $asmdef..."
+            python3 -m json.tool "$asmdef" > /dev/null
+          done
+
+      - name: Verify Unity .meta File Pairing in Assets/_SpatialMAS
+        run: |
+          missing_meta=0
+          while IFS= read -r -d '' item; do
+            if [ ! -f "${item}.meta" ]; then
+              echo "ERROR: Missing .meta file for: $item"
+              missing_meta=1
+            fi
+          done < <(find Assets/_SpatialMAS -mindepth 1 ! -name "*.meta" -print0)
+
+          orphan_meta=0
+          while IFS= read -r -d '' meta; do
+            target="${meta%.meta}"
+            if [ ! -e "$target" ]; then
+              echo "ERROR: Orphaned .meta file without asset: $meta"
+              orphan_meta=1
+            fi
+          done < <(find Assets/_SpatialMAS -name "*.meta" -print0)
+
+          if [ "$missing_meta" -ne 0 ] || [ "$orphan_meta" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All Assets/_SpatialMAS files and folders have valid 1:1 .meta pairing."
+
   python-osc-lint:
     name: Verify Companion Python OSC Tools
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Python OSC Dependencies
         run: |
           pip install -r ExternalTools/requirements.txt
+
       - name: Syntax & Dry-Run Check on OSC Verification Script
         run: |
           python -m py_compile ExternalTools/verify_osc_compatibility.py
           python ExternalTools/verify_osc_compatibility.py --duration 0.2
-
-  unity-tests:
-    name: Run EditMode & PlayMode NUnit Tests (Unity 6000.6.6f1)
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        testMode: [ editmode, playmode ]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Cache Unity Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-Test-${{ matrix.testMode }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-Test-${{ matrix.testMode }}-
-            Library-
-
-      - name: Run Unity ${{ matrix.testMode }} Tests
-        uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          unityVersion: 6000.6.6f1
-          testMode: ${{ matrix.testMode }}
-          artifactsPath: TestResults-${{ matrix.testMode }}
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Test Results XML
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: TestResults-${{ matrix.testMode }}
-          path: TestResults-${{ matrix.testMode }}
-
-  multiplatform-builds:
-    name: Build ${{ matrix.targetPlatform }}
-    needs: [ unity-tests, python-osc-lint ]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        targetPlatform:
-          - Android            # Meta Quest 3 / Android OpenXR (.apk)
-          - StandaloneWindows64
-          - StandaloneLinux64  # Enabled by our zero-Csound Native C# DSP Engine!
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Cache Unity Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-Build-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-Build-${{ matrix.targetPlatform }}-
-
-      - name: Build SpatialMAS for ${{ matrix.targetPlatform }}
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          unityVersion: 6000.6.6f1
-          targetPlatform: ${{ matrix.targetPlatform }}
-          buildsPath: Builds
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpatialMAS-${{ matrix.targetPlatform }}
-          path: Builds/${{ matrix.targetPlatform }}
