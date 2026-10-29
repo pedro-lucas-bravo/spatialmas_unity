@@ -2,7 +2,7 @@
 
 SpatialMAS listens on **UDP Port `6011`** (configurable in `SpatialMASConfig` or `spatialmas_config.json`) and supports both single OSC 1.0 messages and recursive **`#bundle`** packets.
 
-It is **100% backward-compatible** with the published ACSOS 2025 `HS-ims` protocol (`human_swarm_examples`) while adding **v2 SpatialMAS XR & Scenario Control** endpoints.
+It implements the legacy signatures below from the ACSOS 2025 `HS-ims` examples, plus **v2 SpatialMAS XR & Scenario Control** endpoints. Focused regressions cover lifecycle, synth targeting, boundaries, movement, and coordinate changes; this is not a certification of every external application.
 
 ---
 
@@ -36,8 +36,10 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 | `/connect` or `/test/alive` | `(string ip, int port, [float testVal])` | Registers `(ip, port)` as the remote destination for outgoing OSC feedback and replies with `/test/alive/ <ip> <port> "OK"`. |
 | `/agents/instantiate` | **`HS-ims`**: `(int count, [int shape=0], [int movMode=0])`<br>**`v2`**: `(int shape, int movMode, int count, float scale, string ip, int port)` | Clears all existing agents and spawns `count` agents (`0 .. count-1`). `shape`: `0`=Sphere, `1`=Cube, `2`=Pyramid. `movMode`: `0`=Teleport, `1`=Follow/Smooth, `2`=Velocity. |
 | `/agents/instantiate/id` | `(int shape, int movMode, int id0, int id1, ...)` | Spawns or reconfigures the specified agent IDs with `shape` and `movMode` (used by `swarmalators/main.py` & `attractors_repellers/main.py`). |
-| `/agents/add` or `/agents/add/id` | **`HS-ims`**: `(int count, [int shape=0], [int movMode=0], ...)`<br>**`v2`**: `(int shape, int movMode, float scale, string ip, int port, int id1, ...)` | Adds one or more agents without clearing existing agents. |
-| `/agents/remove` or `/agents/remove/id` | `()` or `(int id0, int id1, ...)` | Removes all agents (if 0 args or `N -1 -1`) or removes the specified agent IDs. |
+| `/agents/add` | **`HS-ims`**: `(int count, [int shape=0], [int movMode=0], [int initPosMode=0], ...)`<br>**`v2`**: `(int shape, int movMode, float scale, string ip, int port, int id0, ...)` | Adds without clearing. Legacy additions allocate unused IDs; `initPosMode=1` uses a random-radius argument in meters, and `2` uses explicit position triples in mm. |
+| `/agents/add/id` | `(int shape, int movMode, int id0, int id1, ...)` or the v2 add signature above | Adds or reconfigures the supplied IDs. |
+| `/agents/remove` | `()` or `(int count, [int shape=-1], [int movMode=-1])` | Zero arguments removes all. Otherwise removes the last `count` matching agents; `-1` filters mean any shape/movement, not "remove all". |
+| `/agents/remove/id` | `(int id0, int id1, ...)` | Removes exactly the supplied IDs. |
 | `/agents/position/id` | `(int id0, float x0_mm, float y0_mm, float z0_mm, [int id1, ...])` | Moves one or more agents to mapped `(x_mm, y_mm, z_mm)` (`4 * K` args). Ignored while an agent is actively grabbed by the user. |
 | `/agents/position` | `(float x0, float y0, float z0, float x1, ...)` | Batch updates positions for all ordered agents (`3 * N` floats). |
 | `/agents/speed/id` | `(int id0, float speed0_mm_s, [int id1, float speed1_mm_s, ...])` | Sets movement speed in `mm/s` for `Follow` (`1`) or `Velocity` (`2`) mode (`2 * K` args). |
@@ -46,24 +48,26 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 | `/agents/color/id` | **`HS-ims`**: `(int id0, string hex0, [int id1, string hex1, ...])`<br>**`v2`**: `(int id, float r, float g, float b, [float a=1.0])` | Sets agent color via 6-char hex strings (`"00e5ff"`, `"#ff0000"`) in pairs OR float RGBA (`0.0–1.0`). |
 | `/agents/color` | `(float r0, float g0, float b0, float a0, ...)` or `(int N, int shape, int action, string hex0, ...)` | Batch updates colors for all ordered agents. |
 | `/agents/radius/id` | `(int id0, float radius0_mm, float alpha0, string hex0, ...)` | Displays or hides (`radius=0`) a translucent influence/detection sphere around each agent (`4 * K` args). |
-| `/agents/Interactable` | `(int id, int interactable)` | `1` = Enables XR Hand/Gaze-Pinch & Desktop Mouse grabbing on agent `id`; `0` = Disables. |
+| `/agents/Interactable` | `(int id, int interactable)` | `1` = Enables grabbing through configured XR hand/controller input or the desktop mouse; `0` = Disables. |
 | `/agents/localcomm` | **`HS-ims Config`**: `(float maxRange_mm, float latency_ms, int showVisuals)`<br>**`v2 Broadcast`**: `(string type, int senderId, float range_mm, float latency_s, ...extra)` | Configures global localcomm defaults (3 numeric args) OR triggers an expanding spherical wavefront from `senderId` (4+ args). |
 | `/agents/localcomm/send` | `(int senderId0, string msg0, [int senderId1, string msg1, ...])` | Broadcasts `msg` from `senderId` using configured localcomm range & latency; delivers `/agents/localcomm/recv` & `/agents/localcomm/id`. |
 | `/agents/audio/mute` | `(int muteAll)` or `(int id, int mute)` | Mutes (`1`) or unmutes (`0`) all agents (1 arg) or agent `id` (2 args). |
-| `/agents/audio/synth/add` & `/add/id` | `(...)` | Ensures synthesizer is active and unmuted on agents. |
-| `/agents/audio/synth/flush` & `/remove` | `(...)` | Immediately silences ADSR envelopes and clears filter/reverb tails across agents. |
+| `/agents/audio/synth/add` & `/remove` | `()` or `(int count, [int shape=-1], [int movMode=-1])` | Selects the first matching agents. Add unmutes; remove flushes and mutes. Zero arguments selects all. |
+| `/agents/audio/synth/add/id` & `/remove/id` | `(int id0, int id1, ...)` | Add/unmute or flush/mute exactly these agents. |
+| `/agents/audio/synth/flush` | `()` or `(int agentId, [int bank=0])` | Flushes a single agent's envelope/filter/reverb state; no arguments flushes all. Native DSP provides one synth bank per agent. |
 | `/agents/audio/synth/note` | `(int id, int bankOrAction, int midiNote, int velocity)` | `velocity > 0`: Note On ($f = 440 \cdot 2^{(m-69)/12}$ Hz); `velocity == 0`: Note Off. Supports both `HS-ims` (`bank=0`) and `v2` (`action=1|0`). |
 | `/agents/audio/synth/param_val` | **`HS-ims`**: `(int id, int bank, int ccId, float value)`<br>**`v2`**: `(int id, int ccId, float value)` | Sets DSP synthesizer parameter `ccId` on agent `id` (see **Section 4**). |
 | `/agents/audio/synth/param_midi` | `(int id, [int bank], int ccId, float midiVal_0_127)` | Sets DSP synthesizer parameter `ccId` mapped from MIDI range `0..127`. |
 | `/agents/audio/bank` | `(int id, int clipIdx, int action, float gain)` | Plays (`1`) or stops (`0`) soundbank clip `clipIdx` (`0`=Bell, `1`=Click) at `gain` (`0.0–1.0`). |
-| `/boundaries/add` or `/boundary/add/id` | `(int id, int shape, [float x_mm, float y_mm, float z_mm, float size_mm])` | Spawns translucent boundary `id` (`0`=Sphere, `1`=Cube) with radius/half-extent `size_mm`. |
+| `/boundaries/add` | `(int id, int shape, float x_mm, float y_mm, float z_mm, float radiusOrHalfExtent_mm)` | Compact v2 boundary (`0`=Sphere, `1`=Cube). |
+| `/boundary/add/id` | Sphere: `(id, 0, x, y, z, radius, [alpha], [hex])`<br>Cube: `(id, 1, x, y, z, fullX, fullY, fullZ, [alpha], [hex])` | Legacy positions/dimensions are mm. Cube extents follow the same wire-axis swap as positions; color/alpha are preserved. |
 | `/boundaries/update`, `/boundary/position/id`, `/boundary/scale/id`, `/boundary/alpha/id`, `/boundary/color/id` | `(int id, ...)` | Updates position, size, opacity (`0.0–1.0`), or hex color of boundary `id`. |
 | `/boundaries/remove` or `/boundary/remove/id` | `()` or `(int id)` | Removes all boundaries (0 args) or boundary `id`. |
 | `/listener/position` or `/audio/listener/position` | `(float x_mm, float y_mm, float z_mm)` | Moves `AudioListenerProxy` to `(x_mm, y_mm, z_mm)` when unlocked from XR head (`/xr/listener/lock_to_head 0`). |
 | `/listener/rotation` | `(float pitch_deg, float yaw_deg, float roll_deg)` | Rotates `AudioListenerProxy` when unlocked from XR head. |
 | `/arrow` or `/environment/set_arrow` | **`HS-ims`**: `(x, y, z, dx, dy, dz, scale)`<br>**`v2`**: `(id, x1, y1, z1, x2, y2, z2, w_mm)` | Renders a 3D directional arrow in the arena. |
 | `/arrow/remove` or `/environment/remove_arrow` | `()` or `(int id)` | Removes all arrows (0 args) or arrow `id`. |
-| `/recorder/start` & `/recorder/stop` | `([string tag])` | Starts or stops buffered CSV recording (alias for `/logging/state 1|0`). |
+| `/recorder/start` & `/recorder/stop` | `()` | Starts or stops buffered CSV recording (alias for `/logging/state 1|0`). Session tags are available through the C# recorder API. |
 
 ### 2.2 v2 `SpatialMAS` XR & Scenario Endpoints
 
@@ -104,7 +108,7 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 | Parameter | Primary `cc_id` | Legacy Alias `cc_id` | Range | Default | Description |
 | :--- | :---: | :---: | :--- | :---: | :--- |
 | **Waveform** | `1` | `0` | `0`=Sine, `1`=Square, `2`=Saw, `3`=Triangle | `0` | Anti-aliased PolyBLEP oscillator waveform. |
-| **Frequency (Hz)** | `2` | — | `20.0 – 16000.0` | `440.0` | Instantaneous pitch in Hz (also wakes continuous drone mode when Gain > 0). |
+| **Frequency (Hz)** | `2` | — | `20.0 – 16000.0` | `440.0` | Selects continuous playback. Frequency and gain may arrive in either order; positive gain starts/resumes the tone. Note messages return to note-driven ADSR behavior. |
 | **Gain / Volume** | `16` | `7` | `0.0 – 1.0` | `0.0` | Linear amplitude multiplier. |
 | **Attack (s)** | `82` | `74` | `0.001 – 10.0` | `0.04` | ADSR envelope attack time in seconds. |
 | **Decay (s)** | `83` | `71` | `0.001 – 10.0` | `0.10` | ADSR envelope decay time in seconds. |
@@ -113,3 +117,7 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 | **LPF Cutoff (Hz)** | `93` | — | `20.0 – 20000.0` | `12000.0` | 12 dB/oct Biquad Low-Pass Filter cutoff frequency. |
 | **LPF Resonance ($Q$)** | `18` | — | `0.5 – 12.0` | `0.707` | Biquad filter resonance quality factor. |
 | **Reverb Mix** | `19` | `91` | `0.0 – 1.0` | `0.12` | Schroeder Comb/Allpass diffuser wet mix. |
+
+Live `/xr/scale` and `/xr/origin` changes rebase existing agents, boundaries, arrows, communication wavefronts, and active scenario state together. Physical head/hand poses stay in room space. An unlocked audio listener follows the arena frame; a head-locked listener follows the physical camera.
+
+`/boundary/scale/id` takes an existing sphere's **radius**, or a cube's three **full dimensions**, in mm. Velocity-mode agents accept explicit position corrections; Follow speed `0` holds position.

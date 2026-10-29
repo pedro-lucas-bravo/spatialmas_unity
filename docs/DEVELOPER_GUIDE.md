@@ -11,7 +11,7 @@ SpatialMAS uses strict **Assembly Definitions (`.asmdef`)** under `Assets/_Spati
   - `Agents/`: `AgentManager`, `AgentEntity`, `AgentVisualController`, `ProceduralMeshFactory`
   - `Environment/`: `BoundaryManager`, `EnvironmentArrowManager`
   - `LocalComm/`: `LocalCommManager`
-  - `XR/`: `XRPlatformAdapter`, `XRModeSwitcher`, `XRHandTrackingProcessor`, `XRHandPinchHysteresis`, `XRUserEmbodimentBridge`, `DesktopInteractionRig`
+  - `XR/`: `XRPlatformAdapter`, `XRModeSwitcher`, `XRInteractionRigSetup`, `XRTrackedHandInteractor`, `XRHandTrackingProcessor`, `XRHandPinchHysteresis`, `XRUserEmbodimentBridge`, `DesktopInteractionRig`
   - `Scenarios/`: `IScenarioModule`, `ScenarioManager`, and `BuiltIn/` scenarios (`0..5`)
   - `Logging/`: `DataRecordingService`, `EmbodimentTelemetrySampler`, `WifiLogExportServer`
   - `UI/`: `SpatialResearcherHUD`
@@ -44,12 +44,13 @@ unity command script run --file Assets/_SpatialMAS/Editor/SpatialMASEditorBuilde
 
 Use the **`SpatialMAS > Build Target`** menu in Unity Editor:
 - **Meta Quest 3 / 3S / Pro & Android OpenXR**: `SpatialMAS > Build Target > Build Meta Quest & Android OpenXR (.apk)`
-- **Apple Vision Pro (`visionOS`)**: `SpatialMAS > Build Target > Build Apple Vision Pro (visionOS Xcode)`
+- **Apple Vision Pro (`visionOS`, experimental scaffolding)**: The build menu exists, but a visionOS XR provider, input integration, and device validation are still required.
 - **Windows / macOS / Linux Standalone**: Select the corresponding desktop target under `SpatialMAS > Build Target`.
 
 ### How Multiplatform Differences Are Handled Automatically
 - [`XRPlatformAdapter.cs`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) detects whether the app is running on **Meta Quest (`Android`)**, **Apple Vision Pro (`visionOS`)**, **Generic OpenXR**, or **Desktop** at startup. On Desktop without an HMD, it disables `TrackedPoseDriver` and `ARSession` so `XRSimulation` never interferes with [`DesktopInteractionRig.cs`](../Assets/_SpatialMAS/Runtime/XR/DesktopInteractionRig.cs).
-- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) reads direct optical finger joint positions from `XRHandSubsystem` when available, and falls back to XRI Input Actions (supporting Apple Vision Pro Spatial Pointer Gaze-and-Pinch, 6DoF controllers, or Desktop clicks).
+- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) reads optical finger joints or fallback controller actions. Hand poses are transformed from tracking space through the rig's Camera Offset. Missing hand tracking does not create a repulsion field at a stale position.
+- The generated world panel uses `TrackedDeviceGraphicRaycaster` and `XRUIInputModule` for scenario, preset, pause/reset, MR/VR, recording, IDs, scale, and arena placement controls. The desktop IMGUI panel remains available.
 
 ---
 
@@ -87,8 +88,16 @@ To add a new scenario (or commercial Logic Pack):
    ```
 2. Register it in `ScenarioManager.Initialize()` via `RegisterScenario(new CustomFlockingLogicPack())`.
 
+If a scenario caches world-space state, also implement `ISpatialFrameAwareScenario.ApplySpatialFrameChange(SpatialFrameChange change)`. Transform cached positions with `TransformPosition`, velocities with `TransformVector`, orientations with `TransformRotation`, and scalar sizes with `ScaleRatio`. World managers already transform the entities, so a scenario should rebase only its own caches.
+
 ---
 
 ## 5. Plugging in an Optional Custom Audio Engine (e.g., `CsoundUnity` or `FMOD`)
 
-By default, every agent uses [`NativeDspSynthesizer.cs`](../Assets/_SpatialMAS/Runtime/Audio/NativeDspSynthesizer.cs). To use a custom backend, implement [`IAgentAudioSynth`](../Assets/_SpatialMAS/Runtime/Audio/IAgentAudioSynth.cs) on a `MonoBehaviour` and attach it to your agent prefab. `AgentEntity` will automatically discover and route `/agents/audio/synth/note` and `/agents/audio/synth/param_val` commands to your implementation.
+Every agent currently uses [`NativeDspSynthesizer.cs`](../Assets/_SpatialMAS/Runtime/Audio/NativeDspSynthesizer.cs). `IAgentAudioSynth` defines an adapter contract, but `AgentEntity` still holds a concrete native synth reference. A custom backend requires changing that binding and construction path; attaching another component alone does not replace it.
+
+## 6. Regression Tests
+
+Keep Unity NUnit regressions in the existing EditMode/PlayMode assemblies and run them locally through Unity CLI or Test Runner. Coverage includes recording restarts, continuous-tone ordering, XR settings and generated inputs/UI, listener ownership, desktop click/drag lifecycle, OSC targeting/movement/boundaries, arena rebasing, and scenario controls/assembly graphs. Hardware interaction and platform performance remain device checks.
+
+GitHub CI intentionally runs only asset/JSON integrity and Python packet/feedback tests. It installs `python-osc` and requires no Unity license, Unity Docker image, .NET SDK, NumPy, or device simulator. The live OSC verifier first requires a matching handshake and reports traffic transmission separately from runtime behavior; `--dry-run` sends no traffic.

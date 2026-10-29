@@ -2,9 +2,9 @@
 
 ## 1. Overview & Clean-Room Mandate
 
-**SpatialMAS** is a commercial-grade, multiplatform Mixed Reality (MR) and Virtual Reality (VR) multi-agent interaction and 3D spatial sonification platform built in **Unity 6 (`6000.6.6f1`)**.
+**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent interaction and spatial sonification research prototype built in **Unity 6 (`6000.6.6f1`)**.
 
-Designed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 2026), the codebase is architected from the ground up as a **100% clean-room proprietary implementation** to ensure Freedom to Operate (FTO) and commercial licensing readiness, while preserving **100% backward compatibility** with the published [ACSOS 2025 `HS-ims` OSC Protocol](../helping_sources/ACSOS2025___Human_Swarm_IMS_Artifact_camera_ready-public-INCONFERENCE.pdf).
+The project targets an independent XR runtime with legacy HS-ims OSC compatibility. Compatibility regressions exercise selected published signatures; commercial readiness, licensing status, and hardware support are separate validation work, not guarantees supplied by this architecture.
 
 ---
 
@@ -89,12 +89,12 @@ flowchart TD
 ### ADR-002: Native C# Procedural DSP Synthesizer (`NativeDspSynthesizer`) with Dual CC Compatibility
 - **Context**: `CsoundUnity` in `human_swarm_ims` caused audio dropouts starting at 24 agents on desktop, blocked native Linux builds, and did not support Apple Vision Pro (`visionOS`). Furthermore, an audit of `human_swarm_examples` revealed that `README.md` documented `CC 0` for Waveform and `CC 82/83/85/17` for ADSR, whereas `CsoundBasicSynthesizer.cs` had inspector defaults `1` and `74/71/72/73`.
 - **Decision**: Implement `NativeDspSynthesizer` in pure C# using `OnAudioFilterRead` (PolyBLEP oscillators, ADSR, Biquad LPF, Schroeder reverb) behind `IAgentAudioSynth`, and accept **both** primary and legacy alias CC IDs.
-- **Consequences**: Compiles natively via IL2CPP to Android ARM64 (Meta Quest 3), visionOS ARM64 (Apple Vision Pro), Windows, macOS, and Linux, scaling to 100+ spatialized agents with zero GC allocations.
+- **Consequences**: DSP synthesis uses C# without Csound native libraries. Unity handles 3D panning and distance rolloff; no HRTF plugin is bundled. Agent-count performance and IL2CPP/platform behavior require measurement on each target.
 
 ### ADR-003: Multiplatform XR Abstraction (`XRPlatformAdapter` + `XRModeSwitcher`)
 - **Context**: SpatialMAS must run not only on Meta Quest 3, but also on **Apple Vision Pro (`visionOS`)**, generic OpenXR headsets (Pico 4 Ultra, Android XR, HTC Vive, PCVR), and Desktop laptops.
 - **Decision**: Use standard Unity 6 `XROrigin`, `ARSession` / `ARCameraManager`, `XRHandSubsystem`, and `XRGrabInteractable`, isolating vendor-specific calls (such as `MetaOpenXRDisplaySubsystemExtensions`) behind `#if UNITY_ANDROID && !UNITY_EDITOR && SPATIALMAS_META_OPENXR` inside `XRPlatformAdapter.cs`.
-- **Consequences**: Single unified scene (`SpatialMAS_Main.unity`) builds cleanly across all 5 target platforms.
+- **Consequences**: The builder registers XR Management managers/loaders for Standalone and Android, binds headset pose actions, and creates fallback hand/controller interactors without requiring the optional XRI sample import. Runtime setup repairs older fallback scenes. The visionOS menu remains experimental until a provider, input rig, and device validation are supplied.
 
 ### ADR-004: Embedded `TcpListener` Wi-Fi HTTP Log Server (`WifiLogExportServer`)
 - **Context**: Pulling recorded CSV telemetry from a Quest 3 or Apple Vision Pro via USB cables (`adb pull` or Xcode Devices window) is slow and impractical during multi-participant lab studies. Moreover, `System.Net.HttpListener` throws permission errors on Android/visionOS IL2CPP.
@@ -111,3 +111,11 @@ flowchart TD
 | **Unity Main Thread** | `OscProtocolRouter.ProcessIncomingMessages` | Drains up to 4,096 messages per `Update()` frame and dispatches to `SimulationCommandBus`. |
 | **Unity Audio DSP Thread** | `NativeDspSynthesizer.OnAudioFilterRead` | Reads `volatile` synth parameters (`_targetFrequencyHz`, `_targetGain`, `_filterCutoffHz`, `_adsrStageInt`) with zero locks or heap allocations. |
 | **HTTP Export Thread Pool** | `WifiLogExportServer.HandleClientAsync` | Calls `DataRecordingService.Flush()` (protected by `_lock`) and reads CSV files using `FileShare.ReadWrite`. |
+
+## 5. Arena Calibration and Session Integrity
+
+`SpatialCoordinateMapper.OnFrameChanged` carries the previous/new origin, rotation delta, and scale ratio through `SimulationCommandBus.OnSpatialFrameChanged`. World managers transform existing entities and pending communication wavefronts. `ISpatialFrameAwareScenario` implementations transform their cached positions, velocities, radii, and orbit bases. A later simulation tick therefore stays in the calibrated frame. Physical participant tracking remains in room space.
+
+`AudioListenerProxy` owns the active listener and disables the old camera listener. Head lock copies the camera pose; detached OSC control moves the real listener and follows arena calibration changes.
+
+Recording creates paired filenames with millisecond timestamps and unique session IDs using `FileMode.CreateNew`. Streams are published as an active session only after both open successfully. Optional session tags are sanitized, and multiline CSV fields are quoted. Writes are buffered and synchronized, but not performed on a dedicated asynchronous writer thread.

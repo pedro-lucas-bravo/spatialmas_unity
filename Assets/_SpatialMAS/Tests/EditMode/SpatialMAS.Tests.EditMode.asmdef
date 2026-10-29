@@ -5,7 +5,10 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "SpatialMAS.Runtime",
-        "SpatialMAS.Editor"
+        "SpatialMAS.Editor",
+        "Unity.XR.Management",
+        "Unity.XR.Management.Editor",
+        "Unity.XR.OpenXR"
     ],
     "includePlatforms": [
         "Editor"

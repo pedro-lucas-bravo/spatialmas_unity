@@ -178,11 +178,25 @@ namespace SpatialMAS.Networking
                         int n = Mathf.Clamp(msg.GetInt(0), 0, 512);
                         var shape = (AgentShapeType)Mathf.Clamp(msg.GetInt(1, 0), 0, 3);
                         var movMode = (AgentMovementMode)Mathf.Clamp(msg.GetInt(2, 0), 0, 2);
-                        int[] ids = new int[n];
-                        int baseId = (int)(Time.frameCount % 1000) * 100;
-                        for (int i = 0; i < n; i++) ids[i] = baseId + i;
+                        int initialMode = msg.GetInt(3, 0);
+                        Vector3[] positions = new Vector3[n];
+                        for (int i = 0; i < n; i++)
+                        {
+                            if (initialMode == 1)
+                            {
+                                // Legacy random spawning radius is in meters (explicit positions are millimeters).
+                                Vector3 local = UnityEngine.Random.insideUnitSphere * Mathf.Max(0f, msg.GetFloat(4, 10f));
+                                positions[i] = _mapper.OriginOffset + _mapper.OriginRotation * local * _mapper.WorldScale;
+                            }
+                            else if (initialMode == 2)
+                            {
+                                int offset = 4 + 3 * i;
+                                positions[i] = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(offset), msg.GetFloat(offset + 1), msg.GetFloat(offset + 2));
+                            }
+                            else positions[i] = _mapper.OriginOffset;
+                        }
                         float scaledRadius = _mapper.ScaleAgentMeterRadius(0.28f);
-                        _bus.AddAgents(shape, movMode, scaledRadius, _client.RemoteIp, _client.RemotePort, ids);
+                        _bus.AddAgentsAutomatically(shape, movMode, scaledRadius, positions);
                     }
                     break;
                 }
@@ -194,10 +208,9 @@ namespace SpatialMAS.Networking
                     {
                         _bus.RemoveAgents(null);
                     }
-                    else if (addr == "/agents/remove" && msg.ArgCount == 3 && msg.GetInt(1) < 0)
+                    else if (addr == "/agents/remove")
                     {
-                        // HS-ims /agents/remove <N> -1 -1
-                        _bus.RemoveAgents(null);
+                        _bus.RemoveLastAgents(Mathf.Max(0, msg.GetInt(0)), msg.GetInt(1, -1), msg.GetInt(2, -1));
                     }
                     else
                     {
@@ -265,7 +278,7 @@ namespace SpatialMAS.Networking
                         float dy = msg.GetFloat(i + 2);
                         float dz = msg.GetFloat(i + 3);
                         // Swap Y and Z to match Unity left-handed axes
-                        Vector3 dirUnity = new Vector3(dx, dz, dy);
+                        Vector3 dirUnity = _mapper.OriginRotation * new Vector3(dx, dz, dy);
                         _bus.SetAgentDirectionUnity(id, dirUnity);
                     }
                     break;
@@ -279,7 +292,7 @@ namespace SpatialMAS.Networking
                         float vxMm = msg.GetFloat(i + 1);
                         float vyMm = msg.GetFloat(i + 2);
                         float vzMm = msg.GetFloat(i + 3);
-                        Vector3 velUnity = new Vector3(
+                        Vector3 velUnity = _mapper.OriginRotation * new Vector3(
                             _mapper.OscMillimeterLengthToUnityMeters(vxMm),
                             _mapper.OscMillimeterLengthToUnityMeters(vzMm),
                             _mapper.OscMillimeterLengthToUnityMeters(vyMm));
@@ -450,18 +463,28 @@ namespace SpatialMAS.Networking
                 }
 
                 case "/agents/audio/synth/add":
-                case "/agents/audio/synth/add/id":
+                case "/agents/audio/synth/remove":
                 {
-                    // NativeDspSynthesizer is already pre-attached to every pooled AgentEntity; ensure unmuted
-                    _bus.SetAgentMute(-1, false);
+                    _bus.SetAgentSynthEnabledFiltered(msg.GetInt(0, int.MaxValue), msg.GetInt(1, -1), msg.GetInt(2, -1),
+                        addr == "/agents/audio/synth/add");
+                    break;
+                }
+                case "/agents/audio/synth/add/id":
+                case "/agents/audio/synth/remove/id":
+                {
+                    bool enabled = addr == "/agents/audio/synth/add/id";
+                    for (int i = 0; i < msg.ArgCount; i++)
+                    {
+                        int id = msg.GetInt(i);
+                        if (!enabled) _bus.FlushAgentSynth(id);
+                        _bus.SetAgentMute(id, !enabled);
+                    }
                     break;
                 }
 
-                case "/agents/audio/synth/remove":
-                case "/agents/audio/synth/remove/id":
                 case "/agents/audio/synth/flush":
                 {
-                    _bus.FlushAgentSynth(-1);
+                    _bus.FlushAgentSynth(msg.GetInt(0, -1));
                     break;
                 }
 
@@ -555,7 +578,21 @@ namespace SpatialMAS.Networking
                         : _mapper.OriginOffset;
                     float sizeMm = msg.ArgCount >= 6 ? msg.GetFloat(5, 2500f) : 2500f;
                     float sizeMeters = _mapper.OscMillimeterLengthToUnityMeters(sizeMm);
-                    _bus.AddBoundaryUnity(id, shape, posUnity, sizeMeters);
+                    if (addr == "/boundary/add/id" && shape == AgentShapeType.Cube)
+                    {
+                        _bus.AddBoxBoundaryUnity(id, posUnity, new Vector3(
+                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(5, 1000f)),
+                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(7, 1000f)),
+                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(6, 1000f))));
+                    }
+                    else _bus.AddBoundaryUnity(id, shape, posUnity, sizeMeters);
+                    int alphaIndex = shape == AgentShapeType.Cube ? 8 : 6;
+                    if (msg.ArgCount > alphaIndex)
+                    {
+                        Color color = new Color(-1f, -1f, -1f, 1f);
+                        if (msg.ArgCount > alphaIndex + 1) TryParseHexColor(msg.GetString(alphaIndex + 1), out color);
+                        _bus.SetBoundaryVisuals(id, color, Mathf.Clamp01(msg.GetFloat(alphaIndex, 0.14f)));
+                    }
                     break;
                 }
 
@@ -582,8 +619,10 @@ namespace SpatialMAS.Networking
                 {
                     if (msg.ArgCount < 2) break;
                     int id = msg.GetInt(0);
-                    float sizeMeters = _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(1, 2500f) * 0.5f);
-                    _bus.UpdateBoundaryUnity(id, new Vector3(float.NaN, float.NaN, float.NaN), sizeMeters);
+                    _bus.SetBoundaryDimensionsUnity(id, new Vector3(
+                        _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(1)),
+                        msg.ArgCount > 3 ? _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(3)) : float.NaN,
+                        msg.ArgCount > 2 ? _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(2)) : float.NaN));
                     break;
                 }
 

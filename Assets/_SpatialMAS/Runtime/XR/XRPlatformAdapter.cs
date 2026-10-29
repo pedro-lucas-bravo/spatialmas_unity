@@ -32,6 +32,9 @@ namespace SpatialMAS.XR
             _targetRefreshRate = Mathf.Clamp(targetRefreshRate, 60f, 120f);
             Application.runInBackground = true;
 
+            XRInteractionRigSetup.ConfigureHeadTracking(Camera.main);
+            XRInteractionRigSetup.EnsureHandInteractors(Camera.main);
+
             DetectPlatform();
             ConfigureFramePacing();
         }
@@ -41,7 +44,7 @@ namespace SpatialMAS.XR
             string model = SystemInfo.deviceModel ?? string.Empty;
             var displays = new List<XRDisplaySubsystem>();
             SubsystemManager.GetSubsystems(displays);
-            IsXRHeadsetActive = displays.Count > 0 && displays[0].running;
+            IsXRHeadsetActive = displays.Exists(display => display != null && display.running);
 
 #if UNITY_VISIONOS
             ActivePlatform = XRHardwarePlatform.AppleVisionPro;

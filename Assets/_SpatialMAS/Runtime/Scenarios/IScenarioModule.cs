@@ -27,4 +27,10 @@ namespace SpatialMAS.Scenarios
         void SetParameter(string paramName, float value);
         void ApplyPreset(int presetIndex);
     }
+
+    /// <summary>Rebases simulation state when the arena's spatial calibration changes.</summary>
+    public interface ISpatialFrameAwareScenario
+    {
+        void ApplySpatialFrameChange(SpatialFrameChange change);
+    }
 }

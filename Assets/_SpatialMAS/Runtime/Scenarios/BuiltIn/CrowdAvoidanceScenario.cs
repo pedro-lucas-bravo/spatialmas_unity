@@ -9,7 +9,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// Autonomous agents flock smoothly within an arena while physically dispersing around the XR participant's
     /// head and hands using Helbing's Social Force Model, emitting proximity-mapped spatial audio cues.
     /// </summary>
-    public class CrowdAvoidanceScenario : IScenarioModule
+    public class CrowdAvoidanceScenario : IScenarioModule, ISpatialFrameAwareScenario
     {
         public int ScenarioId => 1;
         public string DisplayName => "1. Crowd Navigation & Human Avoidance";
@@ -25,12 +25,18 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private Vector3[] _positions;
         private Vector3[] _velocities;
         private float[] _pulseTimers;
+        private Vector3[] _humanForces;
 
         private static readonly int[] s_DMinor9ChordNotes = { 50, 57, 60, 62, 64, 65, 69, 72, 74, 76 };
 
         public void OnScenarioStart(ScenarioContext context)
         {
             _ctx = context;
+            if (_ctx.Embodiment != null)
+            {
+                _personalSpaceRadius = _ctx.Embodiment.UserRepellerRadiusMeters;
+                _humanRepulsionStrength = _ctx.Embodiment.UserRepellerForce;
+            }
             RebuildCrowd();
         }
 
@@ -40,6 +46,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
             Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
             float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
+            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
             _arenaRadiusMeters = Mathf.Clamp(6.5f * scale, 0.6f, 4.0f);
             float agentScale = Mathf.Clamp(0.32f * scale, 0.04f, 0.18f);
 
@@ -49,14 +56,15 @@ namespace SpatialMAS.Scenarios.BuiltIn
             _positions = new Vector3[_agentCount];
             _velocities = new Vector3[_agentCount];
             _pulseTimers = new float[_agentCount];
+            _humanForces = new Vector3[_agentCount];
 
             var rng = new System.Random(42);
             for (int i = 0; i < _agentCount; i++)
             {
                 Vector3 offset = RandomInsideSphere(rng) * (_arenaRadiusMeters * 0.75f);
                 offset.y *= 0.35f; // Flattened crowd corridor layer
-                _positions[i] = center + offset;
-                _velocities[i] = RandomInsideSphere(rng).normalized * _cruiseSpeed;
+                _positions[i] = center + rotation * offset;
+                _velocities[i] = rotation * (RandomInsideSphere(rng).normalized * _cruiseSpeed);
                 _pulseTimers[i] = (float)rng.NextDouble() * 1.5f;
 
                 _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
@@ -76,6 +84,15 @@ namespace SpatialMAS.Scenarios.BuiltIn
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
             Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
             Vector3 userHead = _ctx.Embodiment != null ? _ctx.Embodiment.HeadPositionWorld : center;
+            if (_ctx.Embodiment != null)
+            {
+                _personalSpaceRadius = _ctx.Embodiment.UserRepellerRadiusMeters;
+                _humanRepulsionStrength = _ctx.Embodiment.UserRepellerForce;
+                for (int i = 0; i < _agentCount; i++)
+                {
+                    _humanForces[i] = _ctx.Embodiment.ComputeRepulsionForceOnAgent(_positions[i]);
+                }
+            }
 
             StepBoidsAndHumanAvoidance(
                 _positions,
@@ -84,9 +101,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 _arenaRadiusMeters,
                 userHead,
                 _personalSpaceRadius,
-                _humanRepulsionStrength,
+                _ctx.Embodiment != null ? 0f : _humanRepulsionStrength,
                 _cruiseSpeed,
-                dt);
+                dt,
+                _ctx.Embodiment != null ? _humanForces : null);
 
             for (int i = 0; i < _agentCount; i++)
             {
@@ -135,7 +153,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
             float personalSpaceRadius,
             float humanRepulsionStrength,
             float targetSpeed,
-            float dt)
+            float dt,
+            Vector3[] externalForces = null)
         {
             int n = positions.Length;
             float neighborRadius = arenaRadius * 0.35f;
@@ -169,6 +188,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 }
 
                 Vector3 accel = sep * 2.2f;
+                if (externalForces != null && i < externalForces.Length)
+                {
+                    accel += externalForces[i];
+                }
                 if (count > 0)
                 {
                     coh = ((coh / count) - pos).normalized * targetSpeed;
@@ -226,8 +249,14 @@ namespace SpatialMAS.Scenarios.BuiltIn
             switch (paramName.ToLowerInvariant())
             {
                 case "speed": _cruiseSpeed = Mathf.Clamp(value, 0.1f, 3.0f); break;
-                case "personalspace": _personalSpaceRadius = Mathf.Clamp(value, 0.2f, 2.5f); break;
-                case "repulsion": _humanRepulsionStrength = Mathf.Clamp(value, 0f, 10.0f); break;
+                case "personalspace":
+                    _personalSpaceRadius = Mathf.Clamp(value, 0.2f, 2.5f);
+                    if (_ctx.Embodiment != null) _ctx.Embodiment.UserRepellerRadiusMeters = _personalSpaceRadius;
+                    break;
+                case "repulsion":
+                    _humanRepulsionStrength = Mathf.Clamp(value, 0f, 10.0f);
+                    if (_ctx.Embodiment != null) _ctx.Embodiment.UserRepellerForce = _humanRepulsionStrength;
+                    break;
                 case "agentcount":
                     int newCount = Mathf.Clamp(Mathf.RoundToInt(value), 4, 120);
                     if (newCount != _agentCount)
@@ -247,6 +276,23 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 case 1: _personalSpaceRadius = 0.95f; _humanRepulsionStrength = 3.5f; _cruiseSpeed = 0.85f; break;
                 case 2: _personalSpaceRadius = 0.35f; _humanRepulsionStrength = 0.8f; _cruiseSpeed = 0.40f; break;
             }
+            if (_ctx.Embodiment != null)
+            {
+                _ctx.Embodiment.UserRepellerRadiusMeters = _personalSpaceRadius;
+                _ctx.Embodiment.UserRepellerForce = _humanRepulsionStrength;
+            }
+        }
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        {
+            if (_positions == null) return;
+            for (int i = 0; i < _positions.Length; i++)
+            {
+                _positions[i] = change.TransformPosition(_positions[i]);
+                _velocities[i] = change.TransformVector(_velocities[i]);
+            }
+            _arenaRadiusMeters *= change.ScaleRatio;
+            _cruiseSpeed *= change.ScaleRatio;
         }
     }
 }

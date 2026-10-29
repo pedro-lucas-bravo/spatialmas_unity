@@ -88,6 +88,7 @@ namespace SpatialMAS.Core
             // 1. Core Bus & Coordinate Mapper
             CommandBus = new SimulationCommandBus();
             CoordinateMapper = new SpatialCoordinateMapper(_config.worldScale, _config.originOffset);
+            CoordinateMapper.OnFrameChanged += CommandBus.ApplySpatialFrameChange;
 
             CommandBus.OnSetWorldScale += s => CoordinateMapper.WorldScale = s;
             CommandBus.OnSetOriginOffset += o => CoordinateMapper.OriginOffset = o;
@@ -130,7 +131,7 @@ namespace SpatialMAS.Core
 
             // 4. Pooled World Entities & 3D Audio Listener Proxy
             AgentManager = GetOrAddChildComponent<AgentManager>("AgentManager");
-            AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial);
+            AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial, CoordinateMapper);
 
             BoundaryManager = GetOrAddChildComponent<BoundaryManager>("BoundaryManager");
             BoundaryManager.Initialize(CommandBus, AgentManager, _boundaryMaterial);
@@ -142,10 +143,6 @@ namespace SpatialMAS.Core
             LocalCommManager.Initialize(CommandBus, AgentManager);
 
             ListenerProxy = GetOrAddChildComponent<AudioListenerProxy>("AudioListenerProxy");
-            if (ListenerProxy.GetComponent<AudioListener>() == null && (_mainCamera == null || _mainCamera.GetComponent<AudioListener>() == null))
-            {
-                ListenerProxy.gameObject.AddComponent<AudioListener>();
-            }
             ListenerProxy.Initialize(CommandBus, _mainCamera != null ? _mainCamera.transform : transform, _config.lockAudioListenerToHead);
 
             // 5. OSC v1 & v2 UDP Networking

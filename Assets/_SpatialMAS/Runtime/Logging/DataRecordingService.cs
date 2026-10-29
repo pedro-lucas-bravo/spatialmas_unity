@@ -79,24 +79,42 @@ namespace SpatialMAS.Logging
             {
                 if (_isRecording) return;
 
-                string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
-                string suffix = string.IsNullOrWhiteSpace(sessionTag) ? timestamp : $"{timestamp}_{sessionTag}";
+                string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss-fff", CultureInfo.InvariantCulture);
+                string suffix = timestamp + "_" + Guid.NewGuid().ToString("N");
+                string safeTag = SanitizeSessionTag(sessionTag);
+                if (safeTag.Length > 0) suffix += "_" + safeTag;
 
-                ActiveOscCsvPath = Path.Combine(_logsDirectory, $"osc_traffic_{suffix}.csv");
-                ActiveEmbodimentCsvPath = Path.Combine(_logsDirectory, $"xr_embodiment_{suffix}.csv");
+                string oscPath = Path.Combine(_logsDirectory, $"osc_traffic_{suffix}.csv");
+                string embodimentPath = Path.Combine(_logsDirectory, $"xr_embodiment_{suffix}.csv");
+                StreamWriter oscWriter = null;
+                StreamWriter embodimentWriter = null;
+                try
+                {
+                    // Never truncate an existing session, even if a name collision occurs.
+                    oscWriter = new StreamWriter(
+                        new FileStream(oscPath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite, 65536),
+                        Encoding.UTF8);
+                    oscWriter.WriteLine("TimestampISO,ElapsedMs,Direction,OscAddress,Arguments");
+                    embodimentWriter = new StreamWriter(
+                        new FileStream(embodimentPath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite, 65536),
+                        Encoding.UTF8);
+                    embodimentWriter.WriteLine(
+                        "TimestampISO,ElapsedMs,Frame,Scenario,XRMode,WorldScale,ActiveAgents,FrameTimeMs," +
+                        "HeadPosX,HeadPosY,HeadPosZ,HeadRotX,HeadRotY,HeadRotZ,HeadRotW," +
+                        "LHandPosX,LHandPosY,LHandPosZ,LPinch,RHandPosX,RHandPosY,RHandPosZ,RPinch");
+                }
+                catch
+                {
+                    // Publish a session only after both streams have opened successfully.
+                    oscWriter?.Dispose();
+                    embodimentWriter?.Dispose();
+                    throw;
+                }
 
-                _oscWriter = new StreamWriter(
-                    new FileStream(ActiveOscCsvPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite, 65536),
-                    Encoding.UTF8);
-                _oscWriter.WriteLine("TimestampISO,ElapsedMs,Direction,OscAddress,Arguments");
-
-                _embodimentWriter = new StreamWriter(
-                    new FileStream(ActiveEmbodimentCsvPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite, 65536),
-                    Encoding.UTF8);
-                _embodimentWriter.WriteLine(
-                    "TimestampISO,ElapsedMs,Frame,Scenario,XRMode,WorldScale,ActiveAgents,FrameTimeMs," +
-                    "HeadPosX,HeadPosY,HeadPosZ,HeadRotX,HeadRotY,HeadRotZ,HeadRotW," +
-                    "LHandPosX,LHandPosY,LHandPosZ,LPinch,RHandPosX,RHandPosY,RHandPosZ,RPinch");
+                _oscWriter = oscWriter;
+                _embodimentWriter = embodimentWriter;
+                ActiveOscCsvPath = oscPath;
+                ActiveEmbodimentCsvPath = embodimentPath;
 
                 OscRowsWritten = 0;
                 EmbodimentRowsWritten = 0;
@@ -149,7 +167,7 @@ namespace SpatialMAS.Logging
                 string iso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
                 long elapsed = _sessionStopwatch.ElapsedMilliseconds;
                 string escapedArgs = EscapeCsvField(argumentsCsv ?? string.Empty);
-                _oscWriter.WriteLine($"{iso},{elapsed},{direction},{oscAddress},{escapedArgs}");
+                _oscWriter.WriteLine($"{iso},{elapsed},{EscapeCsvField(direction)},{EscapeCsvField(oscAddress)},{escapedArgs}");
                 OscRowsWritten++;
             }
         }
@@ -211,11 +229,23 @@ namespace SpatialMAS.Logging
         private static string EscapeCsvField(string value)
         {
             if (string.IsNullOrEmpty(value)) return "\"\"";
-            if (value.IndexOf(',') >= 0 || value.IndexOf('"') >= 0)
+            if (value.IndexOf(',') >= 0 || value.IndexOf('"') >= 0 || value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0)
             {
                 return "\"" + value.Replace("\"", "\"\"") + "\"";
             }
             return value;
+        }
+
+        private static string SanitizeSessionTag(string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) return string.Empty;
+            var safe = new StringBuilder(Math.Min(tag.Length, 64));
+            foreach (char c in tag)
+            {
+                if (safe.Length >= 64) break;
+                safe.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_');
+            }
+            return safe.ToString();
         }
 
         public void Dispose()

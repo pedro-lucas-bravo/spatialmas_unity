@@ -1,10 +1,10 @@
 # SpatialMAS — Multiplatform XR Multi-Agent Interaction & Spatial Sonification Platform
 
-**SpatialMAS** is a commercial-grade, clean-room Mixed Reality (MR) and Virtual Reality (VR) multi-agent simulation and 3D procedural spatial audio platform built in **Unity 6 (`6000.6.6f1`)**.
+**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent simulation and procedural spatial audio research prototype built in **Unity 6 (`6000.6.6f1`)**.
 
 Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 2026), it provides:
-1. **Multiplatform XR & Desktop Support**: Runs natively on **Meta Quest 3 / 3S / Pro (`Android` OpenXR)**, **Apple Vision Pro (`visionOS`)**, **Generic OpenXR Headsets** (Pico 4 Ultra, Android XR, HTC Vive, PCVR), and **Desktop Standalone (`Windows`, `macOS`, `Linux`)**.
-2. **100% `HS-ims` OSC v1 Backward Compatibility + v2 XR Extensions**: Works out-of-the-box with all Python, Cycling '74 Max, and C++ scripts from the [ACSOS 2025 `human_swarm_examples`](./docs/OSC_API_SPECIFICATION.md) repository on UDP port `6011`, while adding v2 endpoints for runtime **MR Passthrough $\leftrightarrow$ VR Immersive** switching (`/xr/mode`), **World Scale & Origin Calibration** (`/xr/scale`, `/xr/origin`), and live **User Head & Hand 6DoF Pose Streaming** (`/xr/user/pose`, `/xr/hands/pose`).
+1. **Desktop and OpenXR implementation**: Includes desktop controls and Android/PC OpenXR setup for head tracking and tracked-hand interaction. Headset passthrough, performance, and platform builds require validation on the target hardware. The **Apple Vision Pro (`visionOS`) build menu is experimental scaffolding**; a visionOS XR provider and device validation are still required.
+2. **`HS-ims` OSC v1 Compatibility + v2 XR Extensions**: Implements the legacy signatures documented in the [OSC API specification](./docs/OSC_API_SPECIFICATION.md) on UDP port `6011`, plus **MR/VR switching** (`/xr/mode`), **live arena scale and origin changes** (`/xr/scale`, `/xr/origin`), and **head/hand pose streaming** (`/xr/user/pose`, `/xr/hands/pose`). Regression tests cover selected compatibility cases; full Python/Max/C++ application compatibility is not yet certified.
 3. **Zero-Dependency Native C# Procedural DSP Synthesizer (`NativeDspSynthesizer`)**: Per-agent 3D spatialized audio synthesis (`OnAudioFilterRead`) featuring anti-aliased PolyBLEP oscillators (Sine, Square, Saw, Triangle), ADSR envelopes, 12 dB/oct Biquad Low-Pass Filter with Resonance, Schroeder Reverb, and **dual CC ID compatibility** (`0/1` Waveform, `82/74` Attack, `83/71` Decay, `85/72` Sustain, `17/73` Release).
 4. **Five Built-In No-Code Interactive Scenarios**:
    - **Scenario 0**: *External OSC Controller Mode (`HS-ims` Compatible)*
@@ -13,7 +13,7 @@ Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 
    - **Scenario 3**: *Orbital Attractors & Repellers* (Interactive Cyan Attractor & Red Repeller cubes + expanding wavefront `/agents/localcomm`)
    - **Scenario 4**: *Musical Encounters* (SysMus25 workshop elastic boundary reflection + radial-quantized musical encounters)
    - **Scenario 5**: *Self-Assembly* (ACSOS 2024 autonomous & hand-assemblable 6-face musical cubes with $90^\circ$ face snapping and coupled polyrhythmic phasors)
-5. **Dual Buffered CSV Telemetry + Wi-Fi HTTP Log Export Server (`:8080`)**: Records both `osc_traffic_*.csv` and 50 Hz `xr_embodiment_*.csv` (Head 6DoF, Hand 6DoF, Pinch events, Frametime ms) and serves an embedded web dashboard at `http://<headset-ip>:8080/` so researchers can download CSV logs directly in their laptop browser over Wi-Fi without an `adb pull` USB cable.
+5. **Dual Buffered CSV Telemetry + Wi-Fi HTTP Log Export Server (`:8080`)**: Records `osc_traffic_*.csv` and `xr_embodiment_*.csv` (head position/rotation, hand positions, pinch state, and frame time). Every session uses a unique ID and refuses to overwrite an existing file. Telemetry targets 50 Hz, limited by frame rate. Download logs from `http://<device-ip>:8080/` over the local network.
 
 ---
 
@@ -24,7 +24,7 @@ Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 
    **`SpatialMAS -> 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`**
    *(Alias: `SpatialMAS -> Build Full SpatialMAS Scene & Prefabs`)*
    - Deterministically generates all 6 URP materials (`Assets/_SpatialMAS/Materials/` & `Assets/_SpatialMAS/Resources/`), 3 agent prefabs (`Agent_Sphere.prefab`, `Agent_Cube.prefab`, `Agent_Pyramid.prefab`), `SpatialMASConfig.asset`, and `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity`.
-3. Press **Play** in the Editor to explore the **Game-Like 3D Desktop Viewport** (`WASD`/`Arrow` keys to walk/fly at any time, `[F]` or `RMB (Hold)` to look around, `MMB` to pan, `Scroll` to zoom, `Alt + LMB` to grab agents, `[Space]` pause, `[R]` reset, `[I]` toggle 3D Agent IDs, `[H]` hide HUD), or build for your target headset under **`SpatialMAS -> 3. Multiplatform Build Profiles`**:
+3. Press **Play** in the Editor to explore the **Game-Like 3D Desktop Viewport** (`WASD`/`Arrow` keys to walk/fly at any time, `[F]` or `RMB (Hold)` to look around, `MMB` to pan, `Scroll` to zoom, `Alt + LMB` to grab agents, `[Space]` pause, `[R]` reset, `[I]` toggle 3D Agent IDs, `[H]` hide HUD), or build under **`SpatialMAS -> Build Target`**:
    - `Build Meta Quest 3 / Android OpenXR (.apk)`
    - `Build Apple Vision Pro (visionOS Xcode Project)`
    - `Build Windows Standalone (x64 .exe)` / `Build macOS Standalone (.app)` / `Build Linux Standalone (x64)`
@@ -69,3 +69,14 @@ Open **Window -> General -> Test Runner** in Unity 6 to run:
 pip install -r ExternalTools/requirements.txt
 python ExternalTools/verify_osc_compatibility.py --ip 127.0.0.1 --port 6011
 ```
+
+The live verifier requires an actual `/test/alive/` acknowledgment before sending its demonstration sequence and exits with an error if Unity does not reply. It checks connectivity and sends traffic; inspect Unity for rendering/audio behavior.
+
+GitHub CI installs only `python-osc` and runs asset/JSON integrity checks, four Python feedback/packet tests, and `--dry-run` packet validation. It does not install Unity, containers, NumPy, or a .NET SDK. Run Unity regressions locally:
+
+```powershell
+unity test . --mode EditMode --output Logs/editmode-results.xml
+unity test . --mode PlayMode --output Logs/playmode-results.xml
+```
+
+These commands launch the installed project Editor in batch mode. If the project is already open, use the connected `unity command test run` commands above instead.

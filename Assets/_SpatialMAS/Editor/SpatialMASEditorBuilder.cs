@@ -127,11 +127,33 @@ namespace SpatialMAS.Editor
 
         private static void ConfigureBuildTargetOpenXR(BuildTargetGroup targetGroup)
         {
-            var generalSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(targetGroup);
-            if (generalSettings != null && generalSettings.Manager != null)
+            // Feature settings alone do not start XR. A clean project also needs a registered
+            // per-target settings container and manager with an assigned loader.
+            XRGeneralSettingsPerBuildTarget targets;
+            if (!EditorBuildSettings.TryGetConfigObject(XRGeneralSettings.settingsKey, out targets) || targets == null)
             {
-                XRPackageMetadataStore.AssignLoader(generalSettings.Manager, typeof(OpenXRLoader).FullName, targetGroup);
+                string[] matches = AssetDatabase.FindAssets("t:XRGeneralSettingsPerBuildTarget");
+                if (matches.Length > 0)
+                    targets = AssetDatabase.LoadAssetAtPath<XRGeneralSettingsPerBuildTarget>(AssetDatabase.GUIDToAssetPath(matches[0]));
+                if (targets == null)
+                {
+                    Directory.CreateDirectory("Assets/XR");
+                    targets = ScriptableObject.CreateInstance<XRGeneralSettingsPerBuildTarget>();
+                    AssetDatabase.CreateAsset(targets, "Assets/XR/XRGeneralSettingsPerBuildTarget.asset");
+                }
+                EditorBuildSettings.AddConfigObject(XRGeneralSettings.settingsKey, targets, true);
             }
+            if (!targets.HasSettingsForBuildTarget(targetGroup)) targets.CreateDefaultSettingsForBuildTarget(targetGroup);
+            if (!targets.HasManagerSettingsForBuildTarget(targetGroup)) targets.CreateDefaultManagerSettingsForBuildTarget(targetGroup);
+            var generalSettings = targets.SettingsForBuildTarget(targetGroup);
+            generalSettings.InitManagerOnStart = true;
+            generalSettings.Manager.automaticLoading = true;
+            generalSettings.Manager.automaticRunning = true;
+            if (!XRPackageMetadataStore.AssignLoader(generalSettings.Manager, typeof(OpenXRLoader).FullName, targetGroup))
+                throw new InvalidOperationException($"Could not assign the OpenXR loader for {targetGroup}.");
+            EditorUtility.SetDirty(generalSettings);
+            EditorUtility.SetDirty(generalSettings.Manager);
+            EditorUtility.SetDirty(targets);
 
             FeatureHelpers.RefreshFeatures(targetGroup);
             OpenXRSettings openXrSettings = OpenXRSettings.GetSettingsForBuildTargetGroup(targetGroup);
@@ -451,8 +473,9 @@ namespace SpatialMAS.Editor
                     {
                         var pinch = nfi.gameObject.AddComponent<XRHandPinchHysteresis>();
                         pinch.Handedness = parentName.Contains("Left") ? Handedness.Left : Handedness.Right;
-                        nfi.selectInput.SetObjectReference(pinch);
-                        nfi.uiPressInput.SetObjectReference(pinch);
+                        pinch.FallbackInput = nfi.selectInput;
+                        nfi.selectInput = XRInteractionRigSetup.ObjectReader("Pinch Select", pinch);
+                        nfi.uiPressInput = XRInteractionRigSetup.ObjectReader("Pinch UI Press", pinch);
                     }
                 }
             }
@@ -477,10 +500,7 @@ namespace SpatialMAS.Editor
                 camGo.AddComponent<AudioListener>();
                 xrOrigin.Camera = mainCam;
 
-                // Attach TrackedPoseDriver so XROrigin has center-eye 6DoF bindings on headsets without warning
-                var tpd = camGo.AddComponent<TrackedPoseDriver>();
-                tpd.trackingType = TrackedPoseDriver.TrackingType.RotationAndPosition;
-                tpd.updateType = TrackedPoseDriver.UpdateType.UpdateAndBeforeRender;
+                XRInteractionRigSetup.ConfigureHeadTracking(mainCam);
 
                 var leftHandGo = new GameObject("Left Hand Tracking");
                 leftHandGo.transform.SetParent(camOffsetGo.transform, false);
@@ -492,6 +512,11 @@ namespace SpatialMAS.Editor
                 var rightPinch = rightHandGo.AddComponent<XRHandPinchHysteresis>();
                 rightPinch.Handedness = Handedness.Right;
             }
+
+            XRInteractionRigSetup.ConfigureHeadTracking(mainCam);
+            XRInteractionRigSetup.EnsureHandInteractors(mainCam);
+            foreach (var pinch in mainCam.GetComponentInParent<XROrigin>().GetComponentsInChildren<XRHandPinchHysteresis>(true))
+                pinch.ConfigureTrackingOrigin(XRInteractionRigSetup.GetTrackingOrigin(mainCam));
 
             // Configure Passthrough defaults on Main Camera (Alpha = 0, PostProcessing = false, ARCameraManager ready)
             mainCam.clearFlags = CameraClearFlags.SolidColor;

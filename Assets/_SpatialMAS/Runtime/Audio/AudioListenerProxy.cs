@@ -15,6 +15,7 @@ namespace SpatialMAS.Audio
 
         private Transform _headTransform;
         private SimulationCommandBus _bus;
+        private AudioListener _listener;
 
         public bool LockedToHead
         {
@@ -32,11 +33,22 @@ namespace SpatialMAS.Audio
             _headTransform = headCameraTransform;
             _lockedToHead = lockToHeadDefault;
 
+            // OSC listener overrides must move the component that actually receives audio.
+            // Older generated scenes put it on Main Camera, so transfer ownership at runtime.
+            _listener = GetComponent<AudioListener>();
+            foreach (var listener in FindObjectsByType<AudioListener>(FindObjectsInactive.Include))
+                if (listener != _listener) listener.enabled = false;
+            if (_listener == null) _listener = gameObject.AddComponent<AudioListener>();
+            _listener.enabled = true;
+            if (_lockedToHead && _headTransform != null)
+                transform.SetPositionAndRotation(_headTransform.position, _headTransform.rotation);
+
             if (_bus != null)
             {
                 _bus.OnSetListenerPositionUnity += HandleSetPosition;
                 _bus.OnSetListenerRotationUnity += HandleSetRotation;
                 _bus.OnSetListenerLockedToHead += HandleSetLockedToHead;
+                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
 
             UpdateVisualVisibility();
@@ -49,6 +61,7 @@ namespace SpatialMAS.Audio
                 _bus.OnSetListenerPositionUnity -= HandleSetPosition;
                 _bus.OnSetListenerRotationUnity -= HandleSetRotation;
                 _bus.OnSetListenerLockedToHead -= HandleSetLockedToHead;
+                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
         }
 
@@ -88,6 +101,12 @@ namespace SpatialMAS.Audio
         private void HandleSetLockedToHead(bool locked)
         {
             LockedToHead = locked;
+        }
+
+        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        {
+            if (!_lockedToHead)
+                transform.SetPositionAndRotation(change.TransformPosition(transform.position), change.TransformRotation(transform.rotation));
         }
 
         private void UpdateVisualVisibility()

@@ -22,8 +22,10 @@ namespace SpatialMAS.Agents
         private readonly Stack<AgentEntity> _agentPool = new Stack<AgentEntity>(256);
 
         private SimulationCommandBus _bus;
+        private SpatialCoordinateMapper _mapper;
         private Transform _agentsRoot;
         private bool _showAgentIds;
+        private int _nextAutoId;
 
         public IReadOnlyDictionary<int, AgentEntity> ActiveAgents => _activeAgents;
         public IReadOnlyList<int> OrderedAgentIds => _orderedAgentIds;
@@ -35,9 +37,11 @@ namespace SpatialMAS.Agents
             set => HandleSetShowAgentIds(value);
         }
 
-        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null, Material translucentMaterial = null)
+        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null, Material translucentMaterial = null,
+            SpatialCoordinateMapper mapper = null)
         {
             _bus = bus;
+            _mapper = mapper;
             if (defaultMaterial != null) _defaultAgentMaterial = defaultMaterial;
             if (translucentMaterial != null) _translucentRadiusMaterial = translucentMaterial;
 
@@ -57,6 +61,9 @@ namespace SpatialMAS.Agents
                 _bus.OnInstantiateAgents += HandleInstantiateAgents;
                 _bus.OnAddAgents += HandleAddAgents;
                 _bus.OnRemoveAgents += HandleRemoveAgents;
+                _bus.OnAddAgentsAutomatically += HandleAddAgentsAutomatically;
+                _bus.OnRemoveLastAgents += HandleRemoveLastAgents;
+                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
                 _bus.OnSetAgentPositionUnity += HandleSetAgentPosition;
                 _bus.OnSetBatchAgentPositionsUnity += HandleSetBatchAgentPositions;
                 _bus.OnSetAgentSpeedMetersPerSec += HandleSetAgentSpeed;
@@ -71,6 +78,7 @@ namespace SpatialMAS.Agents
                 _bus.OnSetAgentSynthNote += HandleSetAgentSynthNote;
                 _bus.OnSetAgentSynthParam += HandleSetAgentSynthParam;
                 _bus.OnFlushAgentSynth += HandleFlushAgentSynth;
+                _bus.OnSetAgentSynthEnabledFiltered += HandleSetAgentSynthEnabledFiltered;
                 _bus.OnSetAgentAudioBank += HandleSetAgentAudioBank;
             }
         }
@@ -82,6 +90,9 @@ namespace SpatialMAS.Agents
                 _bus.OnInstantiateAgents -= HandleInstantiateAgents;
                 _bus.OnAddAgents -= HandleAddAgents;
                 _bus.OnRemoveAgents -= HandleRemoveAgents;
+                _bus.OnAddAgentsAutomatically -= HandleAddAgentsAutomatically;
+                _bus.OnRemoveLastAgents -= HandleRemoveLastAgents;
+                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
                 _bus.OnSetAgentPositionUnity -= HandleSetAgentPosition;
                 _bus.OnSetBatchAgentPositionsUnity -= HandleSetBatchAgentPositions;
                 _bus.OnSetAgentSpeedMetersPerSec -= HandleSetAgentSpeed;
@@ -96,6 +107,7 @@ namespace SpatialMAS.Agents
                 _bus.OnSetAgentSynthNote -= HandleSetAgentSynthNote;
                 _bus.OnSetAgentSynthParam -= HandleSetAgentSynthParam;
                 _bus.OnFlushAgentSynth -= HandleFlushAgentSynth;
+                _bus.OnSetAgentSynthEnabledFiltered -= HandleSetAgentSynthEnabledFiltered;
                 _bus.OnSetAgentAudioBank -= HandleSetAgentAudioBank;
             }
         }
@@ -155,6 +167,7 @@ namespace SpatialMAS.Agents
             }
             _activeAgents.Clear();
             _orderedAgentIds.Clear();
+            _nextAutoId = 0;
         }
 
         private AgentEntity SpawnOrRentAgent(int id, AgentShapeType shape, AgentMovementMode movMode, float scaleMeters)
@@ -194,9 +207,11 @@ namespace SpatialMAS.Agents
 
             entity.transform.SetParent(_agentsRoot, false);
             entity.Configure(id, shape, movMode, scaleMeters, _bus);
+            entity.PlaceImmediately(_mapper != null ? _mapper.OriginOffset : Vector3.zero);
             entity.SetShowIdLabel(_showAgentIds);
             _activeAgents[id] = entity;
             _orderedAgentIds.Add(id);
+            if (id >= _nextAutoId && id < int.MaxValue) _nextAutoId = id + 1;
             return entity;
         }
 
@@ -218,6 +233,39 @@ namespace SpatialMAS.Agents
             {
                 SpawnOrRentAgent(ids[i], shape, movMode, scaleMeters);
             }
+        }
+
+        private void HandleAddAgentsAutomatically(AgentShapeType shape, AgentMovementMode mode, float scaleMeters, Vector3[] positions)
+        {
+            if (positions == null) return;
+            for (int i = 0; i < positions.Length && ActiveCount < MaxSafeAgentsCount; i++)
+            {
+                while (_activeAgents.ContainsKey(_nextAutoId))
+                    _nextAutoId = _nextAutoId == int.MaxValue ? 0 : _nextAutoId + 1;
+                int id = _nextAutoId;
+                _nextAutoId = _nextAutoId == int.MaxValue ? 0 : _nextAutoId + 1;
+                AgentEntity entity = SpawnOrRentAgent(id, shape, mode, scaleMeters);
+                if (entity != null) entity.PlaceImmediately(positions[i]);
+            }
+        }
+
+        private void HandleRemoveLastAgents(int count, int shape, int movementMode)
+        {
+            for (int i = _orderedAgentIds.Count - 1; i >= 0 && count > 0; i--)
+            {
+                int id = _orderedAgentIds[i];
+                AgentEntity entity = _activeAgents[id];
+                if ((shape >= 0 && (int)entity.ShapeType != shape) ||
+                    (movementMode >= 0 && (int)entity.MovementMode != movementMode)) continue;
+                HandleRemoveAgents(new[] { id });
+                count--;
+            }
+        }
+
+        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        {
+            foreach (AgentEntity entity in _activeAgents.Values)
+                entity.ApplySpatialFrameChange(change);
         }
 
         private void HandleRemoveAgents(int[] ids)
@@ -384,6 +432,19 @@ namespace SpatialMAS.Agents
             else if (_activeAgents.TryGetValue(id, out AgentEntity entity))
             {
                 entity.Synth.Flush();
+            }
+        }
+
+        private void HandleSetAgentSynthEnabledFiltered(int count, int shape, int movementMode, bool enabled)
+        {
+            for (int i = 0; i < _orderedAgentIds.Count && count > 0; i++)
+            {
+                AgentEntity entity = _activeAgents[_orderedAgentIds[i]];
+                if ((shape >= 0 && (int)entity.ShapeType != shape) ||
+                    (movementMode >= 0 && (int)entity.MovementMode != movementMode)) continue;
+                if (!enabled) entity.Synth.Flush();
+                entity.Synth.IsMuted = !enabled;
+                count--;
             }
         }
 

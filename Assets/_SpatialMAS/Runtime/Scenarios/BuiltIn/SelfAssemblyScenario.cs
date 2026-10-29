@@ -15,7 +15,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// - 90-degree face snapping and coupled internal phasor (_cyclePhasor) synchronization across connected structures.
     /// - Polyrhythmic face-slot MIDI note sequencing where Attack/Release scale with structure size.
     /// </summary>
-    public class SelfAssemblyScenario : IScenarioModule
+    public class SelfAssemblyScenario : IScenarioModule, ISpatialFrameAwareScenario
     {
         public enum AssemblyState
         {
@@ -77,6 +77,9 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private int _maxStructureSize = 10;
         private float _wanderingDuration = 3.5f;
         private float _maxJoinedDuration = 18.0f;
+        private float _arenaRadiusMeters;
+        private float _dockingSpeedMetersPerSecond = 0.55f;
+        private float _movementScale = 1f;
 
         private CubeNode[] _nodes;
 
@@ -94,8 +97,11 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
             Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
             float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
+            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
             _cubeSizeMeters = Mathf.Clamp(0.42f * scale, 0.055f, 0.16f);
-            float arenaRadius = Mathf.Clamp(4.5f * scale, 0.55f, 2.5f);
+            _arenaRadiusMeters = Mathf.Clamp(4.5f * scale, 0.55f, 2.5f);
+            _dockingSpeedMetersPerSecond = 0.55f;
+            _movementScale = 1f;
 
             _ctx.Bus.InstantiateAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, _cubeCount, _cubeSizeMeters, "127.0.0.1", 6012);
 
@@ -112,14 +118,15 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     StateTimer = (float)(rng.NextDouble() * _wanderingDuration),
                     CyclePhasor = (float)rng.NextDouble(),
                     RhythmDivision = s_RhythmDivisions[i % s_RhythmDivisions.Length],
-                    Position = origin + new Vector3(
-                        (float)(rng.NextDouble() * 2.0 - 1.0) * arenaRadius * 0.7f,
-                        (float)(rng.NextDouble() * 2.0 - 1.0) * arenaRadius * 0.45f,
-                        (float)(rng.NextDouble() * 2.0 - 1.0) * arenaRadius * 0.7f),
-                    Velocity = new Vector3(
+                    Rotation = rotation,
+                    Position = origin + rotation * new Vector3(
+                        (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.7f,
+                        (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.45f,
+                        (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.7f),
+                    Velocity = rotation * (new Vector3(
                         (float)(rng.NextDouble() * 2.0 - 1.0),
                         (float)(rng.NextDouble() * 2.0 - 1.0),
-                        (float)(rng.NextDouble() * 2.0 - 1.0)).normalized * 0.22f
+                        (float)(rng.NextDouble() * 2.0 - 1.0)).normalized * 0.22f)
                 };
 
                 for (int f = 0; f < 6; f++)
@@ -136,6 +143,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 if (_ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var ent) && ent != null)
                 {
                     ent.SnapRotation90DegreesOnRelease = true;
+                    ent.transform.rotation = node.Rotation;
                 }
 
                 _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_OscillatorWaveform, (float)SynthWaveformType.Triangle);
@@ -151,8 +159,6 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
             Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
-            float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
-            float arenaRadius = Mathf.Clamp(4.5f * scale, 0.55f, 2.5f);
             float joinDetectRadius = _cubeSizeMeters * 3.2f;
 
             // 1. Check User Hand / Mouse Grab States
@@ -201,7 +207,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 switch (node.State)
                 {
                     case AssemblyState.Wandering:
-                        DriftWithinArena(node, origin, arenaRadius, dt);
+                        DriftWithinArena(node, origin, _arenaRadiusMeters, dt);
                         node.StateTimer -= dt;
                         if (node.StateTimer <= 0f)
                         {
@@ -210,7 +216,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                         break;
 
                     case AssemblyState.WanderingAndDetecting:
-                        DriftWithinArena(node, origin, arenaRadius, dt);
+                        DriftWithinArena(node, origin, _arenaRadiusMeters, dt);
                         TryFindAssemblyTarget(node, joinDetectRadius);
                         break;
 
@@ -241,6 +247,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 // 4. Push Visual & Transform State
                 _ctx.Bus.SetAgentPositionUnity(i, node.Position);
                 _ctx.Bus.SetAgentColor(i, GetColorForState(node.State));
+                if (_ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var entity) && entity != null && !entity.IsGrabbedByUser)
+                {
+                    entity.transform.rotation = node.Rotation;
+                }
             }
         }
 
@@ -250,7 +260,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             Vector3 offset = node.Position - center;
             if (offset.magnitude > radius)
             {
-                node.Velocity = -offset.normalized * 0.24f;
+                node.Velocity = -offset.normalized * (0.24f * _movementScale);
                 node.Position = center + offset.normalized * (radius * 0.95f);
             }
         }
@@ -296,9 +306,11 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
             CubeNode parent = _nodes[seeker.TargetParentId];
             int slot = seeker.TargetSlotIndex;
-            if (parent.ConnectedNeighborIds[slot] != -1 && parent.ConnectedNeighborIds[slot] != seeker.Id)
+            if (parent.RootStructureId == seeker.RootStructureId ||
+                CountStructureSize(parent.RootStructureId) >= _maxStructureSize ||
+                (parent.ConnectedNeighborIds[slot] != -1 && parent.ConnectedNeighborIds[slot] != seeker.Id))
             {
-                // Slot was taken by another cube
+                // Other seekers may have filled the slot or structure since target selection.
                 seeker.TargetParentId = -1;
                 seeker.TargetSlotIndex = -1;
                 seeker.State = AssemblyState.WanderingAndDetecting;
@@ -306,7 +318,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             }
 
             Vector3 targetPos = GetSlotWorldPosition(parent.Position, parent.Rotation, slot, _cubeSizeMeters);
-            seeker.Position = Vector3.MoveTowards(seeker.Position, targetPos, 0.55f * dt);
+            seeker.Position = Vector3.MoveTowards(seeker.Position, targetPos, _dockingSpeedMetersPerSecond * dt);
             seeker.Rotation = Quaternion.Slerp(seeker.Rotation, parent.Rotation, 10f * dt);
 
             if (Vector3.Distance(seeker.Position, targetPos) <= 0.004f)
@@ -355,8 +367,102 @@ namespace SpatialMAS.Scenarios.BuiltIn
             node.RootStructureId = node.Id;
             node.State = AssemblyState.Wandering;
             node.StateTimer = _wanderingDuration;
-            node.Velocity = Random.onUnitSphere * 0.28f;
+            node.Velocity = Random.onUnitSphere * (0.28f * _movementScale);
             _ctx.Bus?.SetAgentSynthNote(node.Id, 0, 60, 0);
+            RebuildStructureMetadata();
+        }
+
+        private void RebuildStructureMetadata()
+        {
+            // Removing a cube can split one structure into several components. Rebuild
+            // each component's rooted tree so no child follows an edge that was removed.
+            var visited = new bool[_nodes.Length];
+            var component = new List<int>(_nodes.Length);
+            var queue = new Queue<int>(_nodes.Length);
+            for (int start = 0; start < _nodes.Length; start++)
+            {
+                if (visited[start]) continue;
+                component.Clear();
+                queue.Enqueue(start);
+                visited[start] = true;
+                while (queue.Count > 0)
+                {
+                    int id = queue.Dequeue();
+                    component.Add(id);
+                    foreach (int neighborId in _nodes[id].ConnectedNeighborIds)
+                    {
+                        if (neighborId < 0 || neighborId >= _nodes.Length || visited[neighborId]) continue;
+                        visited[neighborId] = true;
+                        queue.Enqueue(neighborId);
+                    }
+                }
+
+                if (component.Count == 1)
+                {
+                    CubeNode isolated = _nodes[start];
+                    isolated.RootStructureId = isolated.Id;
+                    if (isolated.State == AssemblyState.Joined || isolated.State == AssemblyState.JoinedWithUser)
+                    {
+                        isolated.TargetParentId = -1;
+                        isolated.TargetSlotIndex = -1;
+                        isolated.State = isolated.State == AssemblyState.JoinedWithUser
+                            ? AssemblyState.WanderingWithUser : AssemblyState.Wandering;
+                        isolated.StateTimer = _wanderingDuration;
+                    }
+                    continue;
+                }
+
+                int rootId = component[0];
+                foreach (int id in component)
+                {
+                    CubeNode member = _nodes[id];
+                    if (member.TargetParentId < 0 || !component.Contains(member.TargetParentId))
+                    {
+                        rootId = id;
+                        break;
+                    }
+                }
+
+                foreach (int id in component)
+                {
+                    visited[id] = false;
+                    _nodes[id].RootStructureId = rootId;
+                }
+                CubeNode root = _nodes[rootId];
+                root.TargetParentId = -1;
+                root.TargetSlotIndex = -1;
+                visited[rootId] = true;
+                queue.Enqueue(rootId);
+                while (queue.Count > 0)
+                {
+                    CubeNode parent = _nodes[queue.Dequeue()];
+                    for (int slot = 0; slot < 6; slot++)
+                    {
+                        int childId = parent.ConnectedNeighborIds[slot];
+                        if (childId < 0 || childId >= _nodes.Length || visited[childId]) continue;
+                        CubeNode child = _nodes[childId];
+                        child.TargetParentId = parent.Id;
+                        child.TargetSlotIndex = slot;
+                        visited[childId] = true;
+                        queue.Enqueue(childId);
+                    }
+                }
+            }
+        }
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        {
+            if (_nodes == null) return;
+            foreach (CubeNode node in _nodes)
+            {
+                node.Position = change.TransformPosition(node.Position);
+                node.Velocity = change.TransformVector(node.Velocity);
+                node.Rotation = change.TransformRotation(node.Rotation);
+            }
+            _cubeSizeMeters *= change.ScaleRatio;
+            _arenaRadiusMeters *= change.ScaleRatio;
+            _dockingSpeedMetersPerSecond *= change.ScaleRatio;
+            _movementScale *= change.ScaleRatio;
         }
 
         private void StepMusicalPhasor(CubeNode node, float dt)

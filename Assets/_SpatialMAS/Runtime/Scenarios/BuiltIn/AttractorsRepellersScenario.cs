@@ -10,7 +10,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// Spherical agents orbit around user-grabbable Cyan Attractor Cubes and are deflected by Red Repeller Cubes,
     /// broadcasting their orbital angles via simulated expanding Local Communication wavefronts.
     /// </summary>
-    public class AttractorsRepellersScenario : IScenarioModule
+    public class AttractorsRepellersScenario : IScenarioModule, ISpatialFrameAwareScenario
     {
         public int ScenarioId => 3;
         public string DisplayName => "3. Orbital Attractors & Repellers";
@@ -30,6 +30,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private float[] _commTimers;
         private Vector3[] _attractorPositions;
         private Vector3[] _repellerPositions;
+        private bool[,] _repellerContacts;
+        private Quaternion _orbitRotation = Quaternion.identity;
+        private float _repellerRadiusMeters;
+        private float _localCommRangeMeters;
 
         public void OnScenarioStart(ScenarioContext context)
         {
@@ -49,6 +53,9 @@ namespace SpatialMAS.Scenarios.BuiltIn
             float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
             float sphereSize = Mathf.Clamp(0.28f * scale, 0.04f, 0.14f);
             float cubeSize = sphereSize * 1.45f;
+            _orbitRotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
+            _repellerRadiusMeters = 1.25f * scale;
+            _localCommRangeMeters = 1.8f * scale;
 
             _ctx.Bus.InstantiateAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, _orbiterCount, sphereSize, "127.0.0.1", 6012);
 
@@ -62,7 +69,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             {
                 int id = _orbiterCount + i;
                 float xOff = (i == 0 ? -1.8f : 1.8f) * scale;
-                _attractorPositions[i] = origin + new Vector3(xOff, 0f, 0f);
+                _attractorPositions[i] = origin + _orbitRotation * new Vector3(xOff, 0f, 0f);
                 _ctx.Bus.SetAgentPositionUnity(id, _attractorPositions[i]);
                 _ctx.Bus.SetAgentColor(id, new Color(0.0f, 0.95f, 1.0f, 1.0f)); // Cyan Attractor
                 _ctx.Bus.SetAgentInteractable(id, true);
@@ -73,7 +80,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             {
                 int id = _orbiterCount + _attractorCount + i;
                 float zOff = (i == 0 ? -1.6f : 1.6f) * scale;
-                _repellerPositions[i] = origin + new Vector3(0f, 0.15f * scale, zOff);
+                _repellerPositions[i] = origin + _orbitRotation * new Vector3(0f, 0.15f * scale, zOff);
                 _ctx.Bus.SetAgentPositionUnity(id, _repellerPositions[i]);
                 _ctx.Bus.SetAgentColor(id, new Color(1.0f, 0.18f, 0.22f, 1.0f)); // Red Repeller
                 _ctx.Bus.SetAgentInteractable(id, true);
@@ -85,6 +92,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             _omegaPhi = new float[_orbiterCount];
             _orbitRadius = new float[_orbiterCount];
             _commTimers = new float[_orbiterCount];
+            _repellerContacts = new bool[_orbiterCount, _repellerCount];
 
             var rng = new System.Random(303);
             for (int i = 0; i < _orbiterCount; i++)
@@ -109,7 +117,6 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (_ctx.Bus == null || _theta == null) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
-            float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
 
             // Read live positions of user-grabbable Attractor & Repeller cubes
             for (int i = 0; i < _attractorCount; i++)
@@ -150,16 +157,24 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     }
                 }
 
-                // Check repeller proximity -> invert angular velocity if too close
+                // Reverse on entry, then wait until the orbiter has left a slightly
+                // larger radius before allowing another reversal.
+                bool enteredRepeller = false;
                 for (int r = 0; r < _repellerCount; r++)
                 {
                     float dRep = Vector3.Distance(currentPos, _repellerPositions[r]);
-                    if (dRep < 1.25f * scale)
+                    if (!_repellerContacts[i, r] && dRep < _repellerRadiusMeters)
                     {
-                        _omegaTheta[i] = -_omegaTheta[i];
-                        _omegaPhi[i] = -_omegaPhi[i];
-                        break;
+                        _repellerContacts[i, r] = true;
+                        enteredRepeller = true;
                     }
+                    else if (_repellerContacts[i, r] && dRep > _repellerRadiusMeters * 1.1f)
+                        _repellerContacts[i, r] = false;
+                }
+                if (enteredRepeller)
+                {
+                    _omegaTheta[i] = -_omegaTheta[i];
+                    _omegaPhi[i] = -_omegaPhi[i];
                 }
 
                 _theta[i] = Mathf.Repeat(_theta[i] + _omegaTheta[i] * dt, Mathf.PI * 2.0f);
@@ -171,7 +186,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     rad * Mathf.Cos(_phi[i]),
                     rad * Mathf.Sin(_phi[i]) * Mathf.Sin(_theta[i]));
 
-                Vector3 nextPos = targetAttractor + sphericalOffset;
+                Vector3 nextPos = targetAttractor + _orbitRotation * sphericalOffset;
                 _ctx.Bus.SetAgentPositionUnity(i, nextPos);
 
                 // Continuous pitch & filter modulation from orbital angles
@@ -186,7 +201,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 if (_commTimers[i] <= 0f)
                 {
                     _commTimers[i] = 2.2f + (i % 3) * 0.6f;
-                    _ctx.Bus.TriggerLocalComm("orbit_sync", i, 1.8f * scale, 0.35f, new object[] { _theta[i], _phi[i] });
+                    _ctx.Bus.TriggerLocalComm("orbit_sync", i, _localCommRangeMeters, 0.35f, new object[] { _theta[i], _phi[i] });
                 }
             }
         }
@@ -217,13 +232,38 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (string.IsNullOrEmpty(paramName)) return;
             if (paramName.Equals("speed", System.StringComparison.OrdinalIgnoreCase))
             {
-                _angularSpeed = Mathf.Clamp(value, 0.2f, 5.0f);
+                SetAngularSpeed(Mathf.Clamp(value, 0.2f, 5.0f));
             }
         }
 
         public void ApplyPreset(int presetIndex)
         {
-            _angularSpeed = presetIndex == 0 ? 1.2f : (presetIndex == 1 ? 2.4f : 0.7f);
+            SetAngularSpeed(presetIndex == 0 ? 1.2f : (presetIndex == 1 ? 2.4f : 0.7f));
+        }
+
+        private void SetAngularSpeed(float speed)
+        {
+            float ratio = speed / _angularSpeed;
+            _angularSpeed = speed;
+            if (_omegaTheta == null) return;
+            for (int i = 0; i < _omegaTheta.Length; i++)
+            {
+                _omegaTheta[i] *= ratio;
+                _omegaPhi[i] *= ratio;
+            }
+        }
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        {
+            if (_theta == null) return;
+            for (int i = 0; i < _orbitRadius.Length; i++) _orbitRadius[i] *= change.ScaleRatio;
+            for (int i = 0; i < _attractorPositions.Length; i++)
+                _attractorPositions[i] = change.TransformPosition(_attractorPositions[i]);
+            for (int i = 0; i < _repellerPositions.Length; i++)
+                _repellerPositions[i] = change.TransformPosition(_repellerPositions[i]);
+            _orbitRotation = change.TransformRotation(_orbitRotation);
+            _repellerRadiusMeters *= change.ScaleRatio;
+            _localCommRangeMeters *= change.ScaleRatio;
         }
     }
 }

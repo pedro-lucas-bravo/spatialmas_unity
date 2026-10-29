@@ -11,7 +11,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// (or an interactive user-held cube / user hand) cross detection radii, an "encounter" triggers
     /// a quantized musical scale note based on radial distance from the boundary center.
     /// </summary>
-    public class MusicalEncountersScenario : IScenarioModule
+    public class MusicalEncountersScenario : IScenarioModule, ISpatialFrameAwareScenario
     {
         public int ScenarioId => 4;
         public string DisplayName => "4. Musical Encounters (SysMus25)";
@@ -42,6 +42,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
             Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
             float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
+            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
             _boundaryRadiusMeters = Mathf.Clamp(5.0f * scale, 0.5f, 3.5f);
             float agentSize = Mathf.Clamp(0.35f * scale, 0.04f, 0.15f);
 
@@ -74,8 +75,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     (float)(rng.NextDouble() * 2.0 - 1.0),
                     (float)(rng.NextDouble() * 2.0 - 1.0)).normalized;
 
-                _positions[i] = center + dir * (_boundaryRadiusMeters * 0.45f * (float)rng.NextDouble());
-                _velocities[i] = dir * (_speed * (0.7f + 0.6f * (float)rng.NextDouble()));
+                _positions[i] = center + rotation * (dir * (_boundaryRadiusMeters * 0.45f * (float)rng.NextDouble()));
+                _velocities[i] = rotation * (dir * (_speed * (0.7f + 0.6f * (float)rng.NextDouble())));
                 _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
 
                 _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_OscillatorWaveform, (float)(i % 2 == 0 ? SynthWaveformType.Sine : SynthWaveformType.Triangle));
@@ -173,13 +174,33 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (string.IsNullOrEmpty(paramName)) return;
             if (paramName.Equals("speed", System.StringComparison.OrdinalIgnoreCase))
             {
-                _speed = Mathf.Clamp(value, 0.1f, 3.0f);
+                SetSpeed(Mathf.Clamp(value, 0.1f, 3.0f));
             }
         }
 
         public void ApplyPreset(int presetIndex)
         {
-            _speed = presetIndex == 0 ? 0.55f : (presetIndex == 1 ? 1.15f : 0.35f);
+            SetSpeed(presetIndex == 0 ? 0.55f : (presetIndex == 1 ? 1.15f : 0.35f));
+        }
+
+        private void SetSpeed(float speed)
+        {
+            float ratio = speed / _speed;
+            _speed = speed;
+            if (_velocities == null) return;
+            for (int i = 0; i < _velocities.Length; i++) _velocities[i] *= ratio;
+        }
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        {
+            if (_positions == null) return;
+            for (int i = 0; i < _positions.Length; i++)
+            {
+                _positions[i] = change.TransformPosition(_positions[i]);
+                _velocities[i] = change.TransformVector(_velocities[i]);
+            }
+            _boundaryRadiusMeters *= change.ScaleRatio;
+            _speed *= change.ScaleRatio;
         }
     }
 }

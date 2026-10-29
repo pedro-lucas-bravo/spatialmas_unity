@@ -33,6 +33,7 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnSetArrowUnity += HandleSetArrow;
                 _bus.OnRemoveArrow += HandleRemoveArrow;
+                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
         }
 
@@ -42,6 +43,7 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnSetArrowUnity -= HandleSetArrow;
                 _bus.OnRemoveArrow -= HandleRemoveArrow;
+                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
         }
 
@@ -89,6 +91,17 @@ namespace SpatialMAS.Environment
             {
                 if (go != null) Destroy(go);
                 _arrows.Remove(id);
+            }
+        }
+
+        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        {
+            foreach (GameObject arrow in _arrows.Values)
+            {
+                if (arrow == null) continue;
+                arrow.transform.position = change.TransformPosition(arrow.transform.position);
+                arrow.transform.rotation = change.TransformRotation(arrow.transform.rotation);
+                arrow.transform.localScale *= change.ScaleRatio;
             }
         }
     }

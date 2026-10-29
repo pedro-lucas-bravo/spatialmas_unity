@@ -8,6 +8,66 @@ namespace SpatialMAS.Tests.EditMode
     public class DataRecordingServiceTests
     {
         [Test]
+        public void RapidRestart_PreservesEverySessionAndPairsItsFiles()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "SpatialMAS_UnitTests_" + System.Guid.NewGuid().ToString("N"));
+            try
+            {
+                using (var recorder = new DataRecordingService(null, tempDir))
+                {
+                    var paths = new System.Collections.Generic.HashSet<string>();
+                    for (int session = 0; session < 12; session++)
+                    {
+                        recorder.StartRecording("same_tag");
+                        string oscPath = recorder.ActiveOscCsvPath;
+                        string embodimentPath = recorder.ActiveEmbodimentCsvPath;
+                        Assert.IsTrue(paths.Add(oscPath), "Each restart must use a fresh file.");
+                        Assert.AreEqual(Path.GetFileName(oscPath).Substring("osc_traffic_".Length),
+                            Path.GetFileName(embodimentPath).Substring("xr_embodiment_".Length));
+                        recorder.LogOscMessage("IN", "/session/" + session, "value");
+                        recorder.LogEmbodimentRow(new EmbodimentTelemetryRow { Frame = session });
+                        recorder.StopRecording();
+                    }
+
+                    Assert.AreEqual(24, Directory.GetFiles(tempDir, "*.csv").Length);
+                    int expectedSession = 0;
+                    foreach (string path in paths)
+                    {
+                        Assert.AreEqual(2, File.ReadAllLines(path).Length);
+                        StringAssert.Contains("/session/", File.ReadAllText(path));
+                        expectedSession++;
+                    }
+                    Assert.AreEqual(12, expectedSession);
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Test]
+        public void Recording_QuotesMultilineFieldsAndKeepsTagInsideLogDirectory()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "SpatialMAS_UnitTests_" + System.Guid.NewGuid().ToString("N"));
+            try
+            {
+                using (var recorder = new DataRecordingService(null, tempDir))
+                {
+                    recorder.StartRecording("../participant\\\"one\"");
+                    Assert.AreEqual(Path.GetFullPath(tempDir), Path.GetDirectoryName(recorder.ActiveOscCsvPath));
+                    recorder.LogOscMessage("IN", "/message", "line one\nline two");
+                    recorder.StopRecording();
+                    StringAssert.Contains("\"line one\nline two\"", File.ReadAllText(recorder.ActiveOscCsvPath));
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Test]
         public void StartAndStopRecording_WritesValidOscAndEmbodimentCsvFiles()
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "SpatialMAS_UnitTests_" + System.Guid.NewGuid().ToString("N"));

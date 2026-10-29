@@ -6,7 +6,12 @@
         "UnityEditor.TestRunner",
         "SpatialMAS.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
-        "Unity.XR.ARFoundation"
+        "Unity.XR.ARFoundation",
+        "Unity.InputSystem",
+        "UnityEngine.UI",
+        "Unity.XR.CoreUtils",
+        "Unity.XR.Hands",
+        "Unity.XR.Interaction.Toolkit"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -7,6 +7,9 @@ using SpatialMAS.XR;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using UnityEngine.Events;
+using UnityEngine.EventSystems;
+using UnityEngine.XR.Interaction.Toolkit.UI;
 
 namespace SpatialMAS.UI
 {
@@ -33,6 +36,9 @@ namespace SpatialMAS.UI
         private DesktopInteractionRig _desktopRig;
 
         private Text _worldHudStatusText;
+        private GameObject _worldCanvasObject;
+        private Slider _worldScaleSlider;
+        private readonly Button[] _worldPresetButtons = new Button[5];
         private float _smoothedFps = 90f;
 
         // Deferred UI action flags (drained in Update() so scene/GPU mutations never run inside OnGUI!)
@@ -49,6 +55,7 @@ namespace SpatialMAS.UI
         private float _pendingWorldScale = -1f;
 
         private readonly Rect _hudRect = new Rect(14f, 14f, 430f, 485f);
+        private bool IsHeadsetActive => _platformAdapter != null && _platformAdapter.IsXRHeadsetActive;
 
         public bool ShowScreenOverlayOnDesktop
         {
@@ -90,23 +97,24 @@ namespace SpatialMAS.UI
             if (existing != null)
             {
                 _worldHudStatusText = existing.GetComponentInChildren<Text>();
+                _worldCanvasObject = existing.gameObject;
                 return;
             }
 
             var canvasGo = new GameObject("SpatialResearcherWorldCanvas");
+            _worldCanvasObject = canvasGo;
             canvasGo.transform.SetParent(transform, false);
-            canvasGo.transform.position = new Vector3(-0.72f, 1.35f, 1.15f);
-            canvasGo.transform.rotation = Quaternion.Euler(8f, 25f, 0f);
             canvasGo.transform.localScale = Vector3.one * 0.0012f;
 
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.dynamicPixelsPerUnit = 10f;
-            canvasGo.AddComponent<GraphicRaycaster>();
+            canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
+            EnsureXRUIEventSystem(transform);
 
             RectTransform rt = canvasGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(540f, 360f);
+            rt.sizeDelta = new Vector2(620f, 750f);
 
             var bgGo = new GameObject("PanelBackground");
             bgGo.transform.SetParent(canvasGo.transform, false);
@@ -125,11 +133,126 @@ namespace SpatialMAS.UI
             _worldHudStatusText.fontSize = 18;
             _worldHudStatusText.color = new Color(0.9f, 0.96f, 1.0f, 1.0f);
             _worldHudStatusText.alignment = TextAnchor.UpperLeft;
+            _worldHudStatusText.raycastTarget = false;
             var textRt = textGo.GetComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = new Vector2(18f, 18f);
-            textRt.offsetMax = new Vector2(-18f, -18f);
+            SetTopLeftRect(textRt, new Rect(18f, 18f, 584f, 195f));
+
+            string[] scenarioNames = { "0 · External OSC", "1 · Crowd Avoidance", "2 · Swarmalators", "3 · Attractors", "4 · Musical Encounters", "5 · Self-Assembly" };
+            for (int i = 0; i < scenarioNames.Length; i++)
+            {
+                int scenario = i;
+                CreateWorldButton(rt, scenarioNames[i], new Rect(18 + (i % 2) * 296, 220 + (i / 2) * 54, 288, 46),
+                    () => _pendingScenarioToLoad = scenario);
+            }
+            CreateWorldButton(rt, "Pause / Resume", new Rect(18, 390, 288, 46), () => _pendingTogglePause = true);
+            CreateWorldButton(rt, "Reset Scenario", new Rect(314, 390, 288, 46), () => _pendingResetScenario = true);
+            CreateWorldButton(rt, "MR / VR", new Rect(18, 444, 186, 46), () => _pendingToggleDisplayMode = true);
+            CreateWorldButton(rt, "Start / Stop CSV", new Rect(214, 444, 192, 46), () => _pendingToggleRecording = true);
+            CreateWorldButton(rt, "Agent IDs", new Rect(416, 444, 186, 46), () => _pendingToggleAgentIds = true);
+            for (int i = 0; i < _worldPresetButtons.Length; i++)
+            {
+                int preset = i;
+                _worldPresetButtons[i] = CreateWorldButton(rt, "Preset " + (i + 1), new Rect(18 + i * 118, 500, 110, 46),
+                    () => _pendingPresetToApply = preset);
+            }
+
+            var scaleLabel = CreateWorldText(rt, "World scale", 18);
+            SetTopLeftRect(scaleLabel.rectTransform, new Rect(18, 560, 140, 35));
+            var sliderGo = new GameObject("World Scale", typeof(RectTransform), typeof(Image), typeof(Slider));
+            sliderGo.transform.SetParent(rt, false);
+            SetTopLeftRect(sliderGo.GetComponent<RectTransform>(), new Rect(160, 560, 442, 35));
+            sliderGo.GetComponent<Image>().color = new Color(0.18f, 0.25f, 0.32f);
+            var handleGo = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+            handleGo.transform.SetParent(sliderGo.transform, false);
+            var handle = handleGo.GetComponent<RectTransform>();
+            handle.sizeDelta = new Vector2(32f, 45f);
+            handleGo.GetComponent<Image>().color = new Color(0.2f, 0.85f, 1f);
+            _worldScaleSlider = sliderGo.GetComponent<Slider>();
+            _worldScaleSlider.handleRect = handle;
+            _worldScaleSlider.targetGraphic = handleGo.GetComponent<Image>();
+            _worldScaleSlider.minValue = 0.05f;
+            _worldScaleSlider.maxValue = 1.5f;
+            _worldScaleSlider.SetValueWithoutNotify(_mapper != null ? _mapper.WorldScale : 0.2f);
+            _worldScaleSlider.onValueChanged.AddListener(scale => _pendingWorldScale = scale);
+            CreateWorldButton(rt, "Center Arena Ahead", new Rect(18, 624, 288, 46), CenterArenaAhead);
+            CreateWorldButton(rt, "Clear All", new Rect(314, 624, 288, 46), () => _pendingRemoveAllAgents = true);
+            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 680, 584, 46), PositionWorldPanel);
+            PositionWorldPanel();
+        }
+
+        private static void EnsureXRUIEventSystem(Transform parent)
+        {
+            var system = EventSystem.current;
+            if (system == null)
+            {
+                var go = new GameObject("SpatialMAS EventSystem");
+                go.transform.SetParent(parent, false);
+                system = go.AddComponent<EventSystem>();
+            }
+            var module = system.GetComponent<XRUIInputModule>();
+            foreach (var other in system.GetComponents<BaseInputModule>())
+                if (other != module) other.enabled = false;
+            if (module == null) module = system.gameObject.AddComponent<XRUIInputModule>();
+            module.enableXRInput = true;
+            module.enableMouseInput = true;
+            module.enabled = true;
+        }
+
+        private static void SetTopLeftRect(RectTransform rect, Rect bounds)
+        {
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(bounds.x, -bounds.y);
+            rect.sizeDelta = bounds.size;
+        }
+
+        private static Text CreateWorldText(Transform parent, string label, int fontSize)
+        {
+            var go = new GameObject(label, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(parent, false);
+            var text = go.GetComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = fontSize;
+            text.color = Color.white;
+            text.text = label;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static Button CreateWorldButton(Transform parent, string label, Rect bounds, UnityAction action)
+        {
+            var go = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            SetTopLeftRect(go.GetComponent<RectTransform>(), bounds);
+            var image = go.GetComponent<Image>();
+            image.color = new Color(0.12f, 0.28f, 0.38f);
+            var button = go.GetComponent<Button>();
+            button.targetGraphic = image;
+            button.onClick.AddListener(action);
+            var text = CreateWorldText(go.transform, label, 19);
+            text.rectTransform.anchorMin = Vector2.zero;
+            text.rectTransform.anchorMax = Vector2.one;
+            text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
+            return button;
+        }
+
+        private void PositionWorldPanel()
+        {
+            if (_worldCanvasObject == null || Camera.main == null) return;
+            Transform head = Camera.main.transform;
+            Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
+            if (forward.sqrMagnitude < 0.1f) forward = Vector3.forward;
+            Vector3 position = head.position + forward * 1.1f - Vector3.Cross(Vector3.up, forward) * 0.55f - Vector3.up * 0.1f;
+            _worldCanvasObject.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - head.position, Vector3.up));
+        }
+
+        private void CenterArenaAhead()
+        {
+            if (Camera.main == null) return;
+            Transform head = Camera.main.transform;
+            Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
+            _bus?.SetOriginOffset(head.position + forward * 0.8f - Vector3.up * 0.3f);
         }
 
         private void Update()
@@ -139,8 +262,12 @@ namespace SpatialMAS.UI
 
             if (_desktopRig != null)
             {
-                _desktopRig.IgnoredScreenGuiRect = _showScreenOverlayOnDesktop ? _hudRect : Rect.zero;
+                _desktopRig.IgnoredScreenGuiRect = _showScreenOverlayOnDesktop && !IsHeadsetActive ? _hudRect : Rect.zero;
             }
+            if (_worldCanvasObject != null) _worldCanvasObject.SetActive(IsHeadsetActive);
+            if (_worldScaleSlider != null && _mapper != null) _worldScaleSlider.SetValueWithoutNotify(_mapper.WorldScale);
+            for (int i = 0; i < _worldPresetButtons.Length; i++)
+                if (_worldPresetButtons[i] != null) _worldPresetButtons[i].gameObject.SetActive(i < 3 || (_scenarioManager != null && _scenarioManager.ActiveScenarioId == 2));
 
             ProcessDeferredUiActions();
             HandleKeyboardShortcuts();
@@ -298,14 +425,13 @@ namespace SpatialMAS.UI
                 $"Scenario: <b>{scenario}{runState}</b>\n" +
                 $"Active Agents: <b>{agents}</b>  |  OSC In (:{oscPort}): <b>{rxCount} msgs</b>\n" +
                 $"Telemetry: <b>{recState}</b>\n" +
-                $"Wi-Fi Log Download: <b>{wifiUrl}</b>\n\n" +
-                $"<i>Shortcuts: [0-5] Scenarios | [Space] Pause | [R] Reset | [Tab/M] MR/VR\n" +
-                $"Desktop: WASD+EQ Walk | RMB or [F] Look | LMB Drag | [C] Center Cam</i>";
+                $"Wi-Fi Log Download: <b>{wifiUrl}</b>";
         }
 
         private void OnGUI()
         {
             if (!Application.isPlaying) return;
+            if (IsHeadsetActive) return;
 
             // Draw center reticle crosshair when in First-Person Game Look Mode ([F])
             if (_desktopRig != null && _desktopRig.IsFpsCursorLocked)

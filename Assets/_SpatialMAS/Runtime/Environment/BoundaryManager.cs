@@ -15,6 +15,8 @@ namespace SpatialMAS.Environment
         public Color Color = new Color(0.2f, 0.75f, 1.0f, 0.14f);
         public Vector3 CenterUnity;
         public float SizeMeters; // Radius for Sphere, half-extent for Cube
+        public Vector3 HalfExtentsMeters;
+        public Quaternion RotationUnity = Quaternion.identity;
         public readonly HashSet<int> AgentsInside = new HashSet<int>();
     }
 
@@ -42,7 +44,10 @@ namespace SpatialMAS.Environment
             if (_bus != null)
             {
                 _bus.OnAddBoundaryUnity += HandleAddBoundary;
+                _bus.OnAddBoxBoundaryUnity += HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity += HandleUpdateBoundary;
+                _bus.OnSetBoundaryDimensionsUnity += HandleSetBoundaryDimensions;
+                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
                 _bus.OnSetBoundaryVisuals += HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary += HandleRemoveBoundary;
             }
@@ -53,7 +58,10 @@ namespace SpatialMAS.Environment
             if (_bus != null)
             {
                 _bus.OnAddBoundaryUnity -= HandleAddBoundary;
+                _bus.OnAddBoxBoundaryUnity -= HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity -= HandleUpdateBoundary;
+                _bus.OnSetBoundaryDimensionsUnity -= HandleSetBoundaryDimensions;
+                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
                 _bus.OnSetBoundaryVisuals -= HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary -= HandleRemoveBoundary;
             }
@@ -81,6 +89,19 @@ namespace SpatialMAS.Environment
         }
 
         private void HandleAddBoundary(int id, AgentShapeType shape, Vector3 posUnity, float sizeMeters)
+        {
+            float size = Mathf.Max(0.01f, sizeMeters);
+            CreateBoundary(id, shape, posUnity, size, Vector3.one * size);
+        }
+
+        private void HandleAddBoxBoundary(int id, Vector3 posUnity, Vector3 fullDimensionsMeters)
+        {
+            Vector3 half = new Vector3(Mathf.Max(0.005f, fullDimensionsMeters.x * 0.5f),
+                Mathf.Max(0.005f, fullDimensionsMeters.y * 0.5f), Mathf.Max(0.005f, fullDimensionsMeters.z * 0.5f));
+            CreateBoundary(id, AgentShapeType.Cube, posUnity, half.x, half);
+        }
+
+        private void CreateBoundary(int id, AgentShapeType shape, Vector3 posUnity, float sizeMeters, Vector3 halfExtents)
         {
             if (_boundaries.TryGetValue(id, out BoundaryInstance existing))
             {
@@ -115,7 +136,8 @@ namespace SpatialMAS.Environment
                 Renderer = renderer,
                 Mpb = new MaterialPropertyBlock(),
                 CenterUnity = posUnity,
-                SizeMeters = Mathf.Max(0.01f, sizeMeters)
+                SizeMeters = sizeMeters,
+                HalfExtentsMeters = halfExtents
             };
 
             // Pre-populate AgentsInside so spawning a boundary around existing agents doesn't fire false exit/enter events
@@ -139,7 +161,39 @@ namespace SpatialMAS.Environment
             if (_boundaries.TryGetValue(id, out BoundaryInstance instance))
             {
                 if (!float.IsNaN(posUnity.x)) instance.CenterUnity = posUnity;
-                if (sizeMeters > 0f) instance.SizeMeters = Mathf.Max(0.01f, sizeMeters);
+                if (sizeMeters > 0f)
+                {
+                    instance.SizeMeters = Mathf.Max(0.01f, sizeMeters);
+                    instance.HalfExtentsMeters = Vector3.one * instance.SizeMeters;
+                }
+                ApplyBoundaryTransform(instance);
+            }
+        }
+
+        private void HandleSetBoundaryDimensions(int id, Vector3 dimensions)
+        {
+            if (!_boundaries.TryGetValue(id, out BoundaryInstance instance)) return;
+            if (instance.Shape == AgentShapeType.Cube)
+            {
+                Vector3 half = instance.HalfExtentsMeters;
+                if (!float.IsNaN(dimensions.x)) half.x = Mathf.Max(0.005f, dimensions.x * 0.5f);
+                if (!float.IsNaN(dimensions.y)) half.y = Mathf.Max(0.005f, dimensions.y * 0.5f);
+                if (!float.IsNaN(dimensions.z)) half.z = Mathf.Max(0.005f, dimensions.z * 0.5f);
+                instance.HalfExtentsMeters = half;
+                instance.SizeMeters = half.x;
+            }
+            else instance.SizeMeters = Mathf.Max(0.01f, dimensions.x);
+            ApplyBoundaryTransform(instance);
+        }
+
+        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        {
+            foreach (BoundaryInstance instance in _boundaries.Values)
+            {
+                instance.CenterUnity = change.TransformPosition(instance.CenterUnity);
+                instance.RotationUnity = change.TransformRotation(instance.RotationUnity);
+                instance.SizeMeters *= change.ScaleRatio;
+                instance.HalfExtentsMeters *= change.ScaleRatio;
                 ApplyBoundaryTransform(instance);
             }
         }
@@ -191,8 +245,9 @@ namespace SpatialMAS.Environment
         {
             if (instance.GameObject == null) return;
             instance.GameObject.transform.position = instance.CenterUnity;
-            float diameter = instance.SizeMeters * 2.0f;
-            instance.GameObject.transform.localScale = new Vector3(diameter, diameter, diameter);
+            instance.GameObject.transform.rotation = instance.RotationUnity;
+            instance.GameObject.transform.localScale = instance.Shape == AgentShapeType.Cube
+                ? instance.HalfExtentsMeters * 2f : Vector3.one * (instance.SizeMeters * 2f);
         }
 
         private void FixedUpdate()
@@ -225,13 +280,14 @@ namespace SpatialMAS.Environment
 
         public static bool IsPositionInsideBoundary(Vector3 pos, BoundaryInstance boundary)
         {
-            Vector3 delta = pos - boundary.CenterUnity;
+            Vector3 delta = Quaternion.Inverse(boundary.RotationUnity) * (pos - boundary.CenterUnity);
             if (boundary.Shape == AgentShapeType.Cube)
             {
-                float half = boundary.SizeMeters;
-                return Mathf.Abs(delta.x) <= half &&
-                       Mathf.Abs(delta.y) <= half &&
-                       Mathf.Abs(delta.z) <= half;
+                Vector3 half = boundary.HalfExtentsMeters == Vector3.zero
+                    ? Vector3.one * boundary.SizeMeters : boundary.HalfExtentsMeters;
+                return Mathf.Abs(delta.x) <= half.x &&
+                       Mathf.Abs(delta.y) <= half.y &&
+                       Mathf.Abs(delta.z) <= half.z;
             }
             else
             {

@@ -1,6 +1,6 @@
 # SpatialMAS — Complete Setup & Usage Guide
 
-This guide provides step-by-step instructions for setting up, building, deploying, and operating **SpatialMAS** across **Unity Editor**, **Desktop Standalone**, **Meta Quest 3 / 3S / Pro**, **Apple Vision Pro (`visionOS`)**, and **Generic OpenXR Headsets**, as well as controlling the Unity Editor via the **Unity CLI (`unity` / `com.unity.pipeline`)**.
+This guide covers the **SpatialMAS research prototype** in the Unity Editor, desktop builds, and Android/PC OpenXR targets, including local automation through **Unity CLI (`unity` / `com.unity.pipeline`)**. Headset passthrough, interaction, performance, and builds must be verified on the target device. The visionOS build menu is scaffolding, not a complete Apple Vision Pro integration.
 
 ---
 
@@ -79,7 +79,7 @@ unity command editor invoke_menu --path "SpatialMAS/1. Build Complete Project (M
 
 ## 3. Running in Desktop / Editor Mode (Game-Like 3D Workflow)
 
-You can test every SpatialMAS feature—3D spatial audio, all 5 built-in scenarios, external OSC control, and Wi-Fi CSV log export—directly inside the Unity Editor or a Desktop build without an XR headset connected.
+You can test scenarios, OSC control, procedural audio, desktop interaction, and CSV export in the Editor or a desktop build. Optical hand input, headset tracking, passthrough, and device performance require an XR runtime and hardware.
 
 1. Open `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity`.
 2. Press **Play** in the Unity Editor (or run `unity command editor.playmode start` from the terminal).
@@ -126,24 +126,23 @@ You can test every SpatialMAS feature—3D spatial audio, all 5 built-in scenari
    - Via UI: `SpatialMAS > Build Target > Build Meta Quest & Android OpenXR (.apk)` or `File > Build And Run`
    - Via Unity CLI: `unity command build run --target Android --outputPath Builds/Android_OpenXR/SpatialMAS_Quest.apk --confirm true`
 5. **In-Headset Operation**:
+   - Use the world-space researcher panel to choose scenarios/presets, pause/reset, toggle MR/VR or recording, show IDs, adjust world scale, and center the arena ahead. Point with a tracked hand/controller and pinch/press to activate its controls.
    - The app launches in **MR Passthrough Mode** by default (`CameraClearFlags.SolidColor` with `RGBA(0,0,0,0)`), showing virtual swarm agents floating inside your physical laboratory.
    - Walk physically around the swarm to inspect agents and hear true 3D Doppler and distance-attenuated spatial audio.
    - **Hand Pinch Grab**: Reach toward any interactive Cube agent and pinch your **Thumb + Index/Middle Finger** (`< 20 mm` pinch distance to grab, `> 32 mm` to release). Moving your pinched hand repositions the agent in real time and broadcasts its updated pose over OSC (`/agents/position/id`).
 
-### 4.2 Apple Vision Pro (`visionOS` Target)
-1. On a Mac with Xcode 16+ and the Unity `visionOS` module installed, click **`SpatialMAS > Build Target > Build Apple Vision Pro (visionOS Xcode)`** (or switch target via `unity command build.target switch --target VisionOS --confirm true`).
-2. Open the generated Xcode project (`Builds/VisionOS/SpatialMAS_VisionPro`), configure your Apple Developer Team signing, and deploy to Apple Vision Pro (or the visionOS Simulator).
-3. [`XRPlatformAdapter`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) automatically detects `visionOS`, enables Hand Tracking (`XRHandSubsystem`), and configures the camera background for Mixed Reality passthrough.
+### 4.2 Apple Vision Pro (`visionOS` Target, Experimental)
+The build menu requests a visionOS Xcode project, but the repository does not include a visionOS XR provider or a validated spatial-pointer rig. Platform detection alone does not supply these features. Complete provider, input, rendering, signing, and device validation on a Mac before treating this as a supported deployment target.
 
 ### 4.3 Generic OpenXR Headsets (Pico 4 Ultra, Android XR, HTC Vive, SteamVR / PCVR)
-- **Standalone Android OpenXR (Pico / Android XR)**: Build for `Android` with the **OpenXR** loader enabled. Standard `XRHandSubsystem` hand tracking and OpenXR composition-layer passthrough are used automatically.
+- **Standalone Android OpenXR (Pico / Android XR)**: Build for `Android` with the **OpenXR** loader enabled. Hand tracking and passthrough depend on the device's provider and enabled features; a transparent camera background alone does not guarantee passthrough.
 - **PCVR (Quest Link / AirLink / SteamVR / Windows Mixed Reality)**: Keep the build target on `StandaloneWindows64`, ensure your PC OpenXR runtime (Meta Quest Link or SteamVR) is active, and press **Play** in the Editor or launch `Builds/Windows64/SpatialMAS.exe`.
 
 ---
 
 ## 5. Connecting External Multi-Agent Simulators via OSC
 
-SpatialMAS is 100% backward-compatible with the **ACSOS 2025 `HS-ims` OSC v1 protocol** (`human_swarm_examples` in Python, Max/MSP, and C++) and adds **v2 SpatialMAS XR extensions**.
+SpatialMAS implements the legacy signatures listed in [the OSC specification](OSC_API_SPECIFICATION.md), with focused regression coverage, plus **v2 SpatialMAS XR extensions**. Validate your external controller's actual message sequence before collecting research data.
 
 ### 5.1 Network Setup
 1. Ensure your workstation (running Python / Max / C++ / ROS 2) and your XR headset (or Desktop PC) are on the **same local Wi-Fi / LAN subnet**.
@@ -157,9 +156,11 @@ From your workstation terminal, run the included verification suite:
 # Test against Unity running on the same machine (loopback)
 python ExternalTools/verify_osc_compatibility.py --ip 127.0.0.1 --port 6011 --duration 5
 
-# Test against a Meta Quest 3 or Vision Pro on Wi-Fi (replace with headset IP shown on HUD)
+# Test against an OpenXR device on Wi-Fi (replace with its IP)
 python ExternalTools/verify_osc_compatibility.py --ip 192.168.1.42 --port 6011 --duration 30
 ```
+
+The verifier detects the workstation reply IP automatically; use `--reply-ip <workstation-LAN-IP>` to override it. A missing Unity handshake is an error. The subsequent demonstration traffic requires visual/audio inspection; it is not a full compatibility test. For offline packet validation, run `python ExternalTools/verify_osc_compatibility.py --dry-run`.
 
 You can also run any script from `helping_sources/human_swarm_examples/python/` (e.g., `swarmalators/main.py` or `attractors_repellers/main.py`) directly against port `6011`!
 
@@ -181,8 +182,9 @@ SpatialMAS eliminates the need for USB `adb pull` cables when running user studi
 
 1. **Start / Stop Recording**: Press **`L`** or click **`Start CSV [L]` / `Stop CSV [L]`** on the HUD (or send `/logging/state 1` or `/recorder/start` over OSC).
 2. **Recorded Files** (saved in `Application.persistentDataPath/SpatialMAS_Logs/`):
-   - **`osc_traffic_<timestamp>.csv`**: Timestamped log of all inbound/outbound OSC commands.
-   - **`xr_embodiment_<timestamp>.csv`**: 50 Hz time-series log of `HeadPos`, `HeadRot`, `LHandPos`, `LPinch`, `RHandPos`, `RPinch`, `Scenario`, `XRMode`, `WorldScale`, `ActiveAgents`, and `FrameTimeMs`.
+   - **`osc_traffic_<timestamp>_<session-id>.csv`**: Timestamped log of inbound/outbound OSC commands.
+   - **`xr_embodiment_<timestamp>_<session-id>.csv`**: Time-series log of `HeadPos`, `HeadRot`, `LHandPos`, `LPinch`, `RHandPos`, `RPinch`, `Scenario`, `XRMode`, `WorldScale`, `ActiveAgents`, and `FrameTimeMs`. Sampling targets 50 Hz and is limited by frame rate. Hand rotations are not currently included.
+   - Paired files share a session ID. Rapid stop/start creates new files; existing sessions are never truncated. Optional C# session tags are sanitized for filenames. CSV text fields containing commas, quotes, or newlines are quoted.
 3. **Download over Wi-Fi**:
    - Open any web browser on a laptop connected to the same Wi-Fi network.
    - Navigate to **`http://<headset-ip>:8080/`** (or `http://127.0.0.1:8080/` when running locally on Desktop).
@@ -209,3 +211,9 @@ unity command test status
 ### 7.2 Via the Unity Editor Test Runner Window
 1. Open **`Window > General > Test Runner`**.
 2. Select **EditMode** or **PlayMode** and click **Run All**.
+
+### 7.3 Local Batch Runs and Lightweight GitHub CI
+
+With the Editor closed, `unity test . --mode EditMode --output Logs/editmode-results.xml` and `unity test . --mode PlayMode --output Logs/playmode-results.xml` launch the installed Editor automatically. Keep hardware testing separate from these regressions.
+
+GitHub Actions checks JSON, assembly definitions, Unity `.meta` pairing, Python packet encoding, and feedback acceptance/timeout handling. It installs only `python-osc`; Unity and device tests run locally. Run the same Python regressions with `python -m unittest discover -s ExternalTools -p 'test_*.py'`.

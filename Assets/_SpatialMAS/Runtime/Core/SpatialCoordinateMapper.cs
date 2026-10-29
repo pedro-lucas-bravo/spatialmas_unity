@@ -3,6 +3,29 @@ using UnityEngine;
 
 namespace SpatialMAS.Core
 {
+    /// <summary>Rebases cached world-space simulation state when the arena frame changes.</summary>
+    public readonly struct SpatialFrameChange
+    {
+        public readonly Vector3 PreviousOrigin;
+        public readonly Vector3 Origin;
+        public readonly Quaternion RotationDelta;
+        public readonly float ScaleRatio;
+
+        public SpatialFrameChange(Vector3 previousOrigin, Quaternion previousRotation, float previousScale,
+            Vector3 origin, Quaternion rotation, float scale)
+        {
+            PreviousOrigin = previousOrigin;
+            Origin = origin;
+            RotationDelta = rotation * Quaternion.Inverse(previousRotation);
+            ScaleRatio = scale / previousScale;
+        }
+
+        public Vector3 TransformPosition(Vector3 position) => Origin + TransformVector(position - PreviousOrigin);
+        public Vector3 TransformVector(Vector3 vector) => RotationDelta * vector * ScaleRatio;
+        public Vector3 TransformDirection(Vector3 direction) => RotationDelta * direction;
+        public Quaternion TransformRotation(Quaternion rotation) => RotationDelta * rotation;
+    }
+
     /// <summary>
     /// Converts bidirectionally between the legacy HS-ims external OSC coordinate frame
     /// (millimeters with X=Right, Y=Forward/Depth, Z=Up) and Unity's left-handed meter world space
@@ -18,6 +41,7 @@ namespace SpatialMAS.Core
         private Quaternion _originRotation = Quaternion.identity;
 
         public event Action OnTransformFrameChanged;
+        public event Action<SpatialFrameChange> OnFrameChanged;
 
         public float WorldScale
         {
@@ -27,7 +51,10 @@ namespace SpatialMAS.Core
                 float clamped = Mathf.Clamp(value, 0.01f, 10.0f);
                 if (!Mathf.Approximately(_worldScale, clamped))
                 {
+                    var change = new SpatialFrameChange(_originOffset, _originRotation, _worldScale,
+                        _originOffset, _originRotation, clamped);
                     _worldScale = clamped;
+                    OnFrameChanged?.Invoke(change);
                     OnTransformFrameChanged?.Invoke();
                 }
             }
@@ -40,7 +67,10 @@ namespace SpatialMAS.Core
             {
                 if (_originOffset != value)
                 {
+                    var change = new SpatialFrameChange(_originOffset, _originRotation, _worldScale,
+                        value, _originRotation, _worldScale);
                     _originOffset = value;
+                    OnFrameChanged?.Invoke(change);
                     OnTransformFrameChanged?.Invoke();
                 }
             }
@@ -53,7 +83,10 @@ namespace SpatialMAS.Core
             {
                 if (_originRotation != value)
                 {
+                    var change = new SpatialFrameChange(_originOffset, _originRotation, _worldScale,
+                        _originOffset, value, _worldScale);
                     _originRotation = value;
+                    OnFrameChanged?.Invoke(change);
                     OnTransformFrameChanged?.Invoke();
                 }
             }

@@ -67,7 +67,8 @@ jobs:
         run: |
           pip install -r ExternalTools/requirements.txt
 
-      - name: Syntax & Dry-Run Check on OSC Verification Script
+      - name: Packet Encoding and Feedback Regression Checks (No Unity Required)
         run: |
           python -m py_compile ExternalTools/verify_osc_compatibility.py
-          python ExternalTools/verify_osc_compatibility.py --duration 0.2
+          python -m unittest discover -s ExternalTools -p 'test_*.py'
+          python ExternalTools/verify_osc_compatibility.py --dry-run

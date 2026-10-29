@@ -14,6 +14,8 @@ namespace SpatialMAS.Core
         public event Action<AgentShapeType, AgentMovementMode, int, float, string, int> OnInstantiateAgents;
         public event Action<AgentShapeType, AgentMovementMode, float, string, int, int[]> OnAddAgents;
         public event Action<int[]> OnRemoveAgents; // null or empty = remove all
+        public event Action<AgentShapeType, AgentMovementMode, float, Vector3[]> OnAddAgentsAutomatically;
+        public event Action<int, int, int> OnRemoveLastAgents; // count, shape filter, movement filter
         public event Action<int, Vector3> OnSetAgentPositionUnity;
         public event Action<Vector3[]> OnSetBatchAgentPositionsUnity;
         public event Action<int, float> OnSetAgentSpeedMetersPerSec;
@@ -34,11 +36,14 @@ namespace SpatialMAS.Core
         public event Action<int, int, int, int> OnSetAgentSynthNote; // id, noteAction (1/0), midiNote, velocity
         public event Action<int, int, float> OnSetAgentSynthParam;   // id, ccId, value
         public event Action<int> OnFlushAgentSynth;                  // id = -1 means flush all
+        public event Action<int, int, int, bool> OnSetAgentSynthEnabledFiltered;
         public event Action<int, int, int, float> OnSetAgentAudioBank; // id, clipIndex, playAction, gain
 
         // --- Boundary & Environment Commands ---
         public event Action<int, AgentShapeType, Vector3, float> OnAddBoundaryUnity;
+        public event Action<int, Vector3, Vector3> OnAddBoxBoundaryUnity;
         public event Action<int, Vector3, float> OnUpdateBoundaryUnity;
+        public event Action<int, Vector3> OnSetBoundaryDimensionsUnity; // cube full extents; sphere x is radius
         public event Action<int, Color, float> OnSetBoundaryVisuals; // id, color, alpha (-1 = keep existing)
         public event Action<int> OnRemoveBoundary; // id = -1 means remove all
         public event Action<int, Vector3, Vector3, float> OnSetArrowUnity;
@@ -53,6 +58,7 @@ namespace SpatialMAS.Core
         public event Action<XRDisplayMode> OnSetXRDisplayMode;
         public event Action<float> OnSetWorldScale;
         public event Action<Vector3> OnSetOriginOffset;
+        public event Action<SpatialFrameChange> OnSpatialFrameChanged;
         public event Action<bool, float, float> OnConfigureUserRepeller;
         public event Action<int> OnLoadScenario;
         public event Action<string, float> OnSetScenarioParam;
@@ -81,6 +87,12 @@ namespace SpatialMAS.Core
 
         public void RemoveAgents(int[] ids = null)
             => OnRemoveAgents?.Invoke(ids);
+
+        public void AddAgentsAutomatically(AgentShapeType shape, AgentMovementMode mode, float scaleMeters, Vector3[] initialPositions)
+            => OnAddAgentsAutomatically?.Invoke(shape, mode, scaleMeters, initialPositions);
+
+        public void RemoveLastAgents(int count, int shape = -1, int movementMode = -1)
+            => OnRemoveLastAgents?.Invoke(count, shape, movementMode);
 
         public void SetAgentPositionUnity(int id, Vector3 posUnity)
             => OnSetAgentPositionUnity?.Invoke(id, posUnity);
@@ -130,14 +142,23 @@ namespace SpatialMAS.Core
         public void FlushAgentSynth(int id = -1)
             => OnFlushAgentSynth?.Invoke(id);
 
+        public void SetAgentSynthEnabledFiltered(int count, int shape, int movementMode, bool enabled)
+            => OnSetAgentSynthEnabledFiltered?.Invoke(count, shape, movementMode, enabled);
+
         public void SetAgentAudioBank(int id, int clipIndex, int playAction, float gain)
             => OnSetAgentAudioBank?.Invoke(id, clipIndex, playAction, gain);
 
         public void AddBoundaryUnity(int id, AgentShapeType shape, Vector3 posUnity, float radiusOrHalfExtentMeters)
             => OnAddBoundaryUnity?.Invoke(id, shape, posUnity, radiusOrHalfExtentMeters);
 
+        public void AddBoxBoundaryUnity(int id, Vector3 posUnity, Vector3 fullDimensionsMeters)
+            => OnAddBoxBoundaryUnity?.Invoke(id, posUnity, fullDimensionsMeters);
+
         public void UpdateBoundaryUnity(int id, Vector3 posUnity, float radiusOrHalfExtentMeters)
             => OnUpdateBoundaryUnity?.Invoke(id, posUnity, radiusOrHalfExtentMeters);
+
+        public void SetBoundaryDimensionsUnity(int id, Vector3 dimensionsMeters)
+            => OnSetBoundaryDimensionsUnity?.Invoke(id, dimensionsMeters);
 
         public void SetBoundaryVisuals(int id, Color color, float alpha = -1f)
             => OnSetBoundaryVisuals?.Invoke(id, color, alpha);
@@ -168,6 +189,9 @@ namespace SpatialMAS.Core
 
         public void SetOriginOffset(Vector3 offsetMeters)
             => OnSetOriginOffset?.Invoke(offsetMeters);
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+            => OnSpatialFrameChanged?.Invoke(change);
 
         public void ConfigureUserRepeller(bool enabled, float radiusMeters, float force)
             => OnConfigureUserRepeller?.Invoke(enabled, radiusMeters, force);

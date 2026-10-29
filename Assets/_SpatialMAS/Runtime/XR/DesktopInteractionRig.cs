@@ -30,13 +30,13 @@ namespace SpatialMAS.XR
         private SimulationCommandBus _bus;
         private AgentEntity _hoveredAgent;
         private AgentEntity _grabbedAgent;
-        private AgentEntity _rightClickedAgent;
-        private float _rightClickDownTime;
-        private Vector2 _rightClickDownPos;
+        private int _leftPressedAgentId = -1;
+        private int _rightPressedAgentId = -1;
+        private readonly RaycastHit[] _agentHits = new RaycastHit[1024];
 
         private Plane _dragPlane;
         private Vector3 _grabOffsetWorld;
-        private float _grabDistanceMeters;
+        private float _grabDepthMeters;
 
         private Vector3 _defaultCameraPosition = new Vector3(0f, 1.35f, -0.65f);
         private Quaternion _defaultCameraRotation = Quaternion.Euler(8f, 0f, 0f);
@@ -97,10 +97,41 @@ namespace SpatialMAS.XR
 
         private void OnDisable()
         {
+            ReleasePointerInteractions();
             if (_fpsCursorLockMode)
             {
                 SetFpsCursorLock(false);
             }
+        }
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) ReleasePointerInteractions();
+        }
+
+        private void ReleasePointerInteractions()
+        {
+            if (_grabbedAgent != null) _grabbedAgent.EndUserGrab();
+            _grabbedAgent = null;
+            ReleaseLeftClick();
+            ReleaseRightClick();
+            if (_hoveredAgent != null) _hoveredAgent.Visuals?.SetHighlight(false);
+            _hoveredAgent = null;
+        }
+
+        private void ReleaseLeftClick()
+        {
+            if (_leftPressedAgentId < 0) return;
+            _bus?.EmitAgentControlClick(_leftPressedAgentId, 0, 0);
+            _bus?.EmitAgentTouch(_leftPressedAgentId, 0, -1);
+            _leftPressedAgentId = -1;
+        }
+
+        private void ReleaseRightClick()
+        {
+            if (_rightPressedAgentId < 0) return;
+            _bus?.EmitAgentControlClick(_rightPressedAgentId, 1, 0);
+            _rightPressedAgentId = -1;
         }
 
         private void Update()
@@ -208,6 +239,8 @@ namespace SpatialMAS.XR
 
         private void HandleMouseAgentInteraction(Mouse mouse, Keyboard kb)
         {
+            if (_grabbedAgent != null && (!_grabbedAgent.gameObject.activeInHierarchy || !_grabbedAgent.IsGrabbedByUser))
+                _grabbedAgent = null;
             bool pointerOverHud = !_fpsCursorLockMode && IsMouseOverHud(mouse);
             Vector2 screenPos = _fpsCursorLockMode
                 ? new Vector2(Screen.width * 0.5f, Screen.height * 0.5f)
@@ -219,9 +252,9 @@ namespace SpatialMAS.XR
             if (_grabbedAgent == null)
             {
                 AgentEntity hitAgent = null;
-                if (!pointerOverHud && Physics.Raycast(ray, out RaycastHit hoverHit, 30.0f))
+                if (!pointerOverHud && TryRaycastAgent(ray, out AgentEntity hoverAgent, out _))
                 {
-                    hitAgent = hoverHit.collider.GetComponentInParent<AgentEntity>();
+                    hitAgent = hoverAgent;
                 }
 
                 if (hitAgent != _hoveredAgent)
@@ -241,18 +274,19 @@ namespace SpatialMAS.XR
             // 2. Left Mouse Button Press: Grab interactive agent (or Alt+LMB force-grab any agent) & emit /agents/control 0 1
             if (mouse.leftButton.wasPressedThisFrame && !pointerOverHud && _grabbedAgent == null)
             {
-                if (Physics.Raycast(ray, out RaycastHit hit, 30.0f))
+                if (TryRaycastAgent(ray, out AgentEntity agent, out Vector3 hitPoint))
                 {
-                    var agent = hit.collider.GetComponentInParent<AgentEntity>();
                     if (agent != null)
                     {
                         bool forceGrab = kb != null && (kb[Key.LeftAlt].isPressed || kb[Key.RightAlt].isPressed);
                         if (agent.IsInteractable || forceGrab)
                         {
                             _grabbedAgent = agent;
-                            _grabDistanceMeters = Mathf.Max(0.20f, Vector3.Distance(_camera.transform.position, agent.transform.position));
-                            _dragPlane = new Plane(-_camera.transform.forward, hit.point);
-                            _grabOffsetWorld = agent.transform.position - hit.point;
+                            // Plane depth is measured along the view axis at the original surface hit.
+                            // A radial camera-to-center distance changes the plane immediately and makes the agent jump.
+                            _grabDepthMeters = Mathf.Max(0.01f, Vector3.Dot(hitPoint - _camera.transform.position, _camera.transform.forward));
+                            _dragPlane = new Plane(-_camera.transform.forward, hitPoint);
+                            _grabOffsetWorld = agent.transform.position - hitPoint;
                             _grabbedAgent.BeginUserGrab(forceGrab);
                         }
                         else
@@ -260,34 +294,26 @@ namespace SpatialMAS.XR
                             // Non-grabbable agent still emits HS-ims left-click control event (/agents/control <id> 0 1)
                             _bus?.EmitAgentControlClick(agent.AgentId, 0, 1);
                             _bus?.EmitAgentTouch(agent.AgentId, 1, -1);
+                            _leftPressedAgentId = agent.AgentId;
                         }
                     }
                 }
             }
+            if (mouse.leftButton.wasReleasedThisFrame) ReleaseLeftClick();
 
-            // 3. Right Mouse Button Click on Agent: emit HS-ims /agents/control <id> 1 1/0 if quick click (not camera drag)
+            // 3. Every emitted press has a release, including long holds, camera drags, and focus loss.
             if (mouse.rightButton.wasPressedThisFrame && !pointerOverHud)
             {
-                _rightClickDownTime = Time.unscaledTime;
-                _rightClickDownPos = screenPos;
-                if (Physics.Raycast(ray, out RaycastHit rHit, 30.0f))
+                if (TryRaycastAgent(ray, out AgentEntity rightClickedAgent, out _))
                 {
-                    _rightClickedAgent = rHit.collider.GetComponentInParent<AgentEntity>();
-                    if (_rightClickedAgent != null)
+                    if (rightClickedAgent != null)
                     {
-                        _bus?.EmitAgentControlClick(_rightClickedAgent.AgentId, 1, 1);
+                        _rightPressedAgentId = rightClickedAgent.AgentId;
+                        _bus?.EmitAgentControlClick(_rightPressedAgentId, 1, 1);
                     }
                 }
             }
-            if (mouse.rightButton.wasReleasedThisFrame && _rightClickedAgent != null)
-            {
-                if (Time.unscaledTime - _rightClickDownTime < 0.35f &&
-                    Vector2.Distance(screenPos, _rightClickDownPos) < 8.0f)
-                {
-                    _bus?.EmitAgentControlClick(_rightClickedAgent.AgentId, 1, 0);
-                }
-                _rightClickedAgent = null;
-            }
+            if (mouse.rightButton.wasReleasedThisFrame) ReleaseRightClick();
 
             // 4. Active Agent Dragging (Plane projection + Scroll depth adjustment + [R] 90-degree rotation)
             if (_grabbedAgent != null)
@@ -297,17 +323,10 @@ namespace SpatialMAS.XR
                     float scroll = mouse.scroll.ReadValue().y;
                     if (Mathf.Abs(scroll) > 0.01f)
                     {
-                        _grabDistanceMeters = Mathf.Clamp(_grabDistanceMeters + scroll * 0.0018f, 0.18f, 20.0f);
-                        Vector3 newPlaneOrigin = _camera.transform.position + ray.direction * _grabDistanceMeters;
-                        _dragPlane = new Plane(-_camera.transform.forward, newPlaneOrigin);
-                        _grabOffsetWorld = Vector3.zero;
+                        _grabDepthMeters = Mathf.Clamp(_grabDepthMeters + scroll * 0.0018f, 0.01f, 20.0f);
                     }
-                    else
-                    {
-                        // Keep drag plane normal aligned with camera view direction
-                        Vector3 planePoint = _camera.transform.position + _camera.transform.forward * _grabDistanceMeters;
-                        _dragPlane = new Plane(-_camera.transform.forward, planePoint);
-                    }
+                    Vector3 planePoint = _camera.transform.position + _camera.transform.forward * _grabDepthMeters;
+                    _dragPlane = new Plane(-_camera.transform.forward, planePoint);
 
                     if (kb != null && kb[Key.R].wasPressedThisFrame)
                     {
@@ -320,7 +339,7 @@ namespace SpatialMAS.XR
                     }
                     else
                     {
-                        _grabbedAgent.transform.position = ray.GetPoint(_grabDistanceMeters);
+                        _grabbedAgent.transform.position = ray.GetPoint(_grabDepthMeters) + _grabOffsetWorld;
                     }
                 }
                 else
@@ -329,6 +348,25 @@ namespace SpatialMAS.XR
                     _grabbedAgent = null;
                 }
             }
+        }
+
+        private bool TryRaycastAgent(Ray ray, out AgentEntity agent, out Vector3 point)
+        {
+            agent = null;
+            point = default;
+            float nearest = float.PositiveInfinity;
+            int count = Physics.RaycastNonAlloc(ray, _agentHits, 30f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
+            for (int i = 0; i < count; i++)
+            {
+                var hit = _agentHits[i];
+                var candidate = hit.collider.GetComponentInParent<AgentEntity>();
+                if (candidate == null || hit.distance >= nearest) continue;
+                nearest = hit.distance;
+                agent = candidate;
+                point = hit.point;
+            }
+            // Arena boundary triggers and communication visuals must not block picking agents inside them.
+            return agent != null;
         }
 
         private bool IsMouseOverHud(Mouse mouse)

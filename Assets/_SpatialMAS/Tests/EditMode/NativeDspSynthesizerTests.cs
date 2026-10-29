@@ -6,6 +6,59 @@ namespace SpatialMAS.Tests.EditMode
 {
     public class NativeDspSynthesizerTests
     {
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ContinuousTone_StartsRegardlessOfFrequencyGainOrder(bool frequencyFirst)
+        {
+            var go = new GameObject("ContinuousToneTest");
+            try
+            {
+                var synth = go.AddComponent<NativeDspSynthesizer>();
+                synth.ReverbMix = 0f;
+                synth.SetParameter(frequencyFirst ? 2 : 16, frequencyFirst ? 440f : 0.5f);
+                synth.SetParameter(frequencyFirst ? 16 : 2, frequencyFirst ? 0.5f : 440f);
+                var buffer = new float[4096];
+                synth.SynthesizeBlock(buffer, 1, 48000);
+                Assert.Greater(Rms(buffer), 0.05f);
+
+                synth.SetParameter(16, 0f);
+                for (int block = 0; block < 10; block++) synth.SynthesizeBlock(buffer, 1, 48000);
+                Assert.Less(Rms(buffer), 0.0001f);
+                synth.SetParameter(16, 0.5f);
+                synth.SynthesizeBlock(buffer, 1, 48000);
+                Assert.Greater(Rms(buffer), 0.05f, "A zero-gain drone must resume when gain increases.");
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        [Test]
+        public void GainChangeAfterPercussiveNote_DoesNotStartADrone()
+        {
+            var go = new GameObject("PercussiveToneTest");
+            try
+            {
+                var synth = go.AddComponent<NativeDspSynthesizer>();
+                synth.ReverbMix = 0f;
+                synth.AttackSeconds = 0.001f;
+                synth.DecaySeconds = 0.001f;
+                synth.SustainLevel = 0f;
+                synth.SetNote(1, 69);
+                var buffer = new float[4096];
+                for (int block = 0; block < 4; block++) synth.SynthesizeBlock(buffer, 1, 48000);
+                synth.SetParameter(16, 0.5f);
+                synth.SynthesizeBlock(buffer, 1, 48000);
+                Assert.Less(Rms(buffer), 0.0001f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
+        private static float Rms(float[] buffer)
+        {
+            float sum = 0f;
+            foreach (float sample in buffer) sum += sample * sample;
+            return Mathf.Sqrt(sum / buffer.Length);
+        }
+
         [Test]
         public void DualCcIdCompatibility_AcceptsBothReadmeAndLegacyIds()
         {

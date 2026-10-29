@@ -82,7 +82,7 @@ namespace SpatialMAS.Audio
 
             int idx = Mathf.Clamp(clipIndex, 0, _soundBankClips.Length - 1);
             AudioClip clip = _soundBankClips[idx] != null ? _soundBankClips[idx] : s_ProceduralBellClip;
-            _bankSource.volume = Mathf.Clamp01(gain);
+            _bankSource.volume = 1f;
             _bankSource.PlayOneShot(clip, Mathf.Clamp01(gain));
         }
     }

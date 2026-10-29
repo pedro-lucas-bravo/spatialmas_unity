@@ -1,5 +1,7 @@
 # SpatialMAS: Master Architecture & Single-Run AI Implementation Plan
 
+> This is the original design plan, not a release or hardware-validation report. Current behavior, supported signatures, known platform limits, and local test commands are documented in `README.md` and `docs/`. In particular, full compatibility, performance targets, and visionOS integration remain subject to validation.
+
 > [!IMPORTANT]
 > **Commercial & IP Clean-Room Mandate ([Grant Qualification Project](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/pedro-lucas-spatialMAS-qualification-project-2026.pdf))**  
 > To ensure clean IP transfer and Freedom to Operate (FTO) with *Inven2* (UiO TTO), **SpatialMAS** must be implemented as a **100% standalone, clean-room proprietary architecture** in Unity 6 (`6000.6.6f1`). It must **not** copy the messy academic scripts or legacy `OculusIntegration` dependencies from [`human_swarm_ims`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_ims), while maintaining **100% protocol backward-compatibility** with the published [ACSOS 2025 OSC API](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/ACSOS2025___Human_Swarm_IMS_Artifact_camera_ready-public-INCONFERENCE.pdf) so all scripts in [`human_swarm_examples`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_examples) work out of the box.

@@ -170,16 +170,19 @@ namespace SpatialMAS.Agents
                     _grabInteractable.smoothRotationAmount = 16.0f;
                 }
 
-                _grabInteractable.selectEntered.RemoveListener(OnXRSelectEntered);
-                _grabInteractable.selectExited.RemoveListener(OnXRSelectExited);
-                _grabInteractable.hoverEntered.RemoveListener(OnXRHoverEntered);
-                _grabInteractable.hoverExited.RemoveListener(OnXRHoverExited);
-
-                _grabInteractable.selectEntered.AddListener(OnXRSelectEntered);
-                _grabInteractable.selectExited.AddListener(OnXRSelectExited);
-                _grabInteractable.hoverEntered.AddListener(OnXRHoverEntered);
-                _grabInteractable.hoverExited.AddListener(OnXRHoverExited);
             }
+
+            // Prefabs can already contain an XRGrabInteractable when Awake caches it.
+            // Always attach our lifecycle listeners, including when reusing a pooled agent.
+            _grabInteractable.selectEntered.RemoveListener(OnXRSelectEntered);
+            _grabInteractable.selectExited.RemoveListener(OnXRSelectExited);
+            _grabInteractable.hoverEntered.RemoveListener(OnXRHoverEntered);
+            _grabInteractable.hoverExited.RemoveListener(OnXRHoverExited);
+
+            _grabInteractable.selectEntered.AddListener(OnXRSelectEntered);
+            _grabInteractable.selectExited.AddListener(OnXRSelectExited);
+            _grabInteractable.hoverEntered.AddListener(OnXRHoverEntered);
+            _grabInteractable.hoverExited.AddListener(OnXRHoverExited);
         }
 
         public void SetInteractable(bool interactable)
@@ -199,10 +202,31 @@ namespace SpatialMAS.Agents
         public void SetTargetPosition(Vector3 posUnity)
         {
             _targetPosition = posUnity;
-            if (!IsGrabbedByUser && MovementMode == AgentMovementMode.Teleport)
+            if (!IsGrabbedByUser && (MovementMode == AgentMovementMode.Teleport || MovementMode == AgentMovementMode.Velocity))
             {
                 transform.position = posUnity;
             }
+        }
+
+        public void PlaceImmediately(Vector3 position)
+        {
+            transform.position = position;
+            _targetPosition = position;
+            _smoothDampVelocity = Vector3.zero;
+        }
+
+        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        {
+            transform.position = change.TransformPosition(transform.position);
+            transform.rotation = change.TransformRotation(transform.rotation);
+            BaseScaleMeters *= change.ScaleRatio;
+            transform.localScale *= change.ScaleRatio;
+            _targetPosition = change.TransformPosition(_targetPosition);
+            _lastReportedUserGrabPosition = change.TransformPosition(_lastReportedUserGrabPosition);
+            _velocityVector = change.TransformVector(_velocityVector);
+            _smoothDampVelocity = change.TransformVector(_smoothDampVelocity);
+            _directionVector = change.TransformDirection(_directionVector);
+            if (_explicitSpeedMetersPerSec >= 0f) _explicitSpeedMetersPerSec *= change.ScaleRatio;
         }
 
         public void SetSpeedMetersPerSec(float speedMetersPerSec)
@@ -317,7 +341,7 @@ namespace SpatialMAS.Agents
             }
             else if (MovementMode == AgentMovementMode.DirectVelocity)
             {
-                if (_explicitSpeedMetersPerSec > 0f)
+                if (_explicitSpeedMetersPerSec >= 0f)
                 {
                     transform.position = Vector3.MoveTowards(transform.position, _targetPosition, _explicitSpeedMetersPerSec * Time.deltaTime);
                 }

@@ -54,6 +54,7 @@ namespace SpatialMAS.Scenarios
             {
                 bus.OnLoadScenario += LoadScenarioById;
                 bus.OnSetScenarioParam += SetActiveScenarioParameter;
+                bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
 
             LoadScenarioById(initialScenarioId);
@@ -65,6 +66,7 @@ namespace SpatialMAS.Scenarios
             {
                 _context.Bus.OnLoadScenario -= LoadScenarioById;
                 _context.Bus.OnSetScenarioParam -= SetActiveScenarioParameter;
+                _context.Bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
             _activeScenario?.OnScenarioStop();
         }
@@ -149,6 +151,14 @@ namespace SpatialMAS.Scenarios
         public void ApplyActiveScenarioPreset(int presetIndex)
         {
             _activeScenario?.ApplyPreset(presetIndex);
+        }
+
+        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        {
+            if (_activeScenario is ISpatialFrameAwareScenario spatialScenario)
+            {
+                spatialScenario.ApplySpatialFrameChange(change);
+            }
         }
 
         private void Update()

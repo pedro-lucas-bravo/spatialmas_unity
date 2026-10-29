@@ -30,10 +30,12 @@ namespace SpatialMAS.XR
         public Vector3 LeftHandPositionWorld { get; private set; }
         public Quaternion LeftHandRotationWorld { get; private set; } = Quaternion.identity;
         public bool IsLeftHandPinching { get; private set; }
+        public bool IsLeftHandTracked { get; private set; }
 
         public Vector3 RightHandPositionWorld { get; private set; }
         public Quaternion RightHandRotationWorld { get; private set; } = Quaternion.identity;
         public bool IsRightHandPinching { get; private set; }
+        public bool IsRightHandTracked { get; private set; }
 
         public bool UserRepellerEnabled { get; set; } = true;
         public float UserRepellerRadiusMeters { get; set; } = 0.65f;
@@ -87,7 +89,7 @@ namespace SpatialMAS.XR
                 _headCameraTransform = Camera.main.transform;
             }
 
-            float dt = Mathf.Max(0.0001f, Time.deltaTime);
+            float dt = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
             if (_headCameraTransform != null)
             {
                 Vector3 currentPos = _headCameraTransform.position;
@@ -115,45 +117,63 @@ namespace SpatialMAS.XR
         {
             bool leftTracked = false;
             bool rightTracked = false;
+            Transform trackingOrigin = XRInteractionRigSetup.GetTrackingOrigin(
+                _headCameraTransform != null ? _headCameraTransform.GetComponent<Camera>() : Camera.main);
 
             SubsystemManager.GetSubsystems(s_Subsystems);
-            if (s_Subsystems.Count > 0 && s_Subsystems[0].running)
+            foreach (var sub in s_Subsystems)
             {
-                var sub = s_Subsystems[0];
+                if (sub == null || !sub.running) continue;
                 if (sub.leftHand.isTracked)
                 {
                     leftTracked = true;
-                    LeftHandPositionWorld = sub.leftHand.rootPose.position;
-                    LeftHandRotationWorld = sub.leftHand.rootPose.rotation;
+                    Pose pose = XRInteractionRigSetup.TrackingPoseToWorld(sub.leftHand.rootPose, trackingOrigin);
+                    LeftHandPositionWorld = pose.position;
+                    LeftHandRotationWorld = pose.rotation;
                 }
                 if (sub.rightHand.isTracked)
                 {
                     rightTracked = true;
-                    RightHandPositionWorld = sub.rightHand.rootPose.position;
-                    RightHandRotationWorld = sub.rightHand.rootPose.rotation;
+                    Pose pose = XRInteractionRigSetup.TrackingPoseToWorld(sub.rightHand.rootPose, trackingOrigin);
+                    RightHandPositionWorld = pose.position;
+                    RightHandRotationWorld = pose.rotation;
                 }
             }
 
             if (_leftPinchReader != null)
             {
-                IsLeftHandPinching = _leftPinchReader.IsPinching;
-                if (!leftTracked) LeftHandPositionWorld = _leftPinchReader.LastPinchPositionWorld;
+                if (!leftTracked && _leftPinchReader.TryGetTrackedPoseWorld(out Pose pose))
+                {
+                    leftTracked = true;
+                    LeftHandPositionWorld = pose.position;
+                    LeftHandRotationWorld = pose.rotation;
+                }
+                IsLeftHandPinching = leftTracked && _leftPinchReader.IsPinching;
             }
             if (_rightPinchReader != null)
             {
-                IsRightHandPinching = _rightPinchReader.IsPinching;
-                if (!rightTracked) RightHandPositionWorld = _rightPinchReader.LastPinchPositionWorld;
+                if (!rightTracked && _rightPinchReader.TryGetTrackedPoseWorld(out Pose pose))
+                {
+                    rightTracked = true;
+                    RightHandPositionWorld = pose.position;
+                    RightHandRotationWorld = pose.rotation;
+                }
+                IsRightHandPinching = rightTracked && _rightPinchReader.IsPinching;
             }
 
             // Fallback on desktop when no XR hands are active: place virtual hands slightly in front of camera
-            if (!leftTracked && _leftPinchReader == null && _headCameraTransform != null)
+            if (!leftTracked && _headCameraTransform != null)
             {
                 LeftHandPositionWorld = _headCameraTransform.TransformPoint(new Vector3(-0.2f, -0.15f, 0.45f));
             }
-            if (!rightTracked && _rightPinchReader == null && _headCameraTransform != null)
+            if (!rightTracked && _headCameraTransform != null)
             {
                 RightHandPositionWorld = _headCameraTransform.TransformPoint(new Vector3(0.2f, -0.15f, 0.45f));
             }
+            IsLeftHandTracked = leftTracked;
+            IsRightHandTracked = rightTracked;
+            if (!leftTracked) IsLeftHandPinching = false;
+            if (!rightTracked) IsRightHandPinching = false;
         }
 
         /// <summary>
@@ -166,8 +186,10 @@ namespace SpatialMAS.XR
                 return Vector3.zero;
 
             Vector3 totalForce = ComputeSingleRepeller(agentPosWorld, HeadPositionWorld, UserRepellerRadiusMeters, UserRepellerForce);
-            totalForce += ComputeSingleRepeller(agentPosWorld, LeftHandPositionWorld, UserRepellerRadiusMeters * 0.55f, UserRepellerForce * 0.8f);
-            totalForce += ComputeSingleRepeller(agentPosWorld, RightHandPositionWorld, UserRepellerRadiusMeters * 0.55f, UserRepellerForce * 0.8f);
+            if (IsLeftHandTracked)
+                totalForce += ComputeSingleRepeller(agentPosWorld, LeftHandPositionWorld, UserRepellerRadiusMeters * 0.55f, UserRepellerForce * 0.8f);
+            if (IsRightHandTracked)
+                totalForce += ComputeSingleRepeller(agentPosWorld, RightHandPositionWorld, UserRepellerRadiusMeters * 0.55f, UserRepellerForce * 0.8f);
             return totalForce;
         }
 

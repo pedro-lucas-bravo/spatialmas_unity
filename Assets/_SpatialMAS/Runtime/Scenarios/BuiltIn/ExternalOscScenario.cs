@@ -10,7 +10,12 @@ namespace SpatialMAS.Scenarios.BuiltIn
         public string DisplayName => "0. External OSC Mode (HS-ims)";
         public string ShortDescription => "Driven externally over UDP port 6011 by Python, Max/MSP, or C++ scripts.";
 
-        public void OnScenarioStart(ScenarioContext context) { }
+        public void OnScenarioStart(ScenarioContext context)
+        {
+            // Built-in scenarios mute their agents when stopping. Restore the preserved
+            // agents when handing control to the external OSC controller.
+            context.Bus?.SetAgentMute(-1, false);
+        }
         public void OnScenarioTick(float deltaTime) { }
         public void OnScenarioStop() { }
         public void SetParameter(string paramName, float value) { }

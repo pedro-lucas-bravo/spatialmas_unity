@@ -67,7 +67,7 @@ namespace SpatialMAS.Audio
         private volatile int _adsrStageInt = (int)AdsrStage.Idle;
         private float _adsrEnvelope;
         private float _reverbTailEnergy;
-        private bool _continuousDroneMode;
+        private volatile bool _continuousDroneMode;
 
         // Biquad Low-Pass Filter state
         private float _b0 = 1f, _b1 = 0f, _b2 = 0f, _a1 = 0f, _a2 = 0f;
@@ -257,31 +257,19 @@ namespace SpatialMAS.Audio
 
                 case CC_FrequencyHz:
                     FrequencyHz = value;
-                    // If external script modulates frequency & gain directly without NoteOn, keep envelope active
-                    if (_targetGain > 0.0001f && _adsrStageInt == (int)AdsrStage.Idle)
-                    {
-                        _continuousDroneMode = true;
-                        _adsrStageInt = (int)AdsrStage.Attack;
-                    }
+                    // Frequency CC explicitly selects continuous playback. Remember it even
+                    // when gain is still zero so frequency/gain messages can arrive in either order.
+                    _continuousDroneMode = true;
+                    _velocityGain = 1f;
+                    UpdateDroneEnvelope();
                     break;
 
                 case CC_GainPrimary:
                 case CC_GainLegacyAlias:
                     Gain = value;
-                    // Only trigger or release envelope automatically if already operating in continuous frequency-drone mode
                     if (_continuousDroneMode)
                     {
-                        if (value > 0.0005f)
-                        {
-                            if (_adsrStageInt == (int)AdsrStage.Idle || _adsrStageInt == (int)AdsrStage.Release)
-                            {
-                                _adsrStageInt = (int)AdsrStage.Attack;
-                            }
-                        }
-                        else
-                        {
-                            _adsrStageInt = (int)AdsrStage.Release;
-                        }
+                        UpdateDroneEnvelope();
                     }
                     break;
 
@@ -317,6 +305,19 @@ namespace SpatialMAS.Audio
                 case CC_ReverbLegacyAlias:
                     ReverbMix = value;
                     break;
+            }
+        }
+
+        private void UpdateDroneEnvelope()
+        {
+            if (_targetGain > 0.0005f)
+            {
+                if (_adsrStageInt == (int)AdsrStage.Idle || _adsrStageInt == (int)AdsrStage.Release)
+                    _adsrStageInt = (int)AdsrStage.Attack;
+            }
+            else if (_adsrStageInt != (int)AdsrStage.Idle)
+            {
+                _adsrStageInt = (int)AdsrStage.Release;
             }
         }
 

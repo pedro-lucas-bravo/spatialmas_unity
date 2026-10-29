@@ -92,13 +92,14 @@ namespace SpatialMAS.Scenarios.BuiltIn
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.04f) * _speedMultiplier;
             Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
             float arenaScale = (_ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f) * 2.5f;
+            Quaternion arenaRotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
 
             // Sync user-grabbed cubes from world space back into local Swarmalator coordinates
             for (int i = 0; i < _count; i++)
             {
                 if (_ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var agent) && agent != null && agent.IsGrabbedByUser)
                 {
-                    _localPositions[i] = (agent.transform.position - origin) / Mathf.Max(0.05f, arenaScale);
+                    _localPositions[i] = Quaternion.Inverse(arenaRotation) * (agent.transform.position - origin) / Mathf.Max(0.0001f, arenaScale);
                 }
             }
 
@@ -115,7 +116,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
                 if (!isGrabbed)
                 {
-                    Vector3 worldPos = origin + _localPositions[i] * arenaScale;
+                    Vector3 worldPos = origin + arenaRotation * (_localPositions[i] * arenaScale);
                     _ctx.Bus.SetAgentPositionUnity(i, worldPos);
                 }
 
