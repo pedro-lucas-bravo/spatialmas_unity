@@ -3,8 +3,8 @@ using UnityEngine;
 namespace SpatialMAS.Agents
 {
     /// <summary>
-    /// Updates agent colors and emission highlights using a shared MaterialPropertyBlock
-    /// to avoid per-agent Material cloning and maintain GPU instancing batching on Quest 3 & Vision Pro.
+    /// Updates agent colors and hover/grab highlights using a shared MaterialPropertyBlock
+    /// to avoid per-agent Material cloning and maintain GPU instancing batching on Quest 3, Vision Pro & Desktop.
     /// </summary>
     [RequireComponent(typeof(Renderer))]
     public class AgentVisualController : MonoBehaviour
@@ -16,9 +16,10 @@ namespace SpatialMAS.Agents
         private Renderer _renderer;
         private MaterialPropertyBlock _mpb;
         private Color _currentColor = new Color(0.15f, 0.85f, 1.0f, 1.0f);
-        private float _emissionIntensity = 0.45f;
+        private bool _isHighlighted;
 
         public Color CurrentColor => _currentColor;
+        public bool IsHighlighted => _isHighlighted;
 
         private void Awake()
         {
@@ -35,14 +36,13 @@ namespace SpatialMAS.Agents
         {
             EnsureInitialized();
             _currentColor = color;
-            _emissionIntensity = emissionBoost;
             ApplyPropertyBlock();
         }
 
         public void SetHighlight(bool highlighted)
         {
             EnsureInitialized();
-            _emissionIntensity = highlighted ? 1.35f : 0.45f;
+            _isHighlighted = highlighted;
             ApplyPropertyBlock();
         }
 
@@ -50,12 +50,19 @@ namespace SpatialMAS.Agents
         {
             if (_renderer == null) return;
             _renderer.GetPropertyBlock(_mpb);
-            _mpb.SetColor(s_BaseColorId, _currentColor);
-            _mpb.SetColor(s_ColorId, _currentColor);
+
+            Color displayColor = _isHighlighted
+                ? Color.Lerp(_currentColor, Color.white, 0.48f)
+                : _currentColor;
+
+            _mpb.SetColor(s_BaseColorId, displayColor);
+            _mpb.SetColor(s_ColorId, displayColor);
+
+            float boost = _isHighlighted ? 1.25f : 0.35f;
             Color emissive = new Color(
-                _currentColor.r * _emissionIntensity,
-                _currentColor.g * _emissionIntensity,
-                _currentColor.b * _emissionIntensity,
+                displayColor.r * boost,
+                displayColor.g * boost,
+                displayColor.b * boost,
                 1.0f);
             _mpb.SetColor(s_EmissionColorId, emissive);
             _renderer.SetPropertyBlock(_mpb);

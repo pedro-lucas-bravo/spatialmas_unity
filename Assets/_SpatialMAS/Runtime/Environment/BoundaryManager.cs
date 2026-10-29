@@ -10,14 +10,17 @@ namespace SpatialMAS.Environment
         public int Id;
         public AgentShapeType Shape;
         public GameObject GameObject;
+        public Renderer Renderer;
+        public MaterialPropertyBlock Mpb;
+        public Color Color = new Color(0.2f, 0.75f, 1.0f, 0.14f);
         public Vector3 CenterUnity;
         public float SizeMeters; // Radius for Sphere, half-extent for Cube
         public readonly HashSet<int> AgentsInside = new HashSet<int>();
     }
 
     /// <summary>
-    /// Manages translucent spherical and cubic arena boundaries (/boundaries/add, /update, /remove)
-    /// and emits /boundaries/Touched whenever an agent crosses a boundary surface.
+    /// Manages translucent spherical and cubic arena boundaries (/boundaries/add, /boundary/add/id, etc.)
+    /// and emits both /boundaries/Touched and /boundary/event/id whenever an agent crosses a boundary surface.
     /// </summary>
     public class BoundaryManager : MonoBehaviour
     {
@@ -40,6 +43,7 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnAddBoundaryUnity += HandleAddBoundary;
                 _bus.OnUpdateBoundaryUnity += HandleUpdateBoundary;
+                _bus.OnSetBoundaryVisuals += HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary += HandleRemoveBoundary;
             }
         }
@@ -50,6 +54,7 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnAddBoundaryUnity -= HandleAddBoundary;
                 _bus.OnUpdateBoundaryUnity -= HandleUpdateBoundary;
+                _bus.OnSetBoundaryVisuals -= HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary -= HandleRemoveBoundary;
             }
         }
@@ -57,13 +62,14 @@ namespace SpatialMAS.Environment
         private void EnsureMaterial()
         {
             if (_boundaryMaterial != null) return;
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null) shader = Shader.Find("Standard");
+            _boundaryMaterial = Resources.Load<Material>("Mat_SpatialMAS_BoundaryTranslucent");
+            if (_boundaryMaterial != null) return;
+
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             _boundaryMaterial = new Material(shader)
             {
                 name = "SpatialMAS_BoundaryTranslucent"
             };
-            // Configure transparent surface for URP Lit
             _boundaryMaterial.SetFloat("_Surface", 1f);
             _boundaryMaterial.SetFloat("_Blend", 0f);
             _boundaryMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -88,7 +94,11 @@ namespace SpatialMAS.Environment
             go.transform.SetParent(transform, false);
 
             var col = go.GetComponent<Collider>();
-            if (col != null) Destroy(col); // We evaluate exact mathematical boundary crossings in FixedUpdate
+            if (col != null)
+            {
+                col.enabled = false;
+                Destroy(col); // We evaluate exact mathematical boundary crossings in FixedUpdate
+            }
 
             var renderer = go.GetComponent<Renderer>();
             if (renderer != null)
@@ -102,9 +112,23 @@ namespace SpatialMAS.Environment
                 Id = id,
                 Shape = shape,
                 GameObject = go,
+                Renderer = renderer,
+                Mpb = new MaterialPropertyBlock(),
                 CenterUnity = posUnity,
                 SizeMeters = Mathf.Max(0.01f, sizeMeters)
             };
+
+            // Pre-populate AgentsInside so spawning a boundary around existing agents doesn't fire false exit/enter events
+            if (_agentManager != null)
+            {
+                foreach (var kvp in _agentManager.ActiveAgents)
+                {
+                    if (kvp.Value != null && IsPositionInsideBoundary(kvp.Value.transform.position, instance))
+                    {
+                        instance.AgentsInside.Add(kvp.Key);
+                    }
+                }
+            }
 
             ApplyBoundaryTransform(instance);
             _boundaries[id] = instance;
@@ -114,9 +138,33 @@ namespace SpatialMAS.Environment
         {
             if (_boundaries.TryGetValue(id, out BoundaryInstance instance))
             {
-                instance.CenterUnity = posUnity;
-                instance.SizeMeters = Mathf.Max(0.01f, sizeMeters);
+                if (!float.IsNaN(posUnity.x)) instance.CenterUnity = posUnity;
+                if (sizeMeters > 0f) instance.SizeMeters = Mathf.Max(0.01f, sizeMeters);
                 ApplyBoundaryTransform(instance);
+            }
+        }
+
+        private void HandleSetBoundaryVisuals(int id, Color color, float alpha)
+        {
+            if (_boundaries.TryGetValue(id, out BoundaryInstance instance))
+            {
+                if (color.r >= 0f)
+                {
+                    instance.Color.r = color.r;
+                    instance.Color.g = color.g;
+                    instance.Color.b = color.b;
+                }
+                if (alpha >= 0f)
+                {
+                    instance.Color.a = Mathf.Clamp01(alpha);
+                }
+                if (instance.Renderer != null)
+                {
+                    instance.Renderer.GetPropertyBlock(instance.Mpb);
+                    instance.Mpb.SetColor("_BaseColor", instance.Color);
+                    instance.Mpb.SetColor("_Color", instance.Color);
+                    instance.Renderer.SetPropertyBlock(instance.Mpb);
+                }
             }
         }
 
@@ -143,7 +191,6 @@ namespace SpatialMAS.Environment
         {
             if (instance.GameObject == null) return;
             instance.GameObject.transform.position = instance.CenterUnity;
-            // In HS-ims, sphere size is radius (so diameter = size * 2), cube size is side/extent
             float diameter = instance.SizeMeters * 2.0f;
             instance.GameObject.transform.localScale = new Vector3(diameter, diameter, diameter);
         }
@@ -170,6 +217,7 @@ namespace SpatialMAS.Environment
                         else boundary.AgentsInside.Remove(agent.AgentId);
 
                         _bus?.EmitBoundaryTouched(agent.AgentId, boundary.Id);
+                        _bus?.EmitBoundaryTransition(agent.AgentId, boundary.Id, isInside ? 0 : 1);
                     }
                 }
             }

@@ -41,6 +41,11 @@ namespace SpatialMAS.Networking
                 _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
                 _socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 _socket.ReceiveBufferSize = _receiveBufferSize;
+                try
+                {
+                    _socket.IOControl((IOControlCode)(-1744830452), new byte[] { 0, 0, 0, 0 }, null);
+                }
+                catch { }
                 _socket.Bind(new IPEndPoint(IPAddress.Any, _listenPort));
 
                 _cts = new CancellationTokenSource();

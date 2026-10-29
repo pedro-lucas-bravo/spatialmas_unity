@@ -16,7 +16,7 @@ SpatialMAS uses strict **Assembly Definitions (`.asmdef`)** under `Assets/_Spati
   - `Logging/`: `DataRecordingService`, `EmbodimentTelemetrySampler`, `WifiLogExportServer`
   - `UI/`: `SpatialResearcherHUD`
 - **`SpatialMAS.Editor.asmdef`** (`Assets/_SpatialMAS/Editor/`):
-  - `SpatialMASEditorBuilder.cs`: Deterministic 1-click generator for all materials, prefabs, and `SpatialMAS_Main.unity`.
+  - `SpatialMASEditorBuilder.cs`: Deterministic 1-click generator for all materials, prefabs, OpenXR settings, and `SpatialMAS_Main.unity`.
   - `MultiPlatformBuildProfileHelper.cs`: 1-click player builders for Meta Quest 3 (`Android`), Apple Vision Pro (`VisionOS`), Windows, macOS, and Linux.
 - **`SpatialMAS.Tests.EditMode.asmdef`** & **`SpatialMAS.Tests.PlayMode.asmdef`** (`Assets/_SpatialMAS/Tests/`):
   - Automated NUnit test suites.
@@ -26,30 +26,30 @@ SpatialMAS uses strict **Assembly Definitions (`.asmdef`)** under `Assets/_Spati
 ## 2. One-Click Project & Scene Generation
 
 You never need to manually wire GameObjects in the Unity Inspector. After opening the project in **Unity 6 (`6000.6.6f1`)**:
-1. In the top menu bar, click **`SpatialMAS -> 1. Build Complete Project (Materials, Prefabs & Main Scene)`**.
+1. In the top menu bar, click **`SpatialMAS > 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`** (or **`SpatialMAS > Build Full SpatialMAS Scene & Prefabs`**).
 2. This executes [`SpatialMASEditorBuilder.BuildAll()`](../Assets/_SpatialMAS/Editor/SpatialMASEditorBuilder.cs), which deterministically creates:
-   - `Assets/_SpatialMAS/SpatialMASConfig.asset`
-   - `Assets/_SpatialMAS/Materials/Mat_SpatialMAS_AgentInstanced.mat` & `Mat_SpatialMAS_BoundaryTranslucent.mat`
+   - `Assets/_SpatialMAS/SpatialMASConfig.asset` & `Assets/_SpatialMAS/Resources/DefaultSpatialMASConfig.asset`
+   - `Assets/_SpatialMAS/Materials/` (and `Assets/_SpatialMAS/Resources/`): `Mat_SpatialMAS_AgentInstanced.mat`, `Mat_SpatialMAS_BoundaryTranslucent.mat`, `Mat_SpatialMAS_Wavefront.mat`, `Mat_SpatialMAS_Arrow.mat`, `Mat_SpatialMAS_VRFloor.mat`, `Mat_SpatialMAS_VRGridLine.mat`
    - `Assets/_SpatialMAS/Prefabs/Agent_Sphere.prefab`, `Agent_Cube.prefab`, `Agent_Pyramid.prefab`
-   - `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity` (complete with `ARSession`, `XROrigin`, `XRHandPinchHysteresis`, and `SpatialMASBootstrapper`).
+   - `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity` (complete with `ARSession`, `XROrigin`, `TrackedPoseDriver`, `XRHandPinchHysteresis`, and `SpatialMASBootstrapper`).
 
-You can also run this headlessly from the command line:
+You can also run this via the Unity CLI (`com.unity.pipeline`):
 ```powershell
-Unity.exe -batchmode -nographics -projectPath . -executeMethod SpatialMAS.Editor.SpatialMASEditorBuilder.BuildAll -quit
+unity command script run --file Assets/_SpatialMAS/Editor/SpatialMASEditorBuilder.cs --entry SpatialMAS.Editor.SpatialMASEditorBuilder.BuildAll
 ```
 
 ---
 
 ## 3. Building for Multiplatform Headsets (Quest 3, Apple Vision Pro, OpenXR & Desktop)
 
-Use the **`SpatialMAS -> Build Target`** menu in Unity Editor:
-- **Meta Quest 3 / 3S / Pro & Android OpenXR**: `SpatialMAS -> Build Target -> Build Meta Quest & Android OpenXR (.apk)`
-- **Apple Vision Pro (`visionOS`)**: `SpatialMAS -> Build Target -> Build Apple Vision Pro (visionOS Xcode)`
-- **Windows / macOS / Linux Standalone**: Select the corresponding desktop target under `SpatialMAS -> Build Target`.
+Use the **`SpatialMAS > Build Target`** menu in Unity Editor:
+- **Meta Quest 3 / 3S / Pro & Android OpenXR**: `SpatialMAS > Build Target > Build Meta Quest & Android OpenXR (.apk)`
+- **Apple Vision Pro (`visionOS`)**: `SpatialMAS > Build Target > Build Apple Vision Pro (visionOS Xcode)`
+- **Windows / macOS / Linux Standalone**: Select the corresponding desktop target under `SpatialMAS > Build Target`.
 
 ### How Multiplatform Differences Are Handled Automatically
-- [`XRPlatformAdapter.cs`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) detects whether the app is running on **Meta Quest (`Android`)**, **Apple Vision Pro (`visionOS`)**, **Generic OpenXR**, or **Desktop** at startup.
-- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) reads direct optical finger joint positions from `XRHandSubsystem` when available, and falls back to XRI Input Actions (supporting Apple Vision Pro Spatial Pointer Gaze-and-Pinch, 6DoF controllers, or Desktop Simulator clicks).
+- [`XRPlatformAdapter.cs`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) detects whether the app is running on **Meta Quest (`Android`)**, **Apple Vision Pro (`visionOS`)**, **Generic OpenXR**, or **Desktop** at startup. On Desktop without an HMD, it disables `TrackedPoseDriver` and `ARSession` so `XRSimulation` never interferes with [`DesktopInteractionRig.cs`](../Assets/_SpatialMAS/Runtime/XR/DesktopInteractionRig.cs).
+- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) reads direct optical finger joint positions from `XRHandSubsystem` when available, and falls back to XRI Input Actions (supporting Apple Vision Pro Spatial Pointer Gaze-and-Pinch, 6DoF controllers, or Desktop clicks).
 
 ---
 

@@ -7,12 +7,15 @@ namespace SpatialMAS.Agents
 {
     /// <summary>
     /// High-performance pooled Agent Manager.
-    /// Handles instantiation, addition, removal, batch transform updates, color updates,
-    /// and synth/audio routing for up to hundreds of simultaneous spatial agents.
+    /// Handles instantiation, addition, removal, batch transform updates, speed/direction/velocity updates,
+    /// color updates, radius visualization, floating ID labels, and synth/audio routing.
     /// </summary>
     public class AgentManager : MonoBehaviour
     {
+        public const int MaxSafeAgentsCount = 512;
+
         [SerializeField] private Material _defaultAgentMaterial;
+        [SerializeField] private Material _translucentRadiusMaterial;
 
         private readonly Dictionary<int, AgentEntity> _activeAgents = new Dictionary<int, AgentEntity>(256);
         private readonly List<int> _orderedAgentIds = new List<int>(256);
@@ -20,24 +23,34 @@ namespace SpatialMAS.Agents
 
         private SimulationCommandBus _bus;
         private Transform _agentsRoot;
+        private bool _showAgentIds;
 
         public IReadOnlyDictionary<int, AgentEntity> ActiveAgents => _activeAgents;
         public IReadOnlyList<int> OrderedAgentIds => _orderedAgentIds;
         public int ActiveCount => _activeAgents.Count;
 
-        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null)
+        public bool ShowAgentIds
+        {
+            get => _showAgentIds;
+            set => HandleSetShowAgentIds(value);
+        }
+
+        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null, Material translucentMaterial = null)
         {
             _bus = bus;
             if (defaultMaterial != null) _defaultAgentMaterial = defaultMaterial;
+            if (translucentMaterial != null) _translucentRadiusMaterial = translucentMaterial;
 
             if (_agentsRoot == null)
             {
-                var rootGo = new GameObject("AgentsContainer");
+                Transform existing = transform.Find("AgentsContainer");
+                GameObject rootGo = existing != null ? existing.gameObject : new GameObject("AgentsContainer");
                 rootGo.transform.SetParent(transform, false);
                 _agentsRoot = rootGo.transform;
             }
 
-            EnsureDefaultMaterial();
+            EnsureMaterials();
+            AgentEntity.WarmupPrimitiveMeshes();
 
             if (_bus != null)
             {
@@ -46,12 +59,18 @@ namespace SpatialMAS.Agents
                 _bus.OnRemoveAgents += HandleRemoveAgents;
                 _bus.OnSetAgentPositionUnity += HandleSetAgentPosition;
                 _bus.OnSetBatchAgentPositionsUnity += HandleSetBatchAgentPositions;
+                _bus.OnSetAgentSpeedMetersPerSec += HandleSetAgentSpeed;
+                _bus.OnSetAgentDirectionUnity += HandleSetAgentDirection;
+                _bus.OnSetAgentVelocityUnity += HandleSetAgentVelocity;
                 _bus.OnSetAgentColor += HandleSetAgentColor;
                 _bus.OnSetBatchAgentColors += HandleSetBatchAgentColors;
+                _bus.OnSetAgentRadiusVisual += HandleSetAgentRadiusVisual;
                 _bus.OnSetAgentInteractable += HandleSetAgentInteractable;
+                _bus.OnSetShowAgentIds += HandleSetShowAgentIds;
                 _bus.OnSetAgentMute += HandleSetAgentMute;
                 _bus.OnSetAgentSynthNote += HandleSetAgentSynthNote;
                 _bus.OnSetAgentSynthParam += HandleSetAgentSynthParam;
+                _bus.OnFlushAgentSynth += HandleFlushAgentSynth;
                 _bus.OnSetAgentAudioBank += HandleSetAgentAudioBank;
             }
         }
@@ -65,28 +84,56 @@ namespace SpatialMAS.Agents
                 _bus.OnRemoveAgents -= HandleRemoveAgents;
                 _bus.OnSetAgentPositionUnity -= HandleSetAgentPosition;
                 _bus.OnSetBatchAgentPositionsUnity -= HandleSetBatchAgentPositions;
+                _bus.OnSetAgentSpeedMetersPerSec -= HandleSetAgentSpeed;
+                _bus.OnSetAgentDirectionUnity -= HandleSetAgentDirection;
+                _bus.OnSetAgentVelocityUnity -= HandleSetAgentVelocity;
                 _bus.OnSetAgentColor -= HandleSetAgentColor;
                 _bus.OnSetBatchAgentColors -= HandleSetBatchAgentColors;
+                _bus.OnSetAgentRadiusVisual -= HandleSetAgentRadiusVisual;
                 _bus.OnSetAgentInteractable -= HandleSetAgentInteractable;
+                _bus.OnSetShowAgentIds -= HandleSetShowAgentIds;
                 _bus.OnSetAgentMute -= HandleSetAgentMute;
                 _bus.OnSetAgentSynthNote -= HandleSetAgentSynthNote;
                 _bus.OnSetAgentSynthParam -= HandleSetAgentSynthParam;
+                _bus.OnFlushAgentSynth -= HandleFlushAgentSynth;
                 _bus.OnSetAgentAudioBank -= HandleSetAgentAudioBank;
             }
         }
 
-        private void EnsureDefaultMaterial()
+        private void EnsureMaterials()
         {
-            if (_defaultAgentMaterial != null) return;
-            Shader urpLit = Shader.Find("Universal Render Pipeline/Lit");
-            if (urpLit == null) urpLit = Shader.Find("Standard");
-            _defaultAgentMaterial = new Material(urpLit)
+            if (_defaultAgentMaterial == null)
             {
-                name = "SpatialMAS_AgentLit_Instanced",
-                enableInstancing = true
-            };
-            _defaultAgentMaterial.SetFloat("_Smoothness", 0.8f);
-            _defaultAgentMaterial.EnableKeyword("_EMISSION");
+                _defaultAgentMaterial = Resources.Load<Material>("Mat_SpatialMAS_AgentInstanced");
+            }
+            if (_defaultAgentMaterial == null)
+            {
+                Shader urpLit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _defaultAgentMaterial = new Material(urpLit)
+                {
+                    name = "SpatialMAS_AgentLit_Instanced",
+                    enableInstancing = true
+                };
+                _defaultAgentMaterial.SetFloat("_Smoothness", 0.78f);
+            }
+
+            if (_translucentRadiusMaterial == null)
+            {
+                _translucentRadiusMaterial = Resources.Load<Material>("Mat_SpatialMAS_BoundaryTranslucent");
+            }
+            if (_translucentRadiusMaterial == null)
+            {
+                Shader urpLit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _translucentRadiusMaterial = new Material(urpLit)
+                {
+                    name = "SpatialMAS_RadiusTranslucent"
+                };
+                _translucentRadiusMaterial.SetFloat("_Surface", 1f);
+                _translucentRadiusMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                _translucentRadiusMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                _translucentRadiusMaterial.SetInt("_ZWrite", 0);
+                _translucentRadiusMaterial.renderQueue = 3002;
+            }
         }
 
         public bool TryGetAgent(int id, out AgentEntity entity)
@@ -115,7 +162,14 @@ namespace SpatialMAS.Agents
             if (_activeAgents.TryGetValue(id, out AgentEntity existing))
             {
                 existing.Configure(id, shape, movMode, scaleMeters, _bus);
+                existing.SetShowIdLabel(_showAgentIds);
                 return existing;
+            }
+
+            if (_activeAgents.Count >= MaxSafeAgentsCount)
+            {
+                Debug.LogWarning($"[AgentManager] Reached MaxSafeAgentsCount ({MaxSafeAgentsCount}); skipping spawn of Agent {id}.");
+                return null;
             }
 
             AgentEntity entity;
@@ -140,6 +194,7 @@ namespace SpatialMAS.Agents
 
             entity.transform.SetParent(_agentsRoot, false);
             entity.Configure(id, shape, movMode, scaleMeters, _bus);
+            entity.SetShowIdLabel(_showAgentIds);
             _activeAgents[id] = entity;
             _orderedAgentIds.Add(id);
             return entity;
@@ -148,7 +203,8 @@ namespace SpatialMAS.Agents
         private void HandleInstantiateAgents(AgentShapeType shape, AgentMovementMode movMode, int count, float scaleMeters, string ip, int port)
         {
             ClearAllAgents();
-            for (int i = 0; i < count; i++)
+            int clampedCount = Mathf.Clamp(count, 0, MaxSafeAgentsCount);
+            for (int i = 0; i < clampedCount; i++)
             {
                 SpawnOrRentAgent(i, shape, movMode, scaleMeters);
             }
@@ -157,7 +213,8 @@ namespace SpatialMAS.Agents
         private void HandleAddAgents(AgentShapeType shape, AgentMovementMode movMode, float scaleMeters, string ip, int port, int[] ids)
         {
             if (ids == null) return;
-            for (int i = 0; i < ids.Length; i++)
+            int limit = Mathf.Min(ids.Length, MaxSafeAgentsCount);
+            for (int i = 0; i < limit; i++)
             {
                 SpawnOrRentAgent(ids[i], shape, movMode, scaleMeters);
             }
@@ -210,6 +267,30 @@ namespace SpatialMAS.Agents
             }
         }
 
+        private void HandleSetAgentSpeed(int id, float speedMetersPerSec)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity))
+            {
+                entity.SetSpeedMetersPerSec(speedMetersPerSec);
+            }
+        }
+
+        private void HandleSetAgentDirection(int id, Vector3 dirUnity)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity))
+            {
+                entity.SetDirectionUnity(dirUnity);
+            }
+        }
+
+        private void HandleSetAgentVelocity(int id, Vector3 velUnity)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity))
+            {
+                entity.SetVelocityUnity(velUnity);
+            }
+        }
+
         private void HandleSetAgentColor(int id, Color color)
         {
             if (_activeAgents.TryGetValue(id, out AgentEntity entity))
@@ -232,11 +313,31 @@ namespace SpatialMAS.Agents
             }
         }
 
+        private void HandleSetAgentRadiusVisual(int id, float radiusMeters, float alpha, Color color)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity))
+            {
+                entity.SetRadiusVisual(radiusMeters, alpha, color, _translucentRadiusMaterial);
+            }
+        }
+
         private void HandleSetAgentInteractable(int id, bool interactable)
         {
             if (_activeAgents.TryGetValue(id, out AgentEntity entity))
             {
                 entity.SetInteractable(interactable);
+            }
+        }
+
+        private void HandleSetShowAgentIds(bool show)
+        {
+            _showAgentIds = show;
+            foreach (var kvp in _activeAgents)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.SetShowIdLabel(show);
+                }
             }
         }
 
@@ -268,6 +369,21 @@ namespace SpatialMAS.Agents
             if (_activeAgents.TryGetValue(id, out AgentEntity entity))
             {
                 entity.Synth.SetParameter(ccId, value);
+            }
+        }
+
+        private void HandleFlushAgentSynth(int id)
+        {
+            if (id < 0)
+            {
+                foreach (var kvp in _activeAgents)
+                {
+                    kvp.Value.Synth.Flush();
+                }
+            }
+            else if (_activeAgents.TryGetValue(id, out AgentEntity entity))
+            {
+                entity.Synth.Flush();
             }
         }
 

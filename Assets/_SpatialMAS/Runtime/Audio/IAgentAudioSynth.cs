@@ -29,6 +29,7 @@ namespace SpatialMAS.Audio
 
         void SetNote(int noteAction, int midiNote, int velocity = 100);
         void SetParameter(int ccId, float value);
+        void Flush();
         void SynthesizeBlock(float[] data, int channels, int sampleRate);
     }
 }

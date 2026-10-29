@@ -6,7 +6,7 @@ using UnityEngine;
 namespace SpatialMAS.LocalComm
 {
     /// <summary>
-    /// Pooled Expanding Wavefront Local Communication Simulator (/agents/localcomm).
+    /// Pooled Expanding Wavefront Local Communication Simulator (/agents/localcomm and /agents/localcomm/send).
     /// Replaces legacy PacketTransporter.cs (which called Instantiate/Destroy every broadcast)
     /// with a zero-allocation object pool and distance-wavefront evaluator.
     /// </summary>
@@ -32,6 +32,11 @@ namespace SpatialMAS.LocalComm
         private SimulationCommandBus _bus;
         private AgentManager _agentManager;
         private Material _wavefrontMaterial;
+        private float _defaultMaxRangeMeters = 0.5f;
+        private float _defaultLatencySeconds = 0.25f;
+
+        public float DefaultMaxRangeMeters => _defaultMaxRangeMeters;
+        public float DefaultLatencySeconds => _defaultLatencySeconds;
 
         public bool RenderWavefrontSpheres
         {
@@ -45,6 +50,10 @@ namespace SpatialMAS.LocalComm
             _agentManager = agentManager;
             _wavefrontMaterial = wavefrontMat;
 
+            if (_wavefrontMaterial == null)
+            {
+                _wavefrontMaterial = Resources.Load<Material>("Mat_SpatialMAS_Wavefront");
+            }
             if (_wavefrontMaterial == null)
             {
                 Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -63,6 +72,7 @@ namespace SpatialMAS.LocalComm
 
             if (_bus != null)
             {
+                _bus.OnConfigureLocalComm += HandleConfigureLocalComm;
                 _bus.OnTriggerLocalComm += HandleTriggerLocalComm;
             }
         }
@@ -71,8 +81,16 @@ namespace SpatialMAS.LocalComm
         {
             if (_bus != null)
             {
+                _bus.OnConfigureLocalComm -= HandleConfigureLocalComm;
                 _bus.OnTriggerLocalComm -= HandleTriggerLocalComm;
             }
+        }
+
+        private void HandleConfigureLocalComm(float maxRangeMeters, float latencySec, bool showVisuals)
+        {
+            _defaultMaxRangeMeters = Mathf.Max(0.01f, maxRangeMeters);
+            _defaultLatencySeconds = Mathf.Max(0.005f, latencySec);
+            _renderWavefrontSpheres = showVisuals;
         }
 
         private void HandleTriggerLocalComm(string msgType, int senderId, float rangeMeters, float latencySec, object[] extraArgs)
@@ -80,12 +98,15 @@ namespace SpatialMAS.LocalComm
             if (_agentManager == null || !_agentManager.TryGetAgent(senderId, out AgentEntity sender) || sender == null)
                 return;
 
+            float effectiveRange = rangeMeters > 0f ? rangeMeters : _defaultMaxRangeMeters;
+            float effectiveLatency = latencySec > 0f ? latencySec : _defaultLatencySeconds;
+
             ActiveWavefront wf = _wavefrontPool.Count > 0 ? _wavefrontPool.Pop() : CreatePooledWavefront();
             wf.MessageType = msgType;
             wf.SenderId = senderId;
             wf.OriginUnity = sender.transform.position;
-            wf.MaxRangeMeters = Mathf.Max(0.01f, rangeMeters);
-            wf.DurationSeconds = Mathf.Max(0.005f, latencySec);
+            wf.MaxRangeMeters = Mathf.Max(0.01f, effectiveRange);
+            wf.DurationSeconds = Mathf.Max(0.005f, effectiveLatency);
             wf.ElapsedSeconds = 0f;
             wf.ExtraArgs = extraArgs;
             wf.NotifiedReceivers.Clear();
@@ -106,7 +127,11 @@ namespace SpatialMAS.LocalComm
             sphere.name = "LocalCommWavefront";
             sphere.transform.SetParent(transform, false);
             var col = sphere.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            if (col != null)
+            {
+                col.enabled = false;
+                Destroy(col);
+            }
             var renderer = sphere.GetComponent<Renderer>();
             if (renderer != null)
             {

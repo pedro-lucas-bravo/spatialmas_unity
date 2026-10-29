@@ -11,6 +11,8 @@ using UnityEditor.XR.Management;
 using UnityEditor.XR.Management.Metadata;
 using UnityEditor.XR.OpenXR.Features;
 using UnityEngine;
+using UnityEngine.InputSystem.XR;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR.ARFoundation;
@@ -25,7 +27,7 @@ namespace SpatialMAS.Editor
 {
     /// <summary>
     /// Deterministic C# Editor Builder that generates all SpatialMAS materials, agent prefabs
-    /// (Sphere, Cube, Pyramid), configuration asset, multiplatform XR Origin rig, OpenXR feature settings,
+    /// (Sphere, Cube, Pyramid), configuration assets, multiplatform XR Origin rig, OpenXR feature settings,
     /// and the main scene (Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity) without manual Inspector clicking.
     /// Automatically executes on domain reload if SpatialMAS_Main.unity has not been generated yet.
     /// </summary>
@@ -33,11 +35,13 @@ namespace SpatialMAS.Editor
     public static class SpatialMASEditorBuilder
     {
         public const string RootFolder = "Assets/_SpatialMAS";
+        public const string ResourcesFolder = "Assets/_SpatialMAS/Resources";
         public const string MaterialsFolder = "Assets/_SpatialMAS/Materials";
         public const string PrefabsFolder = "Assets/_SpatialMAS/Prefabs";
         public const string ScenesFolder = "Assets/_SpatialMAS/Scenes";
         public const string MainScenePath = "Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity";
         public const string ConfigAssetPath = "Assets/_SpatialMAS/SpatialMASConfig.asset";
+        public const string DefaultResourcesConfigPath = "Assets/_SpatialMAS/Resources/DefaultSpatialMASConfig.asset";
 
         private const string XriHandsRigSamplePath =
             "Assets/Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/XR Origin Hands (XR Rig).prefab";
@@ -68,6 +72,7 @@ namespace SpatialMAS.Editor
             SpatialMASConfig config = CreateOrLoadConfigAsset();
             Material agentLitMat = CreateOrLoadAgentMaterial();
             Material boundaryMat = CreateOrLoadBoundaryMaterial();
+            CreateOrLoadAdditionalMaterials();
 
             CreateAgentPrefab(AgentShapeType.Sphere, "Agent_Sphere.prefab", agentLitMat);
             CreateAgentPrefab(AgentShapeType.Cube, "Agent_Cube.prefab", agentLitMat);
@@ -89,15 +94,30 @@ namespace SpatialMAS.Editor
             Debug.Log("[SpatialMASEditorBuilder] Successfully built all SpatialMAS materials, prefabs, OpenXR settings, and SpatialMAS_Main.unity!");
         }
 
-        [MenuItem("SpatialMAS/2. Configure OpenXR & Multiplatform XR Settings", priority = 2)]
+        // Alias menu item matching SETUP_AND_USAGE_GUIDE.md
+        [MenuItem("SpatialMAS/Build Full SpatialMAS Scene & Prefabs", priority = 2)]
+        public static void BuildFullSceneAndPrefabsAlias()
+        {
+            BuildAll();
+        }
+
+        [MenuItem("SpatialMAS/2. Configure OpenXR & Multiplatform XR Settings", priority = 3)]
         public static void ConfigureOpenXRMultiplatformSettings()
         {
             try
             {
+                // Ensure Windows Standalone uses Direct3D11 primary to prevent Unity 6 D3D12Fence::Wait TDR freezes in Editor
+                PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[]
+                {
+                    GraphicsDeviceType.Direct3D11,
+                    GraphicsDeviceType.Direct3D12
+                });
+
                 ConfigureBuildTargetOpenXR(BuildTargetGroup.Standalone);
                 ConfigureBuildTargetOpenXR(BuildTargetGroup.Android);
                 AssetDatabase.SaveAssets();
-                Debug.Log("[SpatialMASEditorBuilder] Configured OpenXR Loader & Hand/MR Features for Standalone and Android.");
+                Debug.Log("[SpatialMASEditorBuilder] Configured OpenXR Loader, D3D11 Editor Stability, and Hand/MR Features for Standalone and Android.");
             }
             catch (Exception ex)
             {
@@ -145,7 +165,7 @@ namespace SpatialMAS.Editor
 
         private static void EnsureDirectoriesExist()
         {
-            string[] dirs = { RootFolder, MaterialsFolder, PrefabsFolder, ScenesFolder };
+            string[] dirs = { RootFolder, ResourcesFolder, MaterialsFolder, PrefabsFolder, ScenesFolder };
             for (int i = 0; i < dirs.Length; i++)
             {
                 if (!Directory.Exists(dirs[i]))
@@ -164,50 +184,141 @@ namespace SpatialMAS.Editor
                 AssetDatabase.CreateAsset(config, ConfigAssetPath);
             }
             EditorUtility.SetDirty(config);
+
+            var resConfig = AssetDatabase.LoadAssetAtPath<SpatialMASConfig>(DefaultResourcesConfigPath);
+            if (resConfig == null)
+            {
+                resConfig = ScriptableObject.CreateInstance<SpatialMASConfig>();
+                AssetDatabase.CreateAsset(resConfig, DefaultResourcesConfigPath);
+            }
+            EditorUtility.SetDirty(resConfig);
+
             return config;
         }
 
         private static Material CreateOrLoadAgentMaterial()
         {
-            string path = $"{MaterialsFolder}/Mat_SpatialMAS_AgentInstanced.mat";
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat == null)
-            {
-                Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                mat = new Material(shader)
-                {
-                    name = "Mat_SpatialMAS_AgentInstanced",
-                    enableInstancing = true,
-                    color = new Color(0.15f, 0.85f, 1.0f, 1.0f)
-                };
-                mat.SetColor("_BaseColor", new Color(0.15f, 0.85f, 1.0f, 1.0f));
-                mat.SetFloat("_Smoothness", 0.82f);
-                mat.SetFloat("_Metallic", 0.25f);
-                mat.EnableKeyword("_EMISSION");
-                mat.SetColor("_EmissionColor", new Color(0.05f, 0.35f, 0.45f, 1.0f));
-                AssetDatabase.CreateAsset(mat, path);
-            }
+            Material mat = CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_AgentInstanced.mat",
+                "Mat_SpatialMAS_AgentInstanced",
+                new Color(0.15f, 0.85f, 1.0f, 1.0f),
+                0.82f,
+                0.25f,
+                false,
+                2000);
+
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_AgentInstanced.mat",
+                "Mat_SpatialMAS_AgentInstanced",
+                new Color(0.15f, 0.85f, 1.0f, 1.0f),
+                0.82f,
+                0.25f,
+                false,
+                2000);
+
             return mat;
         }
 
         private static Material CreateOrLoadBoundaryMaterial()
         {
-            string path = $"{MaterialsFolder}/Mat_SpatialMAS_BoundaryTranslucent.mat";
+            Material mat = CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_BoundaryTranslucent.mat",
+                "Mat_SpatialMAS_BoundaryTranslucent",
+                new Color(0.2f, 0.75f, 1.0f, 0.14f),
+                0.5f,
+                0f,
+                true,
+                3000);
+
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_BoundaryTranslucent.mat",
+                "Mat_SpatialMAS_BoundaryTranslucent",
+                new Color(0.2f, 0.75f, 1.0f, 0.14f),
+                0.5f,
+                0f,
+                true,
+                3000);
+
+            return mat;
+        }
+
+        private static void CreateOrLoadAdditionalMaterials()
+        {
+            CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_Wavefront.mat",
+                "Mat_SpatialMAS_Wavefront",
+                new Color(0.1f, 1.0f, 0.65f, 0.18f),
+                0.4f, 0f, true, 3005);
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_Wavefront.mat",
+                "Mat_SpatialMAS_Wavefront",
+                new Color(0.1f, 1.0f, 0.65f, 0.18f),
+                0.4f, 0f, true, 3005);
+
+            CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_Arrow.mat",
+                "Mat_SpatialMAS_Arrow",
+                new Color(1.0f, 0.78f, 0.1f, 1.0f),
+                0.6f, 0.1f, false, 2000);
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_Arrow.mat",
+                "Mat_SpatialMAS_Arrow",
+                new Color(1.0f, 0.78f, 0.1f, 1.0f),
+                0.6f, 0.1f, false, 2000);
+
+            CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_VRFloor.mat",
+                "Mat_SpatialMAS_VRFloor",
+                new Color(0.08f, 0.10f, 0.15f, 1.0f),
+                0.35f, 0f, false, 2000);
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_VRFloor.mat",
+                "Mat_SpatialMAS_VRFloor",
+                new Color(0.08f, 0.10f, 0.15f, 1.0f),
+                0.35f, 0f, false, 2000);
+
+            CreateOrLoadLitMaterial(
+                $"{MaterialsFolder}/Mat_SpatialMAS_VRGridLine.mat",
+                "Mat_SpatialMAS_VRGridLine",
+                new Color(0.0f, 0.72f, 0.95f, 1.0f),
+                0.5f, 0f, false, 2000);
+            CreateOrLoadLitMaterial(
+                $"{ResourcesFolder}/Mat_SpatialMAS_VRGridLine.mat",
+                "Mat_SpatialMAS_VRGridLine",
+                new Color(0.0f, 0.72f, 0.95f, 1.0f),
+                0.5f, 0f, false, 2000);
+        }
+
+        private static Material CreateOrLoadLitMaterial(
+            string path,
+            string matName,
+            Color baseColor,
+            float smoothness,
+            float metallic,
+            bool transparent,
+            int renderQueue)
+        {
             var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (mat == null)
             {
                 Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
                 mat = new Material(shader)
                 {
-                    name = "Mat_SpatialMAS_BoundaryTranslucent"
+                    name = matName,
+                    enableInstancing = true,
+                    color = baseColor
                 };
-                mat.SetFloat("_Surface", 1f);
-                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                mat.SetInt("_ZWrite", 0);
-                mat.renderQueue = 3000;
-                mat.color = new Color(0.2f, 0.75f, 1.0f, 0.14f);
-                mat.SetColor("_BaseColor", new Color(0.2f, 0.75f, 1.0f, 0.14f));
+                mat.SetColor("_BaseColor", baseColor);
+                mat.SetFloat("_Smoothness", smoothness);
+                mat.SetFloat("_Metallic", metallic);
+                if (transparent)
+                {
+                    mat.SetFloat("_Surface", 1f);
+                    mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+                    mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+                    mat.SetInt("_ZWrite", 0);
+                }
+                mat.renderQueue = renderQueue;
                 AssetDatabase.CreateAsset(mat, path);
             }
             return mat;
@@ -235,7 +346,7 @@ namespace SpatialMAS.Editor
             mr.sharedMaterial = mat;
 
             var col = tempGo.AddComponent<SphereCollider>();
-            col.radius = 0.5f;
+            col.radius = 0.55f;
             col.isTrigger = true;
 
             var rb = tempGo.AddComponent<Rigidbody>();
@@ -267,8 +378,11 @@ namespace SpatialMAS.Editor
             lightGo.transform.rotation = Quaternion.Euler(48f, -32f, 0f);
 
             // 2. AR Session (OpenXR / Quest 3 / Vision Pro / Android XR Passthrough lifecycle)
+            // Kept disabled by default in scene so Desktop/Editor doesn't spin up XRSimulation;
+            // automatically enabled by XRModeSwitcher when a physical XR headset is running.
             var arSessionGo = new GameObject("AR Session");
             var arSession = arSessionGo.AddComponent<ARSession>();
+            arSession.enabled = false;
             arSessionGo.AddComponent<ARInputManager>();
 
             // 3. XR Interaction Manager
@@ -283,11 +397,14 @@ namespace SpatialMAS.Editor
             var bootstrapper = bootstrapGo.AddComponent<SpatialMASBootstrapper>();
 
             var so = new SerializedObject(bootstrapper);
-            so.FindProperty("_config").objectReferenceValue = config;
-            so.FindProperty("_mainCamera").objectReferenceValue = mainCam;
-            so.FindProperty("_arSession").objectReferenceValue = arSession;
-            so.FindProperty("_arCameraManager").objectReferenceValue = arCamMgr;
+            SetObjectPropertyIfPresent(so, "_config", config);
+            SetObjectPropertyIfPresent(so, "_mainCamera", mainCam);
+            SetObjectPropertyIfPresent(so, "_arSession", arSession);
+            SetObjectPropertyIfPresent(so, "_arCameraManager", arCamMgr);
+            SetObjectPropertyIfPresent(so, "_agentMaterial", agentMat);
+            SetObjectPropertyIfPresent(so, "_boundaryMaterial", boundaryMat);
             so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(bootstrapper);
 
             EditorSceneManager.SaveScene(scene, MainScenePath);
 
@@ -296,6 +413,15 @@ namespace SpatialMAS.Editor
             {
                 new EditorBuildSettingsScene(MainScenePath, true)
             };
+        }
+
+        private static void SetObjectPropertyIfPresent(SerializedObject so, string propName, UnityEngine.Object value)
+        {
+            SerializedProperty prop = so.FindProperty(propName);
+            if (prop != null)
+            {
+                prop.objectReferenceValue = value;
+            }
         }
 
         private static Camera SetupMultiplatformXROrigin(out ARCameraManager arCamMgr)
@@ -344,11 +470,17 @@ namespace SpatialMAS.Editor
                 var camGo = new GameObject("Main Camera");
                 camGo.tag = "MainCamera";
                 camGo.transform.SetParent(camOffsetGo.transform, false);
-                camGo.transform.localPosition = new Vector3(0f, 1.35f, -0.6f);
+                camGo.transform.localPosition = new Vector3(0f, 1.35f, -0.65f);
+                camGo.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
 
                 mainCam = camGo.AddComponent<Camera>();
                 camGo.AddComponent<AudioListener>();
                 xrOrigin.Camera = mainCam;
+
+                // Attach TrackedPoseDriver so XROrigin has center-eye 6DoF bindings on headsets without warning
+                var tpd = camGo.AddComponent<TrackedPoseDriver>();
+                tpd.trackingType = TrackedPoseDriver.TrackingType.RotationAndPosition;
+                tpd.updateType = TrackedPoseDriver.UpdateType.UpdateAndBeforeRender;
 
                 var leftHandGo = new GameObject("Left Hand Tracking");
                 leftHandGo.transform.SetParent(camOffsetGo.transform, false);
@@ -361,7 +493,7 @@ namespace SpatialMAS.Editor
                 rightPinch.Handedness = Handedness.Right;
             }
 
-            // Configure Passthrough defaults on Main Camera (Alpha = 0, PostProcessing = false, ARCameraManager active)
+            // Configure Passthrough defaults on Main Camera (Alpha = 0, PostProcessing = false, ARCameraManager ready)
             mainCam.clearFlags = CameraClearFlags.SolidColor;
             mainCam.backgroundColor = new Color(0f, 0f, 0f, 0f);
             mainCam.nearClipPlane = 0.05f;
@@ -372,6 +504,7 @@ namespace SpatialMAS.Editor
 
             arCamMgr = mainCam.GetComponent<ARCameraManager>();
             if (arCamMgr == null) arCamMgr = mainCam.gameObject.AddComponent<ARCameraManager>();
+            arCamMgr.enabled = false; // Enabled automatically at runtime when physical XR headset is active
 
             return mainCam;
         }

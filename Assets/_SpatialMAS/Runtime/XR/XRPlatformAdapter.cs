@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using SpatialMAS.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.XR;
 using UnityEngine.XR;
 
 #if UNITY_ANDROID && !UNITY_EDITOR && SPATIALMAS_META_OPENXR
@@ -80,6 +81,14 @@ namespace SpatialMAS.XR
                 ActiveDeviceName = $"Desktop ({SystemInfo.operatingSystem})";
             }
 #endif
+            if (Camera.main != null)
+            {
+                var tpd = Camera.main.GetComponent<TrackedPoseDriver>();
+                if (tpd != null)
+                {
+                    tpd.enabled = IsXRHeadsetActive;
+                }
+            }
         }
 
         private void ConfigureFramePacing()

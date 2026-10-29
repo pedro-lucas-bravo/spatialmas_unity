@@ -42,6 +42,21 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.AreEqual(0.9f, agent2.Visuals.CurrentColor.r, 0.01f);
             Assert.AreEqual(0.08f, agent2.Synth.AttackSeconds, 0.001f);
 
+            // Verify HS-ims v1 multi-agent position batching, hex color strings, and 4-arg synth param_val
+            server.InjectTestMessage(new OscMessage("/agents/position/id", 0, 500f, 0f, 0f, 1, -500f, 0f, 1000f));
+            server.InjectTestMessage(new OscMessage("/agents/color/id", 0, "#00FF00", 0.8f));
+            server.InjectTestMessage(new OscMessage("/agents/audio/synth/param_val", 0, 0, 74, 0.15f));
+            router.ProcessIncomingMessages();
+            yield return null;
+
+            Assert.IsTrue(agentMgr.TryGetAgent(0, out AgentEntity agent0));
+            Assert.IsTrue(agentMgr.TryGetAgent(1, out AgentEntity agent1));
+            Assert.AreEqual(0.5f, agent0.transform.position.x, 0.001f);
+            Assert.AreEqual(-0.5f, agent1.transform.position.x, 0.001f);
+            Assert.AreEqual(1.0f, agent1.transform.position.y, 0.001f);
+            Assert.AreEqual(1.0f, agent0.Visuals.CurrentColor.g, 0.01f);
+            Assert.AreEqual(0.15f, agent0.Synth.AttackSeconds, 0.001f);
+
             router.Dispose();
             server.Dispose();
             client.Dispose();

@@ -21,12 +21,13 @@ Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 
 
 1. Open this repository in **Unity `6000.6.6f1`**.
 2. In the top Unity menu bar, click:
-   **`SpatialMAS -> 1. Build Complete Project (Materials, Prefabs & Main Scene)`**
-   *(This deterministically generates all materials, `Sphere`/`Cube`/`Pyramid` agent prefabs, `SpatialMASConfig.asset`, and `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity`.)*
-3. Press **Play** in the Editor, or build for your target headset under **`SpatialMAS -> Build Target`**:
-   - `Build Meta Quest & Android OpenXR (.apk)`
-   - `Build Apple Vision Pro (visionOS Xcode)`
-   - `Build Windows Standalone (x64)` / `macOS Standalone (.app)` / `Linux Standalone (x64)`
+   **`SpatialMAS -> 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`**
+   *(Alias: `SpatialMAS -> Build Full SpatialMAS Scene & Prefabs`)*
+   - Deterministically generates all 6 URP materials (`Assets/_SpatialMAS/Materials/` & `Assets/_SpatialMAS/Resources/`), 3 agent prefabs (`Agent_Sphere.prefab`, `Agent_Cube.prefab`, `Agent_Pyramid.prefab`), `SpatialMASConfig.asset`, and `Assets/_SpatialMAS/Scenes/SpatialMAS_Main.unity`.
+3. Press **Play** in the Editor to explore the **Game-Like 3D Desktop Viewport** (`WASD`/`Arrow` keys to walk/fly at any time, `[F]` or `RMB (Hold)` to look around, `MMB` to pan, `Scroll` to zoom, `Alt + LMB` to grab agents, `[Space]` pause, `[R]` reset, `[I]` toggle 3D Agent IDs, `[H]` hide HUD), or build for your target headset under **`SpatialMAS -> 3. Multiplatform Build Profiles`**:
+   - `Build Meta Quest 3 / Android OpenXR (.apk)`
+   - `Build Apple Vision Pro (visionOS Xcode Project)`
+   - `Build Windows Standalone (x64 .exe)` / `Build macOS Standalone (.app)` / `Build Linux Standalone (x64)`
 
 ---
 

@@ -7,7 +7,8 @@ namespace SpatialMAS.Audio
     /// Zero-allocation, cross-platform Native C# Procedural DSP Synthesizer running in Unity's audio thread
     /// via OnAudioFilterRead. Supports anti-aliased PolyBLEP oscillators (Sine, Square, Saw, Triangle),
     /// ADSR envelope generator, 12 dB/oct Biquad Low-Pass Filter with Resonance, compact Schroeder reverb,
-    /// and 100% dual CC ID compatibility with all legacy HS-ims Python/Max/C++ scripts.
+    /// O(1) idle voice early-out, shared carrier clip, and 100% dual CC ID compatibility with all legacy
+    /// HS-ims Python/Max/C++ scripts.
     /// </summary>
     [RequireComponent(typeof(AudioSource))]
     public class NativeDspSynthesizer : MonoBehaviour, IAgentAudioSynth
@@ -40,8 +41,11 @@ namespace SpatialMAS.Audio
         public const int CC_ReverbPrimary = 19;
         public const int CC_ReverbLegacyAlias = 91;
 
+        private static AudioClip s_SharedCarrierClip;
+
         // Thread-safe atomic/volatile synth parameters read by the audio thread
         private volatile bool _isMuted;
+        private volatile bool _flushRequested;
         private volatile int _waveformInt = (int)SynthWaveformType.Sine;
         private volatile float _targetFrequencyHz = 440f;
         private volatile float _currentFrequencyHz = 440f;
@@ -62,14 +66,15 @@ namespace SpatialMAS.Audio
         private double _phase;
         private volatile int _adsrStageInt = (int)AdsrStage.Idle;
         private float _adsrEnvelope;
+        private float _reverbTailEnergy;
         private bool _continuousDroneMode;
 
-        // Biquad Low-Pass Filter state (per channel, up to 2 channels)
+        // Biquad Low-Pass Filter state
         private float _b0 = 1f, _b1 = 0f, _b2 = 0f, _a1 = 0f, _a2 = 0f;
         private float _lastCachedCutoff = -1f;
         private float _lastCachedQ = -1f;
         private int _lastCachedSampleRate = -1;
-        private float _z1L, _z2L, _z1R, _z2R;
+        private float _z1L, _z2L;
 
         // Compact zero-allocation Schroeder Comb + Allpass reverb lines
         private float[] _combBuffer1;
@@ -154,7 +159,7 @@ namespace SpatialMAS.Audio
             _audioSource = GetComponent<AudioSource>();
             if (_audioSource != null)
             {
-                _audioSource.playOnAwake = true;
+                _audioSource.playOnAwake = false;
                 _audioSource.loop = true;
                 _audioSource.spatialBlend = 1.0f; // Full 3D spatialization
                 _audioSource.rolloffMode = AudioRolloffMode.Logarithmic;
@@ -162,21 +167,34 @@ namespace SpatialMAS.Audio
                 _audioSource.maxDistance = 15.0f;
                 _audioSource.dopplerLevel = 0.15f;
 
-                // Provide a silent carrier clip if none is assigned so Unity's 3D spatializer runs before OnAudioFilterRead
                 if (_audioSource.clip == null)
                 {
-                    var carrier = AudioClip.Create("SpatialMAS_SynthCarrier", 1024, 1, _cachedSampleRate, false);
-                    float[] ones = new float[1024];
-                    for (int i = 0; i < ones.Length; i++) ones[i] = 1.0f;
-                    carrier.SetData(ones, 0);
-                    _audioSource.clip = carrier;
-                }
-
-                if (!_audioSource.isPlaying)
-                {
-                    _audioSource.Play();
+                    _audioSource.clip = GetOrCreateSharedCarrierClip(_cachedSampleRate);
                 }
             }
+        }
+
+        private void OnEnable()
+        {
+            if (_audioSource != null && Application.isPlaying && !_audioSource.isPlaying)
+            {
+                if (_audioSource.clip == null)
+                {
+                    _audioSource.clip = GetOrCreateSharedCarrierClip(_cachedSampleRate);
+                }
+                _audioSource.Play();
+            }
+        }
+
+        private static AudioClip GetOrCreateSharedCarrierClip(int sampleRate)
+        {
+            if (s_SharedCarrierClip != null) return s_SharedCarrierClip;
+            int sr = sampleRate > 0 ? sampleRate : 48000;
+            s_SharedCarrierClip = AudioClip.Create("SpatialMAS_SharedSynthCarrier", 1024, 1, sr, false);
+            float[] ones = new float[1024];
+            for (int i = 0; i < ones.Length; i++) ones[i] = 1.0f;
+            s_SharedCarrierClip.SetData(ones, 0);
+            return s_SharedCarrierClip;
         }
 
         private void EnsureReverbBuffersAllocated(int sampleRate)
@@ -195,9 +213,19 @@ namespace SpatialMAS.Audio
             return 440.0f * Mathf.Pow(2.0f, (midiNote - 69.0f) / 12.0f);
         }
 
+        public void Flush()
+        {
+            _continuousDroneMode = false;
+            _adsrStageInt = (int)AdsrStage.Idle;
+            _adsrEnvelope = 0f;
+            _reverbTailEnergy = 0f;
+            _smoothedGain = 0f;
+            _flushRequested = true;
+        }
+
         public void SetNote(int noteAction, int midiNote, int velocity = 100)
         {
-            if (noteAction != 0)
+            if (noteAction != 0 && velocity > 0)
             {
                 _continuousDroneMode = false;
                 FrequencyHz = MidiNoteToFrequencyHz(Mathf.Clamp(midiNote, 12, 127));
@@ -211,7 +239,10 @@ namespace SpatialMAS.Audio
             else
             {
                 _continuousDroneMode = false;
-                _adsrStageInt = (int)AdsrStage.Release;
+                if (_adsrStageInt != (int)AdsrStage.Idle)
+                {
+                    _adsrStageInt = (int)AdsrStage.Release;
+                }
             }
         }
 
@@ -237,17 +268,20 @@ namespace SpatialMAS.Audio
                 case CC_GainPrimary:
                 case CC_GainLegacyAlias:
                     Gain = value;
-                    if (value > 0.0005f)
+                    // Only trigger or release envelope automatically if already operating in continuous frequency-drone mode
+                    if (_continuousDroneMode)
                     {
-                        if (_adsrStageInt == (int)AdsrStage.Idle || _adsrStageInt == (int)AdsrStage.Release)
+                        if (value > 0.0005f)
                         {
-                            _continuousDroneMode = true;
-                            _adsrStageInt = (int)AdsrStage.Attack;
+                            if (_adsrStageInt == (int)AdsrStage.Idle || _adsrStageInt == (int)AdsrStage.Release)
+                            {
+                                _adsrStageInt = (int)AdsrStage.Attack;
+                            }
                         }
-                    }
-                    else if (_continuousDroneMode)
-                    {
-                        _adsrStageInt = (int)AdsrStage.Release;
+                        else
+                        {
+                            _adsrStageInt = (int)AdsrStage.Release;
+                        }
                     }
                     break;
 
@@ -301,7 +335,17 @@ namespace SpatialMAS.Audio
             if (sampleRate <= 0) sampleRate = 48000;
             EnsureReverbBuffersAllocated(sampleRate);
 
-            if (_isMuted)
+            if (_flushRequested)
+            {
+                _flushRequested = false;
+                _z1L = _z2L = 0f;
+                if (_combBuffer1 != null) Array.Clear(_combBuffer1, 0, _combBuffer1.Length);
+                if (_combBuffer2 != null) Array.Clear(_combBuffer2, 0, _combBuffer2.Length);
+                if (_allpassBuffer != null) Array.Clear(_allpassBuffer, 0, _allpassBuffer.Length);
+            }
+
+            // O(1) Fast Path: If muted or envelope is idle with no residual reverb tail energy, zero buffer and return immediately!
+            if (_isMuted || (_adsrStageInt == (int)AdsrStage.Idle && _adsrEnvelope <= 0.00001f && _reverbTailEnergy <= 0.00001f))
             {
                 Array.Clear(data, 0, data.Length);
                 return;
@@ -347,6 +391,12 @@ namespace SpatialMAS.Audio
                         break;
                     case AdsrStage.Sustain:
                         _adsrEnvelope = sustain;
+                        // If sustain level is 0 (percussive pluck), transition automatically to Idle
+                        if (sustain <= 0.0001f && !_continuousDroneMode)
+                        {
+                            _adsrEnvelope = 0f;
+                            _adsrStageInt = (int)AdsrStage.Idle;
+                        }
                         break;
                     case AdsrStage.Release:
                         _adsrEnvelope -= releaseStep;
@@ -363,7 +413,7 @@ namespace SpatialMAS.Audio
                 _currentFrequencyHz += (_targetFrequencyHz - _currentFrequencyHz) * 0.015f;
 
                 float envGain = _adsrEnvelope * _smoothedGain * _velocityGain;
-                if (envGain <= 0.00001f && revWet <= 0.001f)
+                if (envGain <= 0.00001f && _reverbTailEnergy <= 0.00001f)
                 {
                     int baseIdx = f * channels;
                     for (int c = 0; c < channels; c++) data[baseIdx + c] = 0f;
@@ -371,49 +421,52 @@ namespace SpatialMAS.Audio
                 }
 
                 // 2. Compute Phase Increment & Anti-Aliased PolyBLEP Oscillator Sample
-                double dt = _currentFrequencyHz * invSampleRate;
-                if (dt > 0.49) dt = 0.49;
-                double t = _phase;
-
-                float rawSample;
-                switch (wave)
+                float sample = 0f;
+                if (envGain > 0.00001f)
                 {
-                    case SynthWaveformType.Square:
-                        rawSample = t < 0.5 ? 1.0f : -1.0f;
-                        rawSample += PolyBlep(t, dt);
-                        rawSample -= PolyBlep((t + 0.5) % 1.0, dt);
-                        break;
+                    double dt = _currentFrequencyHz * invSampleRate;
+                    if (dt > 0.49) dt = 0.49;
+                    double t = _phase;
 
-                    case SynthWaveformType.Sawtooth:
-                        rawSample = (float)(2.0 * t - 1.0);
-                        rawSample -= PolyBlep(t, dt);
-                        break;
+                    float rawSample;
+                    switch (wave)
+                    {
+                        case SynthWaveformType.Square:
+                            rawSample = t < 0.5 ? 1.0f : -1.0f;
+                            rawSample += PolyBlep(t, dt);
+                            rawSample -= PolyBlep((t + 0.5) % 1.0, dt);
+                            break;
 
-                    case SynthWaveformType.Triangle:
-                        rawSample = (float)(2.0 * Math.Abs(2.0 * t - 1.0) - 1.0);
-                        break;
+                        case SynthWaveformType.Sawtooth:
+                            rawSample = (float)(2.0 * t - 1.0);
+                            rawSample -= PolyBlep(t, dt);
+                            break;
 
-                    case SynthWaveformType.Sine:
-                    default:
-                        rawSample = Mathf.Sin((float)(t * 2.0 * Math.PI));
-                        break;
+                        case SynthWaveformType.Triangle:
+                            rawSample = (float)(2.0 * Math.Abs(2.0 * t - 1.0) - 1.0);
+                            break;
+
+                        case SynthWaveformType.Sine:
+                        default:
+                            rawSample = Mathf.Sin((float)(t * 2.0 * Math.PI));
+                            break;
+                    }
+
+                    _phase += dt;
+                    if (_phase >= 1.0) _phase -= 1.0;
+
+                    sample = rawSample * envGain;
                 }
-
-                _phase += dt;
-                if (_phase >= 1.0) _phase -= 1.0;
-
-                float sample = rawSample * envGain;
 
                 // 3. Apply 12 dB/oct Biquad Low-Pass Filter (Direct Form II Transposed)
                 float filtered = _b0 * sample + _z1L;
                 _z1L = _b1 * sample - _a1 * filtered + _z2L;
                 _z2L = _b2 * sample - _a2 * filtered;
 
-                // Clamp filter state against denormals/resonance spikes
                 if (float.IsNaN(filtered) || float.IsInfinity(filtered))
                 {
                     filtered = 0f;
-                    _z1L = _z2L = _z1R = _z2R = 0f;
+                    _z1L = _z2L = 0f;
                 }
                 filtered = Mathf.Clamp(filtered, -1.5f, 1.5f);
 
@@ -436,12 +489,16 @@ namespace SpatialMAS.Audio
                     if (++_allpassIdx >= _allpassBuffer.Length) _allpassIdx = 0;
 
                     outSample = (filtered * revDry) + (apOut * revWet * 0.45f);
+                    _reverbTailEnergy = Mathf.Max(Mathf.Abs(outSample), _reverbTailEnergy * 0.995f);
+                }
+                else
+                {
+                    _reverbTailEnergy = Mathf.Abs(outSample);
                 }
 
                 int frameOffset = f * channels;
                 for (int c = 0; c < channels; c++)
                 {
-                    // Multiply with carrier if present inside Unity's spatializer pipeline, or write directly
                     data[frameOffset + c] = outSample;
                 }
             }

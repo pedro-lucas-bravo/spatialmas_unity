@@ -12,10 +12,16 @@ Welcome to **SpatialMAS**! You can run multi-agent spatial audio experiments on 
 3. **Physical Head Listening**: Your headset position automatically drives the 3D `AudioListener`. Walk around the arena or turn your head to hear spatialized sound synthesis from each agent.
 4. **Bare-Hand / Gaze-Pinch Interaction**: Reach out and **pinch** (Thumb + Index/Middle finger) any interactive Cube agent to grab, move, or rotate it.
 
-### On Desktop (Windows / macOS / Linux)
+### On Desktop (Windows / macOS / Linux — Game-Like Controls)
 1. Press **Play** in Unity or launch the standalone executable.
-2. **Fly / Walk Around Arena**: Hold **Right Mouse Button (RMB)** and press **`W` `A` `S` `D` `Q` `E`** to walk and look around the 3D space.
-3. **Grab Interactive Cubes**: **Left-Click and Drag** any Cube agent with your mouse. Use the **Scroll Wheel** to push/pull the cube deeper or closer, and press **`R`** while holding a cube to snap-rotate it by $90^\circ$.
+2. **Walk / Fly Around Arena**: Press **`W` `A` `S` `D`** (or **Arrow Keys**) and **`E` / `Q`** (Up/Down) at any time—**no need to hold a mouse button to walk**! Hold **`Left Shift`** to sprint or **`Left Ctrl`** for slow precision movement.
+3. **Camera Look, Pan & Zoom**:
+   - Hold **Right Mouse Button (`RMB`) + Mouse Move** to look around, OR press **`F`** to toggle **First-Person Game Look Mode** (locks cursor for effortless mouse-look; press **`F`** or **`Esc`** to unlock).
+   - Hold **Middle Mouse Button (`MMB`) + Mouse Move** to pan laterally/vertically, and use the **Scroll Wheel** to zoom in/out.
+   - Press **`C`** at any time to center and reset the camera.
+4. **Grab & Click Agents**:
+   - **Hover** over any agent to inspect its ID, shape, and 3D coordinates at the bottom of the screen.
+   - **Left-Click and Drag** any interactive Cube agent (or hold **`Alt + Left-Click`** to force-drag any autonomous agent). Use the **Scroll Wheel** while dragging to push/pull the cube deeper or closer, and press **`R`** while holding a cube to snap-rotate it by $90^\circ$.
 
 ---
 
@@ -25,12 +31,16 @@ Use either the on-screen **Researcher Control Panel** or quick keyboard shortcut
 - **Keys `0` – `5` (or Scenario Buttons)**:
   - **`0`**: *External OSC Mode* (Waits for Python/Max/C++ commands on UDP port `6011`)
   - **`1`**: *Crowd Navigation & Human Avoidance* (Walk through the crowd to observe agents dispersing around your body!)
-  - **`2`**: *3D Swarmalators* (Coupled swarming & color/musical phase synchronization)
+  - **`2`**: *3D Swarmalators* (Coupled swarming & color/musical phase synchronization, with 5 instant preset buttons)
   - **`3`**: *Orbital Attractors & Repellers* (Grab the Cyan Attractor cubes and Red Repeller cubes to reshape agent orbits)
   - **`4`**: *Musical Encounters* (Move the Golden cubes inside the sphere to trigger musical encounters)
   - **`5`**: *Self-Assembly* (Watch 6-face musical cubes assemble autonomously, or grab and snap them together yourself!)
-- **Key `M` (or `[Toggle MR / VR]` button)**:
-  - Switches instantly between **MR Passthrough** (physical room visible) and **VR Immersive Studio** (dark studio backdrop with a holographic reference floor grid).
+- **Key `Space`**: Pause / Resume the active scenario.
+- **Key `R`**: Reset and re-seed the active scenario.
+- **Key `Tab` or `M` (or `[MR / VR]` button)**:
+  - Switches instantly between **MR Passthrough** and **VR Immersive Studio** (dark studio backdrop with a holographic reference floor grid).
+- **Key `I` (or `[Show IDs]` button)**: Toggle floating 3D Agent ID labels above every agent.
+- **Key `H` (or `[Hide]` button)**: Show / Hide the Researcher Control Panel.
 - **World Scale Slider (`0.05x – 1.50x`)**:
   - Rescales the entire simulation from a compact **Tabletop scale (`0.15x – 0.25x`)** to full **Room-Scale (`1.0x`)**.
 

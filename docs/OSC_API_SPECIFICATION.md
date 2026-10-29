@@ -29,31 +29,41 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 
 ## 2. Incoming OSC Endpoints (External Controller $\to$ SpatialMAS `:6011`)
 
-### 2.1 v1 `HS-ims` Endpoints
+### 2.1 v1 `HS-ims` Endpoints (Dual-Signature Compatible)
 
 | OSC Address | Arguments & Types | Description |
 | :--- | :--- | :--- |
-| `/test/alive` | `(string ip, int port, float testVal)` | Registers `(ip, port)` as the remote destination for outgoing OSC feedback. |
-| `/agents/instantiate` | `(int shape, int movMode, int count, float scale, string ip, int port)` | Clears all existing agents and spawns `count` agents (`0 .. count-1`). `shape`: `0`=Sphere, `1`=Cube, `2`=Pyramid. `movMode`: `0`=Teleport, `1`=Smooth Velocity. `scale`: base size in meters (multiplied by `WorldScale`). |
-| `/agents/add` | `(int shape, int movMode, float scale, string ip, int port, int id1, ...)` | Adds one or more specific agent IDs without clearing existing agents. |
-| `/agents/remove` | `()` or `(int id1, int id2, ...)` | Removes all agents (if 0 args) or the specified agent IDs. |
-| `/agents/position/id` | `(int id, float x_mm, float y_mm, float z_mm)` | Moves agent `id` to mapped `(x_mm, y_mm, z_mm)`. Ignored while agent `id` is actively grabbed by the user's hand. |
+| `/connect` or `/test/alive` | `(string ip, int port, [float testVal])` | Registers `(ip, port)` as the remote destination for outgoing OSC feedback and replies with `/test/alive/ <ip> <port> "OK"`. |
+| `/agents/instantiate` | **`HS-ims`**: `(int count, [int shape=0], [int movMode=0])`<br>**`v2`**: `(int shape, int movMode, int count, float scale, string ip, int port)` | Clears all existing agents and spawns `count` agents (`0 .. count-1`). `shape`: `0`=Sphere, `1`=Cube, `2`=Pyramid. `movMode`: `0`=Teleport, `1`=Follow/Smooth, `2`=Velocity. |
+| `/agents/instantiate/id` | `(int shape, int movMode, int id0, int id1, ...)` | Spawns or reconfigures the specified agent IDs with `shape` and `movMode` (used by `swarmalators/main.py` & `attractors_repellers/main.py`). |
+| `/agents/add` or `/agents/add/id` | **`HS-ims`**: `(int count, [int shape=0], [int movMode=0], ...)`<br>**`v2`**: `(int shape, int movMode, float scale, string ip, int port, int id1, ...)` | Adds one or more agents without clearing existing agents. |
+| `/agents/remove` or `/agents/remove/id` | `()` or `(int id0, int id1, ...)` | Removes all agents (if 0 args or `N -1 -1`) or removes the specified agent IDs. |
+| `/agents/position/id` | `(int id0, float x0_mm, float y0_mm, float z0_mm, [int id1, ...])` | Moves one or more agents to mapped `(x_mm, y_mm, z_mm)` (`4 * K` args). Ignored while an agent is actively grabbed by the user. |
 | `/agents/position` | `(float x0, float y0, float z0, float x1, ...)` | Batch updates positions for all ordered agents (`3 * N` floats). |
-| `/agents/color/id` | `(int id, float r, float g, float b, float a)` | Sets RGBA color (`0.0–1.0`) of agent `id`. |
-| `/agents/color` | `(float r0, float g0, float b0, float a0, ...)` | Batch updates RGBA colors for all ordered agents (`4 * N` floats). |
+| `/agents/speed/id` | `(int id0, float speed0_mm_s, [int id1, float speed1_mm_s, ...])` | Sets movement speed in `mm/s` for `Follow` (`1`) or `Velocity` (`2`) mode (`2 * K` args). |
+| `/agents/direction/id` | `(int id0, float dx0, float dy0, float dz0, ...)` | Sets movement direction vector for `Velocity` (`2`) mode (`4 * K` args). |
+| `/agents/velocity/id` | `(int id0, float vx0_mm_s, float vy0_mm_s, float vz0_mm_s, ...)` | Sets velocity vector in `mm/s` for `Velocity` (`2`) mode (`4 * K` args). |
+| `/agents/color/id` | **`HS-ims`**: `(int id0, string hex0, [int id1, string hex1, ...])`<br>**`v2`**: `(int id, float r, float g, float b, [float a=1.0])` | Sets agent color via 6-char hex strings (`"00e5ff"`, `"#ff0000"`) in pairs OR float RGBA (`0.0–1.0`). |
+| `/agents/color` | `(float r0, float g0, float b0, float a0, ...)` or `(int N, int shape, int action, string hex0, ...)` | Batch updates colors for all ordered agents. |
+| `/agents/radius/id` | `(int id0, float radius0_mm, float alpha0, string hex0, ...)` | Displays or hides (`radius=0`) a translucent influence/detection sphere around each agent (`4 * K` args). |
 | `/agents/Interactable` | `(int id, int interactable)` | `1` = Enables XR Hand/Gaze-Pinch & Desktop Mouse grabbing on agent `id`; `0` = Disables. |
-| `/agents/localcomm` | `(string type, int senderId, float range_mm, float latency_s, ...extra)` | Spawns an expanding spherical wavefront at `senderId` reaching `range_mm` in `latency_s` seconds. Delivers `/agents/localcomm/id` as each neighbor is reached. |
+| `/agents/localcomm` | **`HS-ims Config`**: `(float maxRange_mm, float latency_ms, int showVisuals)`<br>**`v2 Broadcast`**: `(string type, int senderId, float range_mm, float latency_s, ...extra)` | Configures global localcomm defaults (3 numeric args) OR triggers an expanding spherical wavefront from `senderId` (4+ args). |
+| `/agents/localcomm/send` | `(int senderId0, string msg0, [int senderId1, string msg1, ...])` | Broadcasts `msg` from `senderId` using configured localcomm range & latency; delivers `/agents/localcomm/recv` & `/agents/localcomm/id`. |
 | `/agents/audio/mute` | `(int muteAll)` or `(int id, int mute)` | Mutes (`1`) or unmutes (`0`) all agents (1 arg) or agent `id` (2 args). |
-| `/agents/audio/synth/note` | `(int id, int action, int midiNote, int velocity)` | `action=1`: Note On ($f = 440 \cdot 2^{(m-69)/12}$ Hz), `action=0`: Note Off. |
-| `/agents/audio/synth/param_val` | `(int id, int ccId, float value)` | Sets DSP synthesizer parameter `ccId` on agent `id` (see **Section 4**). |
+| `/agents/audio/synth/add` & `/add/id` | `(...)` | Ensures synthesizer is active and unmuted on agents. |
+| `/agents/audio/synth/flush` & `/remove` | `(...)` | Immediately silences ADSR envelopes and clears filter/reverb tails across agents. |
+| `/agents/audio/synth/note` | `(int id, int bankOrAction, int midiNote, int velocity)` | `velocity > 0`: Note On ($f = 440 \cdot 2^{(m-69)/12}$ Hz); `velocity == 0`: Note Off. Supports both `HS-ims` (`bank=0`) and `v2` (`action=1|0`). |
+| `/agents/audio/synth/param_val` | **`HS-ims`**: `(int id, int bank, int ccId, float value)`<br>**`v2`**: `(int id, int ccId, float value)` | Sets DSP synthesizer parameter `ccId` on agent `id` (see **Section 4**). |
+| `/agents/audio/synth/param_midi` | `(int id, [int bank], int ccId, float midiVal_0_127)` | Sets DSP synthesizer parameter `ccId` mapped from MIDI range `0..127`. |
 | `/agents/audio/bank` | `(int id, int clipIdx, int action, float gain)` | Plays (`1`) or stops (`0`) soundbank clip `clipIdx` (`0`=Bell, `1`=Click) at `gain` (`0.0–1.0`). |
-| `/boundaries/add` | `(int id, int shape, float x_mm, float y_mm, float z_mm, float size_mm)` | Spawns translucent boundary `id` (`0`=Sphere, `1`=Cube) with radius/half-extent `size_mm`. |
-| `/boundaries/update` | `(int id, float x_mm, float y_mm, float z_mm, float size_mm)` | Updates position and size of boundary `id`. |
-| `/boundaries/remove` | `()` or `(int id)` | Removes all boundaries (0 args) or boundary `id`. |
-| `/listener/position` | `(float x_mm, float y_mm, float z_mm)` | Moves `AudioListenerProxy` to `(x_mm, y_mm, z_mm)` when unlocked from XR head (`/xr/listener/lock_to_head 0`). |
+| `/boundaries/add` or `/boundary/add/id` | `(int id, int shape, [float x_mm, float y_mm, float z_mm, float size_mm])` | Spawns translucent boundary `id` (`0`=Sphere, `1`=Cube) with radius/half-extent `size_mm`. |
+| `/boundaries/update`, `/boundary/position/id`, `/boundary/scale/id`, `/boundary/alpha/id`, `/boundary/color/id` | `(int id, ...)` | Updates position, size, opacity (`0.0–1.0`), or hex color of boundary `id`. |
+| `/boundaries/remove` or `/boundary/remove/id` | `()` or `(int id)` | Removes all boundaries (0 args) or boundary `id`. |
+| `/listener/position` or `/audio/listener/position` | `(float x_mm, float y_mm, float z_mm)` | Moves `AudioListenerProxy` to `(x_mm, y_mm, z_mm)` when unlocked from XR head (`/xr/listener/lock_to_head 0`). |
 | `/listener/rotation` | `(float pitch_deg, float yaw_deg, float roll_deg)` | Rotates `AudioListenerProxy` when unlocked from XR head. |
-| `/environment/set_arrow` | `(int id, float x1, float y1, float z1, float x2, float y2, float z2, float w_mm)` | Renders a 3D directional arrow `id` from `(x1,y1,z1)` to `(x2,y2,z2)` with width `w_mm`. |
-| `/environment/remove_arrow` | `()` or `(int id)` | Removes all arrows (0 args) or arrow `id`. |
+| `/arrow` or `/environment/set_arrow` | **`HS-ims`**: `(x, y, z, dx, dy, dz, scale)`<br>**`v2`**: `(id, x1, y1, z1, x2, y2, z2, w_mm)` | Renders a 3D directional arrow in the arena. |
+| `/arrow/remove` or `/environment/remove_arrow` | `()` or `(int id)` | Removes all arrows (0 args) or arrow `id`. |
+| `/recorder/start` & `/recorder/stop` | `([string tag])` | Starts or stops buffered CSV recording (alias for `/logging/state 1|0`). |
 
 ### 2.2 v2 `SpatialMAS` XR & Scenario Endpoints
 
@@ -74,10 +84,14 @@ $$\begin{bmatrix} x_{\text{mm}} \\ y_{\text{mm}} \\ z_{\text{mm}} \end{bmatrix}_
 
 | OSC Address | Arguments Sent | Trigger Condition |
 | :--- | :--- | :--- |
+| `/test/alive/` | `(string ip, int port, string "OK")` | Sent in reply to `/connect` or `/test/alive` handshake. |
 | `/agents/position/id` | `(int id, float x_mm, float y_mm, float z_mm)` | Emitted continuously while user grabs and moves agent `id` in XR or Desktop. |
-| `/agents/touch/id` | `(int id, int touchState, int otherAgentId)` | `touchState`: `1`=Touch Enter, `0`=Touch Exit. `otherAgentId = -1` if touched by user hand/pointer, or `>= 0` if agent-to-agent collision. |
-| `/agents/localcomm/id` | `(string type, int senderId, int receiverId, float dist_mm, ...extra)` | Emitted when an expanding `/agents/localcomm` sphere from `senderId` reaches `receiverId`. |
-| `/boundaries/Touched` | `(int agentId, int boundaryId)` | Emitted when `agentId` crosses the surface of `boundaryId`. |
+| `/agents/control` | `(int id, int controlType, int controlValue)` | `HS-ims` click/grab feedback (`controlType`: `0`=Left/Primary, `1`=Right/Secondary; `controlValue`: `1`=Press, `0`=Release). |
+| `/agents/touch/id` | `(int id, int touchState, int otherAgentId)` | `touchState`: `1`=Touch Enter, `0`=Touch Exit (`otherAgentId = -1` for user hand/mouse). |
+| `/agents/localcomm/recv` | `(int receiverId, int senderId, string msg)` | `HS-ims` localcomm delivery when an expanding wavefront reaches `receiverId`. |
+| `/agents/localcomm/id` | `(string type, int senderId, int receiverId, float dist_mm, ...extra)` | `v2` extended localcomm delivery including exact Euclidean distance in `mm`. |
+| `/boundary/event/id` | `(int agentId, int boundaryId, int eventType)` | `HS-ims` boundary crossing (`eventType`: `0`=Enter, `1`=Exit). |
+| `/boundaries/Touched` | `(int agentId, int boundaryId)` | `v2` boundary crossing notification. |
 | `/xr/user/pose` *(v2)* | `(float x_mm, float y_mm, float z_mm, float qx, float qy, float qz, float qw)` | Streamed at `25 Hz` with the user's physical head position (in arena `mm`) and rotation quaternion. |
 | `/xr/hands/pose` *(v2)* | `(int hand, float x_mm, float y_mm, float z_mm, int isPinching)` | Streamed at `25 Hz` for Left (`0`) and Right (`1`) hands. |
 

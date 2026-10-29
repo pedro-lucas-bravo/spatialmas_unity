@@ -16,22 +16,30 @@ namespace SpatialMAS.Core
         public event Action<int[]> OnRemoveAgents; // null or empty = remove all
         public event Action<int, Vector3> OnSetAgentPositionUnity;
         public event Action<Vector3[]> OnSetBatchAgentPositionsUnity;
+        public event Action<int, float> OnSetAgentSpeedMetersPerSec;
+        public event Action<int, Vector3> OnSetAgentDirectionUnity;
+        public event Action<int, Vector3> OnSetAgentVelocityUnity;
         public event Action<int, Color> OnSetAgentColor;
         public event Action<Color[]> OnSetBatchAgentColors;
+        public event Action<int, float, float, Color> OnSetAgentRadiusVisual; // id, radiusMeters, alpha, color
         public event Action<int, bool> OnSetAgentInteractable;
+        public event Action<bool> OnSetShowAgentIds;
 
         // --- Local Communication Commands ---
+        public event Action<float, float, bool> OnConfigureLocalComm; // maxRangeMeters, latencySec, showVisuals
         public event Action<string, int, float, float, object[]> OnTriggerLocalComm;
 
         // --- Audio & DSP Synth Commands ---
         public event Action<int, bool> OnSetAgentMute; // agentId = -1 means mute/unmute all
         public event Action<int, int, int, int> OnSetAgentSynthNote; // id, noteAction (1/0), midiNote, velocity
         public event Action<int, int, float> OnSetAgentSynthParam;   // id, ccId, value
+        public event Action<int> OnFlushAgentSynth;                  // id = -1 means flush all
         public event Action<int, int, int, float> OnSetAgentAudioBank; // id, clipIndex, playAction, gain
 
         // --- Boundary & Environment Commands ---
         public event Action<int, AgentShapeType, Vector3, float> OnAddBoundaryUnity;
         public event Action<int, Vector3, float> OnUpdateBoundaryUnity;
+        public event Action<int, Color, float> OnSetBoundaryVisuals; // id, color, alpha (-1 = keep existing)
         public event Action<int> OnRemoveBoundary; // id = -1 means remove all
         public event Action<int, Vector3, Vector3, float> OnSetArrowUnity;
         public event Action<int> OnRemoveArrow; // id = -1 means remove all
@@ -54,8 +62,10 @@ namespace SpatialMAS.Core
         // --- Outgoing World Feedback Events (World/XR -> OSC Client & Scenarios & Logger) ---
         public event Action<int, Vector3> OnAgentMovedByUserUnity;
         public event Action<int, int, int> OnAgentTouchEvent; // agentId, touchState (1/0), otherAgentId (-1 if user)
+        public event Action<int, int, int> OnAgentControlClickEvent; // agentId, controlType (0=left,1=right), controlValue (1=press,0=release)
         public event Action<string, int, int, float, object[]> OnLocalCommDeliveredUnity;
         public event Action<int, int> OnBoundaryTouchedEvent; // agentId, boundaryId
+        public event Action<int, int, int> OnBoundaryTransitionEvent; // agentId, boundaryId, transitionType (0=enter, 1=exit)
         public event Action<Vector3, Quaternion> OnUserHeadPoseSampledUnity;
         public event Action<int, Vector3, bool> OnUserHandPoseSampledUnity; // hand (0=L,1=R), posUnity, isPinching
 
@@ -78,14 +88,32 @@ namespace SpatialMAS.Core
         public void SetBatchAgentPositionsUnity(Vector3[] positionsUnity)
             => OnSetBatchAgentPositionsUnity?.Invoke(positionsUnity);
 
+        public void SetAgentSpeedMetersPerSec(int id, float speedMetersPerSec)
+            => OnSetAgentSpeedMetersPerSec?.Invoke(id, speedMetersPerSec);
+
+        public void SetAgentDirectionUnity(int id, Vector3 dirUnity)
+            => OnSetAgentDirectionUnity?.Invoke(id, dirUnity);
+
+        public void SetAgentVelocityUnity(int id, Vector3 velUnity)
+            => OnSetAgentVelocityUnity?.Invoke(id, velUnity);
+
         public void SetAgentColor(int id, Color color)
             => OnSetAgentColor?.Invoke(id, color);
 
         public void SetBatchAgentColors(Color[] colors)
             => OnSetBatchAgentColors?.Invoke(colors);
 
+        public void SetAgentRadiusVisual(int id, float radiusMeters, float alpha, Color color)
+            => OnSetAgentRadiusVisual?.Invoke(id, radiusMeters, alpha, color);
+
         public void SetAgentInteractable(int id, bool interactable)
             => OnSetAgentInteractable?.Invoke(id, interactable);
+
+        public void SetShowAgentIds(bool show)
+            => OnSetShowAgentIds?.Invoke(show);
+
+        public void ConfigureLocalComm(float maxRangeMeters, float latencySec, bool showVisuals)
+            => OnConfigureLocalComm?.Invoke(maxRangeMeters, latencySec, showVisuals);
 
         public void TriggerLocalComm(string msgType, int senderId, float rangeMeters, float latencySec, object[] extraArgs)
             => OnTriggerLocalComm?.Invoke(msgType, senderId, rangeMeters, latencySec, extraArgs);
@@ -99,6 +127,9 @@ namespace SpatialMAS.Core
         public void SetAgentSynthParam(int id, int ccId, float value)
             => OnSetAgentSynthParam?.Invoke(id, ccId, value);
 
+        public void FlushAgentSynth(int id = -1)
+            => OnFlushAgentSynth?.Invoke(id);
+
         public void SetAgentAudioBank(int id, int clipIndex, int playAction, float gain)
             => OnSetAgentAudioBank?.Invoke(id, clipIndex, playAction, gain);
 
@@ -107,6 +138,9 @@ namespace SpatialMAS.Core
 
         public void UpdateBoundaryUnity(int id, Vector3 posUnity, float radiusOrHalfExtentMeters)
             => OnUpdateBoundaryUnity?.Invoke(id, posUnity, radiusOrHalfExtentMeters);
+
+        public void SetBoundaryVisuals(int id, Color color, float alpha = -1f)
+            => OnSetBoundaryVisuals?.Invoke(id, color, alpha);
 
         public void RemoveBoundary(int id = -1)
             => OnRemoveBoundary?.Invoke(id);
@@ -157,11 +191,17 @@ namespace SpatialMAS.Core
         public void EmitAgentTouch(int id, int touchState, int otherAgentId = -1)
             => OnAgentTouchEvent?.Invoke(id, touchState, otherAgentId);
 
+        public void EmitAgentControlClick(int id, int controlType, int controlValue)
+            => OnAgentControlClickEvent?.Invoke(id, controlType, controlValue);
+
         public void EmitLocalCommDeliveredUnity(string msgType, int senderId, int receiverId, float distanceMeters, object[] extraArgs)
             => OnLocalCommDeliveredUnity?.Invoke(msgType, senderId, receiverId, distanceMeters, extraArgs);
 
         public void EmitBoundaryTouched(int agentId, int boundaryId)
             => OnBoundaryTouchedEvent?.Invoke(agentId, boundaryId);
+
+        public void EmitBoundaryTransition(int agentId, int boundaryId, int transitionType)
+            => OnBoundaryTransitionEvent?.Invoke(agentId, boundaryId, transitionType);
 
         public void EmitUserHeadPoseUnity(Vector3 posUnity, Quaternion rotUnity)
             => OnUserHeadPoseSampledUnity?.Invoke(posUnity, rotUnity);

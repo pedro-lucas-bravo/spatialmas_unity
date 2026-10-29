@@ -19,30 +19,33 @@ def run_verification(ip: str, port: int, local_port: int, duration_sec: float) -
     print(f"[SpatialMAS Verifier] Connecting to SpatialMAS at {ip}:{port}...")
     client = udp_client.SimpleUDPClient(ip, port)
 
-    # 1. Switch to Scenario 0 (External OSC Mode) & set World Scale
+    # 1. Switch to Scenario 0 (External OSC Mode), set World Scale, and test HS-ims /connect + /test/alive
     client.send_message("/scenario/load", [0])
     client.send_message("/xr/scale", [0.20])
+    client.send_message("/connect", ["127.0.0.1", local_port])
     client.send_message("/test/alive", ["127.0.0.1", local_port, 1.0])
 
-    # 2. Instantiate 16 Sphere Agents + 2 Interactive Cube Agents (HS-ims v1 API)
+    # 2. Instantiate 16 Sphere Agents + 2 Interactive Cube Agents (Both HS-ims v1 & v2 signatures)
     n_spheres = 16
     print(f"[SpatialMAS Verifier] Instantiating {n_spheres} Sphere agents + 2 Interactive Cubes...")
     client.send_message("/agents/instantiate", [0, 0, n_spheres, 0.25, "127.0.0.1", local_port])
-    client.send_message("/agents/add", [1, 0, 0.35, "127.0.0.1", local_port, n_spheres, n_spheres + 1])
+    client.send_message("/agents/add/id", [1, 0, n_spheres, n_spheres + 1])
     client.send_message("/agents/Interactable", [n_spheres, 1])
     client.send_message("/agents/Interactable", [n_spheres + 1, 1])
+    client.send_message("/agents/color/id", [n_spheres, "#00F5D4", 1.0])
+    client.send_message("/agents/color/id", [n_spheres + 1, "#FF2A85", 1.0])
 
     # 3. Add a Translucent Spherical Boundary (radius = 3000 mm = 3.0 m unscaled)
     client.send_message("/boundaries/add", [1, 0, 0.0, 0.0, 0.0, 3000.0])
 
     # 4. Configure Dual-Compatible DSP Synthesizer Parameters
-    # Tests both README CC IDs (0, 82, 83, 85, 17) and Legacy C# CC IDs (1, 74, 71, 72, 73)
+    # Tests both 3-arg (agentId, ccId, val) and 4-arg HS-ims (agentId, synthIdx, ccId, val)
     pentatonic_midi = [60, 62, 64, 67, 69, 72, 74, 76]
     for i in range(n_spheres):
         waveform = i % 4
         cc_wave = 0 if (i % 2 == 0) else 1
         cc_attack = 82 if (i % 2 == 0) else 74
-        client.send_message("/agents/audio/synth/param_val", [i, cc_wave, float(waveform)])
+        client.send_message("/agents/audio/synth/param_val", [i, 0, cc_wave, float(waveform)])
         client.send_message("/agents/audio/synth/param_val", [i, cc_attack, 0.03])
         client.send_message("/agents/audio/synth/param_val", [i, 93, 3800.0])  # LPF Cutoff
         client.send_message("/agents/audio/synth/param_val", [i, 19, 0.20])    # Reverb

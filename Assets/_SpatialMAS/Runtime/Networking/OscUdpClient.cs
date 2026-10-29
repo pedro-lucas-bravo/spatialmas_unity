@@ -8,10 +8,13 @@ namespace SpatialMAS.Networking
 {
     /// <summary>
     /// Thread-safe UDP OSC Client that sends outgoing OSC messages to the active external controller IP:Port.
-    /// Automatically reconfigures target endpoint when /test/alive or /agents/instantiate is received.
+    /// Automatically reconfigures target endpoint when /connect, /test/alive, or /agents/instantiate is received.
+    /// Disables Windows SIO_UDP_CONNRESET so localhost UDP sends to an unopened port never stall the main thread.
     /// </summary>
     public class OscUdpClient : IDisposable
     {
+        private const int SIO_UDP_CONNRESET = -1744830452;
+
         private Socket _socket;
         private IPEndPoint _remoteEndPoint;
         private string _remoteIp = "127.0.0.1";
@@ -27,6 +30,18 @@ namespace SpatialMAS.Networking
         {
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             _socket.SendBufferSize = 524288;
+            _socket.Blocking = false;
+
+            // Prevent Windows Winsock ICMP "Port Unreachable" resets on localhost UDP sockets
+            try
+            {
+                _socket.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+            }
+            catch
+            {
+                // Ignored on non-Windows platforms (Android/visionOS/macOS/Linux)
+            }
+
             SetDestination(defaultIp, defaultPort);
         }
 
@@ -76,7 +91,6 @@ namespace SpatialMAS.Networking
             }
             catch (Exception ex)
             {
-                // Suppress transient unreachable errors on localhost when external controller is closed
                 if (!(ex is SocketException))
                 {
                     Debug.LogWarning($"[OscUdpClient] Send error: {ex.Message}");

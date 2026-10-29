@@ -15,7 +15,9 @@ namespace SpatialMAS.Core
     public enum AgentMovementMode
     {
         Teleport = 0,
-        DirectVelocity = 1
+        DirectVelocity = 1,
+        Follow = 1,
+        Velocity = 2
     }
 
     public enum XRDisplayMode

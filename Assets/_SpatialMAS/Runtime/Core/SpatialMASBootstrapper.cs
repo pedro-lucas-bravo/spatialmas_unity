@@ -25,6 +25,24 @@ namespace SpatialMAS.Core
         [SerializeField] private Camera _mainCamera;
         [SerializeField] private ARSession _arSession;
         [SerializeField] private ARCameraManager _arCameraManager;
+        [SerializeField] private Material _agentMaterial;
+        [SerializeField] private Material _boundaryMaterial;
+
+        public void ConfigureReferences(
+            SpatialMASConfig config,
+            Camera mainCamera,
+            ARSession arSession,
+            ARCameraManager arCameraManager,
+            Material agentMaterial,
+            Material boundaryMaterial)
+        {
+            _config = config;
+            _mainCamera = mainCamera;
+            _arSession = arSession;
+            _arCameraManager = arCameraManager;
+            _agentMaterial = agentMaterial;
+            _boundaryMaterial = boundaryMaterial;
+        }
 
         public SpatialMASConfig Config => _config;
         public SimulationCommandBus CommandBus { get; private set; }
@@ -54,11 +72,18 @@ namespace SpatialMAS.Core
         {
             if (_config == null)
             {
+                _config = Resources.Load<SpatialMASConfig>("DefaultSpatialMASConfig");
+            }
+            if (_config == null)
+            {
                 _config = ScriptableObject.CreateInstance<SpatialMASConfig>();
             }
             _config.LoadJsonOverridesIfPresent();
 
             if (_mainCamera == null) _mainCamera = Camera.main;
+
+            // Pre-warm all procedural and primitive meshes during Awake so zero GPU mesh allocations occur mid-frame
+            AgentEntity.WarmupPrimitiveMeshes();
 
             // 1. Core Bus & Coordinate Mapper
             CommandBus = new SimulationCommandBus();
@@ -87,7 +112,7 @@ namespace SpatialMAS.Core
 
             // 3. XR Embodiment & Desktop Rig
             EmbodimentBridge = GetOrAddComponent<XRUserEmbodimentBridge>(gameObject);
-            var pinchReaders = FindObjectsByType<XRHandPinchHysteresis>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var pinchReaders = FindObjectsByType<XRHandPinchHysteresis>(FindObjectsInactive.Include);
             XRHandPinchHysteresis leftPinch = null;
             XRHandPinchHysteresis rightPinch = null;
             for (int i = 0; i < pinchReaders.Length; i++)
@@ -101,14 +126,14 @@ namespace SpatialMAS.Core
             EmbodimentBridge.UserRepellerForce = _config.userRepellerForce;
 
             DesktopRig = GetOrAddComponent<DesktopInteractionRig>(gameObject);
-            DesktopRig.Initialize(_mainCamera);
+            DesktopRig.Initialize(_mainCamera, CommandBus);
 
             // 4. Pooled World Entities & 3D Audio Listener Proxy
             AgentManager = GetOrAddChildComponent<AgentManager>("AgentManager");
-            AgentManager.Initialize(CommandBus);
+            AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial);
 
             BoundaryManager = GetOrAddChildComponent<BoundaryManager>("BoundaryManager");
-            BoundaryManager.Initialize(CommandBus, AgentManager);
+            BoundaryManager.Initialize(CommandBus, AgentManager, _boundaryMaterial);
 
             ArrowManager = GetOrAddChildComponent<EnvironmentArrowManager>("EnvironmentArrowManager");
             ArrowManager.Initialize(CommandBus);
@@ -169,7 +194,8 @@ namespace SpatialMAS.Core
                 OscServer,
                 OscClient,
                 RecordingService,
-                WifiLogServer);
+                WifiLogServer,
+                DesktopRig);
         }
 
         private void Update()
