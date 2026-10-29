@@ -5,6 +5,7 @@ SpatialMAS — External OSC v1 (HS-ims) & v2 (SpatialMAS XR) Verification Suite
 Checks a live OSC handshake and sends representative v1/v2 traffic.
 Use --dry-run for packet validation without a Unity instance or network traffic.
 This smoke check does not prove full protocol or headset compatibility.
+Demonstration objects are removed on exit; use --keep-scene to leave them for inspection.
 
 Usage:
     python ExternalTools/verify_osc_compatibility.py --ip 127.0.0.1 --port 6011
@@ -17,6 +18,18 @@ import time
 from pythonosc import udp_client, osc_bundle_builder, osc_message_builder, osc_packet
 
 
+SPHERE_COUNT = 16
+BOUNDARY_ID = 1
+VERIFICATION_AGENT_IDS = tuple(range(SPHERE_COUNT + 2))
+
+
+def build_message(address, values):
+    builder = osc_message_builder.OscMessageBuilder(address=address)
+    for value in values:
+        builder.add_arg(value)
+    return builder.build()
+
+
 class DryRunClient:
     """Build and decode each packet, without opening a socket."""
 
@@ -25,10 +38,7 @@ class DryRunClient:
         self.message_count = 0
 
     def send_message(self, address, values):
-        builder = osc_message_builder.OscMessageBuilder(address=address)
-        for value in values:
-            builder.add_arg(value)
-        self.send(builder.build())
+        self.send(build_message(address, values))
 
     def send(self, packet):
         messages = osc_packet.OscPacket(packet.dgram).messages
@@ -53,10 +63,10 @@ def wait_for_handshake(receiver, reply_ip, reply_port, timeout):
     raise TimeoutError("No matching Unity /test/alive/ reply; check Play mode, IP, ports and firewall.")
 
 
-def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply_ip=None, timeout=3.0):
+def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply_ip=None, timeout=3.0, keep_scene=False):
     if dry_run:
         client = DryRunClient()
-        send_sequence(client, "127.0.0.1", local_port, duration_sec, dry_run=True)
+        send_sequence(client, "127.0.0.1", local_port, duration_sec, dry_run=True, keep_scene=keep_scene)
         print(f"[SpatialMAS Verifier] Dry run validated {client.packet_count} packets / {client.message_count} messages. No runtime was tested.")
         return
 
@@ -72,31 +82,56 @@ def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply
         client.send_message("/connect", [reply_ip, reply_port])
         wait_for_handshake(receiver, reply_ip, reply_port, timeout)
         print("[SpatialMAS Verifier] Unity handshake acknowledged.")
-        send_sequence(client, reply_ip, reply_port, duration_sec)
-    print("[SpatialMAS Verifier] Handshake passed; traffic sequence sent. Inspect Unity for visual/audio behavior.")
+        send_sequence(client, reply_ip, reply_port, duration_sec, keep_scene=keep_scene)
+    print("[SpatialMAS Verifier] Handshake passed; traffic sequence sent.")
+    if keep_scene:
+        print("[SpatialMAS Verifier] Demonstration objects kept in Unity for inspection.")
+    else:
+        print("[SpatialMAS Verifier] Cleanup sent for demonstration agents and boundary.")
 
 
-def send_sequence(client, reply_ip, local_port, duration_sec, *, dry_run=False):
+def cleanup_scene(client, *, boundary_created):
+    # One immediate bundle preserves removal order and targets only the objects we created.
+    bundle = osc_bundle_builder.OscBundleBuilder(osc_bundle_builder.IMMEDIATELY)
+    bundle.add_content(build_message("/agents/remove/id", VERIFICATION_AGENT_IDS))
+    if boundary_created:
+        bundle.add_content(build_message("/boundaries/remove", [BOUNDARY_ID]))
+    client.send(bundle.build())
 
-    # 1. Switch to Scenario 0 (External OSC Mode), set World Scale, and test HS-ims /connect + /test/alive
+
+def send_sequence(client, reply_ip, local_port, duration_sec, *, dry_run=False, keep_scene=False):
+
+    # 1. External mode; physical world dimensions require no arena scaling or origin change.
     client.send_message("/scenario/load", [0])
-    client.send_message("/xr/scale", [0.20])
     client.send_message("/connect", [reply_ip, local_port])
     client.send_message("/test/alive", [reply_ip, local_port, 1.0])
 
     # 2. Instantiate 16 Sphere Agents + 2 Interactive Cube Agents (Both HS-ims v1 & v2 signatures)
-    n_spheres = 16
+    n_spheres = SPHERE_COUNT
     print(f"[SpatialMAS Verifier] Instantiating {n_spheres} Sphere agents + 2 Interactive Cubes...")
-    client.send_message("/agents/instantiate", [0, 0, n_spheres, 0.25, reply_ip, local_port])
-    client.send_message("/agents/add/id", [1, 0, n_spheres, n_spheres + 1])
-    client.send_message("/agents/Interactable", [n_spheres, 1])
-    client.send_message("/agents/Interactable", [n_spheres + 1, 1])
-    client.send_message("/agents/color/id", [n_spheres, "#00F5D4", 1.0])
-    client.send_message("/agents/color/id", [n_spheres + 1, "#FF2A85", 1.0])
+    client.send_message("/world/agents/instantiate", [0, 0, n_spheres, 50.0, reply_ip, local_port])
+    # Once instantiation succeeds, clean up even if later setup/streaming fails or Ctrl+C is pressed.
+    boundary_created = False
+    try:
+        client.send_message("/agents/add/id", [1, 0, n_spheres, n_spheres + 1])
+        for cube_id, x_mm in ((n_spheres, -300.0), (n_spheres + 1, 300.0)):
+            client.send_message("/world/agents/size/id", [cube_id, 70.0])
+            client.send_message("/world/agents/position/id", [cube_id, x_mm, 1200.0, 800.0])
+        client.send_message("/agents/Interactable", [n_spheres, 1])
+        client.send_message("/agents/Interactable", [n_spheres + 1, 1])
+        client.send_message("/agents/color/id", [n_spheres, "#00F5D4", 1.0])
+        client.send_message("/agents/color/id", [n_spheres + 1, "#FF2A85", 1.0])
 
-    # 3. Add a Translucent Spherical Boundary (radius = 3000 mm = 3.0 m unscaled)
-    client.send_message("/boundaries/add", [1, 0, 0.0, 0.0, 0.0, 3000.0])
+        # 3. A physical 600 mm radius sphere, centered at world (0, 1.2, 0.8) meters.
+        client.send_message("/world/boundaries/add", [BOUNDARY_ID, 0, 0.0, 1200.0, 800.0, 600.0])
+        boundary_created = True
+        configure_and_stream(client, n_spheres, duration_sec, dry_run=dry_run)
+    finally:
+        if not keep_scene:
+            cleanup_scene(client, boundary_created=boundary_created)
 
+
+def configure_and_stream(client, n_spheres, duration_sec, *, dry_run=False):
     # 4. Configure Dual-Compatible DSP Synthesizer Parameters
     # Tests both 3-arg (agentId, ccId, val) and 4-arg HS-ims (agentId, synthIdx, ccId, val)
     pentatonic_midi = [60, 62, 64, 67, 69, 72, 74, 76]
@@ -123,12 +158,12 @@ def send_sequence(client, reply_ip, local_port, duration_sec, *, dry_run=False):
 
         for i in range(n_spheres):
             angle = elapsed * 1.8 + (2.0 * math.pi * i / n_spheres)
-            radius_mm = 1800.0
+            radius_mm = 360.0
             x_mm = radius_mm * math.cos(angle)
-            y_mm = radius_mm * math.sin(angle)
-            z_mm = 600.0 * math.sin(elapsed * 2.2 + i * 0.5)
+            y_mm = 1200.0 + 120.0 * math.sin(elapsed * 2.2 + i * 0.5)
+            z_mm = 800.0 + radius_mm * math.sin(angle)
 
-            pos_msg = osc_message_builder.OscMessageBuilder(address="/agents/position/id")
+            pos_msg = osc_message_builder.OscMessageBuilder(address="/world/agents/position/id")
             pos_msg.add_arg(i)
             pos_msg.add_arg(float(x_mm))
             pos_msg.add_arg(float(y_mm))
@@ -150,7 +185,7 @@ def send_sequence(client, reply_ip, local_port, duration_sec, *, dry_run=False):
             active_agent = (step // 30) % n_spheres
             midi_note = pentatonic_midi[active_agent % len(pentatonic_midi)]
             client.send_message("/agents/audio/synth/note", [active_agent, 1, midi_note, 100])
-            client.send_message("/agents/localcomm", ["ping", active_agent, 1200.0, 0.35, elapsed])
+            client.send_message("/world/agents/localcomm", ["ping", active_agent, 240.0, 0.35, elapsed])
 
         step += 1
         if not dry_run:
@@ -164,6 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("--local-port", type=int, default=6012, help="Local UDP port for outgoing feedback")
     parser.add_argument("--duration", type=float, default=5.0, help="Duration of orbital streaming test in seconds")
     parser.add_argument("--dry-run", action="store_true", help="Validate packet encoding without network access")
+    parser.add_argument("--keep-scene", action="store_true", help="Leave demonstration objects in Unity instead of removing them on exit")
     parser.add_argument("--reply-ip", help="This workstation's IP reachable by Unity (normally detected automatically)")
     parser.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for the Unity handshake")
     args = parser.parse_args()
@@ -171,6 +207,8 @@ if __name__ == "__main__":
         parser.error("duration must be nonnegative and timeout must be positive")
     try:
         run_verification(args.ip, args.port, args.local_port, args.duration,
-                         dry_run=args.dry_run, reply_ip=args.reply_ip, timeout=args.timeout)
+                         dry_run=args.dry_run, reply_ip=args.reply_ip, timeout=args.timeout, keep_scene=args.keep_scene)
+    except KeyboardInterrupt:
+        parser.exit(130, "[SpatialMAS Verifier] Interrupted.\n")
     except (OSError, TimeoutError) as error:
         parser.exit(1, f"[SpatialMAS Verifier] FAILED: {error}\n")

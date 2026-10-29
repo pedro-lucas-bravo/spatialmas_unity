@@ -7,7 +7,7 @@ using UnityEngine;
 namespace SpatialMAS.Networking
 {
     /// <summary>
-    /// Translates all incoming OSC v1 (100% HS-ims / human_swarm_examples backward-compatible)
+    /// Translates legacy HS-ims OSC and explicit /world coordinate messages
     /// and v2 (SpatialMAS XR & Scenario) messages into SimulationCommandBus commands,
     /// and forwards outgoing world events back over UDP.
     /// </summary>
@@ -41,6 +41,7 @@ namespace SpatialMAS.Networking
             _bus.OnBoundaryTransitionEvent += HandleBoundaryTransition;
             _bus.OnUserHeadPoseSampledUnity += HandleUserHeadPoseSampled;
             _bus.OnUserHandPoseSampledUnity += HandleUserHandPoseSampled;
+            _bus.OnCalibrationState += HandleCalibrationState;
         }
 
         /// <summary>
@@ -63,6 +64,10 @@ namespace SpatialMAS.Networking
 
             // Log incoming OSC message for CSV recorder
             _bus.LogOscTraffic("IN", addr, msg.FormatArgumentsCsv());
+
+            // Prefix is a per-message axis adapter, never persistent scene state.
+            bool worldAxes = addr.StartsWith("/world/", StringComparison.Ordinal);
+            if (worldAxes) addr = addr.Substring("/world".Length);
 
             switch (addr)
             {
@@ -99,21 +104,21 @@ namespace SpatialMAS.Networking
                         var shape = (AgentShapeType)Mathf.Clamp(msg.GetInt(0), 0, 3);
                         var movMode = (AgentMovementMode)Mathf.Clamp(msg.GetInt(1), 0, 2);
                         int nAgents = Mathf.Clamp(msg.GetInt(2), 0, 512);
-                        float rawScale = Mathf.Max(0.005f, msg.GetFloat(3, 0.25f));
+                        float rawSizeMeters = Mathf.Max(0.005f, msg.GetFloat(3, worldAxes ? 250f : 0.25f) * (worldAxes ? 0.001f : 1f));
                         string remoteIp = msg.GetString(4, _client.RemoteIp);
                         int remotePort = msg.GetInt(5, _client.RemotePort);
 
                         _client.SetDestination(remoteIp, remotePort);
-                        float scaledRadius = _mapper.ScaleAgentMeterRadius(rawScale);
-                        _bus.InstantiateAgents(shape, movMode, nAgents, scaledRadius, remoteIp, remotePort);
+                        float sizeMeters = rawSizeMeters;
+                        _bus.InstantiateAgents(shape, movMode, nAgents, sizeMeters, remoteIp, remotePort);
                     }
                     else
                     {
                         int nAgents = Mathf.Clamp(msg.GetInt(0), 0, 512);
                         var shape = (AgentShapeType)Mathf.Clamp(msg.GetInt(1, 0), 0, 3);
                         var movMode = (AgentMovementMode)Mathf.Clamp(msg.GetInt(2, 0), 0, 2);
-                        float scaledRadius = _mapper.ScaleAgentMeterRadius(0.28f);
-                        _bus.InstantiateAgents(shape, movMode, nAgents, scaledRadius, _client.RemoteIp, _client.RemotePort);
+                        float sizeMeters = 0.28f;
+                        _bus.InstantiateAgents(shape, movMode, nAgents, sizeMeters, _client.RemoteIp, _client.RemotePort);
                     }
                     break;
                 }
@@ -133,8 +138,8 @@ namespace SpatialMAS.Networking
 
                     // In HS-ims scripts (e.g. swarmalators/main.py), /agents/instantiate/id is called per shape group
                     // (first spheres, then cubes). Add or reconfigure the specified IDs without wiping previous groups!
-                    float scaledRadius = _mapper.ScaleAgentMeterRadius(shape == AgentShapeType.Cube ? 0.35f : 0.28f);
-                    _bus.AddAgents(shape, movMode, scaledRadius, _client.RemoteIp, _client.RemotePort, ids);
+                    float sizeMeters = shape == AgentShapeType.Cube ? 0.35f : 0.28f;
+                    _bus.AddAgents(shape, movMode, sizeMeters, _client.RemoteIp, _client.RemotePort, ids);
                     break;
                 }
 
@@ -148,7 +153,7 @@ namespace SpatialMAS.Networking
                     {
                         var shape = (AgentShapeType)Mathf.Clamp(msg.GetInt(0), 0, 3);
                         var movMode = (AgentMovementMode)Mathf.Clamp(msg.GetInt(1), 0, 2);
-                        float rawScale = Mathf.Max(0.005f, msg.GetFloat(2, 0.28f));
+                        float rawSizeMeters = Mathf.Max(0.005f, msg.GetFloat(2, worldAxes ? 280f : 0.28f) * (worldAxes ? 0.001f : 1f));
                         string remoteIp = msg.GetString(3, _client.RemoteIp);
                         int remotePort = msg.GetInt(4, _client.RemotePort);
 
@@ -159,8 +164,8 @@ namespace SpatialMAS.Networking
                         {
                             ids[i] = msg.GetInt(5 + i);
                         }
-                        float scaledRadius = _mapper.ScaleAgentMeterRadius(rawScale);
-                        _bus.AddAgents(shape, movMode, scaledRadius, remoteIp, remotePort, ids);
+                        float sizeMeters = rawSizeMeters;
+                        _bus.AddAgents(shape, movMode, sizeMeters, remoteIp, remotePort, ids);
                     }
                     else if (addr == "/agents/add/id" && msg.ArgCount >= 3)
                     {
@@ -169,8 +174,8 @@ namespace SpatialMAS.Networking
                         int idCount = Mathf.Min(msg.ArgCount - 2, 512);
                         int[] ids = new int[idCount];
                         for (int i = 0; i < idCount; i++) ids[i] = msg.GetInt(2 + i);
-                        float scaledRadius = _mapper.ScaleAgentMeterRadius(0.28f);
-                        _bus.AddAgents(shape, movMode, scaledRadius, _client.RemoteIp, _client.RemotePort, ids);
+                        float sizeMeters = 0.28f;
+                        _bus.AddAgents(shape, movMode, sizeMeters, _client.RemoteIp, _client.RemotePort, ids);
                     }
                     else
                     {
@@ -184,19 +189,20 @@ namespace SpatialMAS.Networking
                         {
                             if (initialMode == 1)
                             {
-                                // Legacy random spawning radius is in meters (explicit positions are millimeters).
-                                Vector3 local = UnityEngine.Random.insideUnitSphere * Mathf.Max(0f, msg.GetFloat(4, 10f));
-                                positions[i] = _mapper.OriginOffset + _mapper.OriginRotation * local * _mapper.WorldScale;
+                                // Legacy radius is meters; /world radius is physical millimeters.
+                                float radiusMeters = msg.GetFloat(4, worldAxes ? 10000f : 10f) * (worldAxes ? 0.001f : 1f);
+                                Vector3 local = UnityEngine.Random.insideUnitSphere * Mathf.Max(0f, radiusMeters);
+                                positions[i] = local;
                             }
                             else if (initialMode == 2)
                             {
                                 int offset = 4 + 3 * i;
-                                positions[i] = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(offset), msg.GetFloat(offset + 1), msg.GetFloat(offset + 2));
+                                positions[i] = ReadPosition(worldAxes, msg.GetFloat(offset), msg.GetFloat(offset + 1), msg.GetFloat(offset + 2));
                             }
-                            else positions[i] = _mapper.OriginOffset;
+                            else positions[i] = Vector3.zero;
                         }
-                        float scaledRadius = _mapper.ScaleAgentMeterRadius(0.28f);
-                        _bus.AddAgentsAutomatically(shape, movMode, scaledRadius, positions);
+                        float sizeMeters = 0.28f;
+                        _bus.AddAgentsAutomatically(shape, movMode, sizeMeters, positions);
                     }
                     break;
                 }
@@ -233,8 +239,41 @@ namespace SpatialMAS.Networking
                         float xMm = msg.GetFloat(i + 1);
                         float yMm = msg.GetFloat(i + 2);
                         float zMm = msg.GetFloat(i + 3);
-                        Vector3 posUnity = _mapper.OscMillimetersToUnityMeters(xMm, yMm, zMm);
+                        Vector3 posUnity = ReadPosition(worldAxes, xMm, yMm, zMm);
                         _bus.SetAgentPositionUnity(id, posUnity);
+                    }
+                    break;
+                }
+
+                case "/agents/size/id":
+                {
+                    if (!worldAxes)
+                    {
+                        ReportError(msg.Address, "Use /world/agents/size/id with full mesh dimensions in physical millimeters.");
+                        break;
+                    }
+                    for (int i = 0; i + 1 < msg.ArgCount; i += 2)
+                    {
+                        float dimensionMm = msg.GetFloat(i + 1);
+                        if (IsFinite(dimensionMm) && dimensionMm >= 5f)
+                            _bus.SetAgentSizeMeters(msg.GetInt(i), dimensionMm * 0.001f);
+                        else ReportError(msg.Address, "Agent dimension must be finite and at least 5 millimeters.");
+                    }
+                    break;
+                }
+
+                case "/agents/rotation/id":
+                {
+                    if (!worldAxes)
+                    {
+                        ReportError(msg.Address, "Use /world/agents/rotation/id for Unity quaternion orientation.");
+                        break;
+                    }
+                    for (int i = 0; i + 4 < msg.ArgCount; i += 5)
+                    {
+                        if (TryReadQuaternion(msg, i + 1, out Quaternion rotation))
+                            _bus.SetAgentRotationUnity(msg.GetInt(i), rotation);
+                        else ReportError(msg.Address, "Expected a finite nonzero Unity quaternion (qx,qy,qz,qw).");
                     }
                     break;
                 }
@@ -248,7 +287,7 @@ namespace SpatialMAS.Networking
                     for (int i = 0; i < n; i++)
                     {
                         int baseIdx = startOffset + i * 3;
-                        positions[i] = _mapper.OscMillimetersToUnityMeters(
+                        positions[i] = ReadPosition(worldAxes,
                             msg.GetFloat(baseIdx),
                             msg.GetFloat(baseIdx + 1),
                             msg.GetFloat(baseIdx + 2));
@@ -278,7 +317,7 @@ namespace SpatialMAS.Networking
                         float dy = msg.GetFloat(i + 2);
                         float dz = msg.GetFloat(i + 3);
                         // Swap Y and Z to match Unity left-handed axes
-                        Vector3 dirUnity = _mapper.OriginRotation * new Vector3(dx, dz, dy);
+                        Vector3 dirUnity = worldAxes ? new Vector3(dx, dy, dz) : new Vector3(dx, dz, dy);
                         _bus.SetAgentDirectionUnity(id, dirUnity);
                     }
                     break;
@@ -292,10 +331,7 @@ namespace SpatialMAS.Networking
                         float vxMm = msg.GetFloat(i + 1);
                         float vyMm = msg.GetFloat(i + 2);
                         float vzMm = msg.GetFloat(i + 3);
-                        Vector3 velUnity = _mapper.OriginRotation * new Vector3(
-                            _mapper.OscMillimeterLengthToUnityMeters(vxMm),
-                            _mapper.OscMillimeterLengthToUnityMeters(vzMm),
-                            _mapper.OscMillimeterLengthToUnityMeters(vyMm));
+                        Vector3 velUnity = ReadPosition(worldAxes, vxMm, vyMm, vzMm);
                         _bus.SetAgentVelocityUnity(id, velUnity);
                     }
                     break;
@@ -574,16 +610,14 @@ namespace SpatialMAS.Networking
                     int id = msg.GetInt(0);
                     var shape = (AgentShapeType)Mathf.Clamp(msg.GetInt(1), 0, 1);
                     Vector3 posUnity = msg.ArgCount >= 5
-                        ? _mapper.OscMillimetersToUnityMeters(msg.GetFloat(2), msg.GetFloat(3), msg.GetFloat(4))
-                        : _mapper.OriginOffset;
+                        ? ReadPosition(worldAxes, msg.GetFloat(2), msg.GetFloat(3), msg.GetFloat(4))
+                        : Vector3.zero;
                     float sizeMm = msg.ArgCount >= 6 ? msg.GetFloat(5, 2500f) : 2500f;
                     float sizeMeters = _mapper.OscMillimeterLengthToUnityMeters(sizeMm);
                     if (addr == "/boundary/add/id" && shape == AgentShapeType.Cube)
                     {
-                        _bus.AddBoxBoundaryUnity(id, posUnity, new Vector3(
-                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(5, 1000f)),
-                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(7, 1000f)),
-                            _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(6, 1000f))));
+                        _bus.AddBoxBoundaryUnity(id, posUnity, ReadPosition(worldAxes,
+                            msg.GetFloat(5, 1000f), msg.GetFloat(6, 1000f), msg.GetFloat(7, 1000f)));
                     }
                     else _bus.AddBoundaryUnity(id, shape, posUnity, sizeMeters);
                     int alphaIndex = shape == AgentShapeType.Cube ? 8 : 6;
@@ -600,7 +634,7 @@ namespace SpatialMAS.Networking
                 {
                     if (msg.ArgCount < 5) break;
                     int id = msg.GetInt(0);
-                    Vector3 posUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
+                    Vector3 posUnity = ReadPosition(worldAxes, msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
                     float sizeMeters = _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(4, 1000f));
                     _bus.UpdateBoundaryUnity(id, posUnity, sizeMeters);
                     break;
@@ -610,7 +644,7 @@ namespace SpatialMAS.Networking
                 {
                     if (msg.ArgCount < 4) break;
                     int id = msg.GetInt(0);
-                    Vector3 posUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
+                    Vector3 posUnity = ReadPosition(worldAxes, msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
                     _bus.UpdateBoundaryUnity(id, posUnity, -1f);
                     break;
                 }
@@ -619,10 +653,9 @@ namespace SpatialMAS.Networking
                 {
                     if (msg.ArgCount < 2) break;
                     int id = msg.GetInt(0);
-                    _bus.SetBoundaryDimensionsUnity(id, new Vector3(
-                        _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(1)),
-                        msg.ArgCount > 3 ? _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(3)) : float.NaN,
-                        msg.ArgCount > 2 ? _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(2)) : float.NaN));
+                    _bus.SetBoundaryDimensionsUnity(id, ReadPosition(worldAxes, msg.GetFloat(1),
+                        msg.ArgCount > 2 ? msg.GetFloat(2) : float.NaN,
+                        msg.ArgCount > 3 ? msg.GetFloat(3) : float.NaN));
                     break;
                 }
 
@@ -658,16 +691,20 @@ namespace SpatialMAS.Networking
                 case "/audio/listener/position":
                 {
                     if (msg.ArgCount < 3) break;
-                    Vector3 posUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
+                    Vector3 posUnity = ReadPosition(worldAxes, msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
                     _bus.SetListenerPositionUnity(posUnity);
                     break;
                 }
 
                 case "/listener/rotation":
                 {
-                    if (msg.ArgCount < 3) break;
-                    Quaternion rotUnity = _mapper.OscEulerToUnityRotation(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
-                    _bus.SetListenerRotationUnity(rotUnity);
+                    if (worldAxes)
+                    {
+                        if (TryReadQuaternion(msg, 0, out Quaternion rotation)) _bus.SetListenerRotationUnity(rotation);
+                        else ReportError(msg.Address, "Expected a finite nonzero Unity quaternion (qx,qy,qz,qw).");
+                    }
+                    else if (msg.ArgCount >= 3)
+                        _bus.SetListenerRotationUnity(_mapper.OscEulerToUnityRotation(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2)));
                     break;
                 }
 
@@ -675,8 +712,8 @@ namespace SpatialMAS.Networking
                 {
                     if (msg.ArgCount < 8) break;
                     int id = msg.GetInt(0);
-                    Vector3 startUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
-                    Vector3 endUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(4), msg.GetFloat(5), msg.GetFloat(6));
+                    Vector3 startUnity = ReadPosition(worldAxes, msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3));
+                    Vector3 endUnity = ReadPosition(worldAxes, msg.GetFloat(4), msg.GetFloat(5), msg.GetFloat(6));
                     float widthMeters = _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(7, 20f));
                     _bus.SetArrowUnity(id, startUnity, endUnity, widthMeters);
                     break;
@@ -686,10 +723,10 @@ namespace SpatialMAS.Networking
                 {
                     // HS-ims signature: <x> <y> <z> <dx> <dy> <dz> <scale>
                     if (msg.ArgCount < 6) break;
-                    Vector3 startUnity = _mapper.OscMillimetersToUnityMeters(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
+                    Vector3 startUnity = ReadPosition(worldAxes, msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
                     Vector3 dirOsc = new Vector3(msg.GetFloat(3), msg.GetFloat(4), msg.GetFloat(5)).normalized;
                     float scaleMm = msg.ArgCount >= 7 ? msg.GetFloat(6, 500f) : 500f;
-                    Vector3 endUnity = _mapper.OscMillimetersToUnityMeters(
+                    Vector3 endUnity = ReadPosition(worldAxes,
                         msg.GetFloat(0) + dirOsc.x * scaleMm,
                         msg.GetFloat(1) + dirOsc.y * scaleMm,
                         msg.GetFloat(2) + dirOsc.z * scaleMm);
@@ -730,20 +767,46 @@ namespace SpatialMAS.Networking
                 }
 
                 case "/xr/scale":
+                case "/xr/origin":
                 {
-                    if (msg.ArgCount < 1) break;
-                    float scale = Mathf.Clamp(msg.GetFloat(0, 1.0f), 0.05f, 5.0f);
-                    _bus.SetWorldScale(scale);
+                    ReportError(msg.Address, "Global scale/origin transforms were removed. Use actual world dimensions and /calibration/pose for external alignment.");
                     break;
                 }
 
-                case "/xr/origin":
+                case "/scenario/center":
                 {
-                    if (msg.ArgCount < 3) break;
-                    Vector3 offsetMeters = new Vector3(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
-                    _bus.SetOriginOffset(offsetMeters);
+                    if (msg.ArgCount >= 3)
+                        _bus.SetScenarioCenter(_mapper.WorldMillimetersToUnityMeters(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2)));
                     break;
                 }
+                case "/scenario/layout":
+                {
+                    if (msg.ArgCount >= 1 && (msg.GetInt(0) == 0 || msg.GetInt(0) == 1))
+                        _bus.SetScenarioLayout((ScenarioLayout)msg.GetInt(0));
+                    else ReportError(msg.Address, "Scenario layout must be 0 (Compact) or 1 (RoomScale).");
+                    break;
+                }
+                case "/calibration/pose":
+                {
+                    if (msg.ArgCount >= 7 && TryReadQuaternion(msg, 3, out Quaternion rotation))
+                    {
+                        Vector3 position = _mapper.WorldMillimetersToUnityMeters(msg.GetFloat(0), msg.GetFloat(1), msg.GetFloat(2));
+                        if (IsFinite(position.x) && IsFinite(position.y) && IsFinite(position.z))
+                            _bus.SetCalibrationPose(position, rotation);
+                        else ReportError(msg.Address, "Calibration position must be finite Unity XYZ millimeters.");
+                    }
+                    else ReportError(msg.Address, "Expected Unity XYZ millimeters and a finite nonzero quaternion (qx,qy,qz,qw).");
+                    break;
+                }
+                case "/calibration/visible":
+                    if (msg.ArgCount >= 1) _bus.SetCalibrationVisible(msg.GetInt(0) != 0);
+                    break;
+                case "/calibration/locked":
+                    if (msg.ArgCount >= 1) _bus.SetCalibrationLocked(msg.GetInt(0) != 0);
+                    break;
+                case "/calibration/get":
+                    _bus.GetCalibration();
+                    break;
 
                 case "/xr/listener/lock_to_head":
                 {
@@ -825,6 +888,8 @@ namespace SpatialMAS.Networking
         {
             Vector3 oscMm = _mapper.UnityMetersToOscMillimeters(posUnity);
             SendAndLog(new OscMessage("/agents/position/id", id, oscMm.x, oscMm.y, oscMm.z));
+            Vector3 worldMm = _mapper.UnityMetersToWorldMillimeters(posUnity);
+            SendAndLog(new OscMessage("/world/agents/position/id", id, worldMm.x, worldMm.y, worldMm.z));
         }
 
         private void HandleAgentTouch(int id, int touchState, int otherAgentId)
@@ -872,15 +937,47 @@ namespace SpatialMAS.Networking
         private void HandleUserHeadPoseSampled(Vector3 posUnity, Quaternion rotUnity)
         {
             if (!StreamUserPoseEnabled) return;
-            Vector3 oscMm = _mapper.UnityMetersToOscMillimeters(posUnity);
+            Vector3 oscMm = _mapper.UnityMetersToWorldMillimeters(posUnity);
             SendAndLog(new OscMessage("/xr/user/pose", oscMm.x, oscMm.y, oscMm.z, rotUnity.x, rotUnity.y, rotUnity.z, rotUnity.w));
         }
 
         private void HandleUserHandPoseSampled(int handIndex, Vector3 posUnity, bool isPinching)
         {
             if (!StreamUserPoseEnabled) return;
-            Vector3 oscMm = _mapper.UnityMetersToOscMillimeters(posUnity);
+            Vector3 oscMm = _mapper.UnityMetersToWorldMillimeters(posUnity);
             SendAndLog(new OscMessage("/xr/hands/pose", handIndex, oscMm.x, oscMm.y, oscMm.z, isPinching ? 1 : 0));
+        }
+
+        private void HandleCalibrationState(CalibrationSnapshot snapshot)
+        {
+            Vector3 mm = _mapper.UnityMetersToWorldMillimeters(snapshot.Position);
+            Quaternion q = snapshot.Rotation;
+            SendAndLog(new OscMessage("/calibration/state", snapshot.CalibrationId, snapshot.Revision,
+                mm.x, mm.y, mm.z, q.x, q.y, q.z, q.w, snapshot.Visible ? 1 : 0, snapshot.Locked ? 1 : 0));
+        }
+
+        private Vector3 ReadPosition(bool worldAxes, float x, float y, float z)
+            => worldAxes ? _mapper.WorldMillimetersToUnityMeters(x, y, z) : _mapper.OscMillimetersToUnityMeters(x, y, z);
+
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private static bool TryReadQuaternion(OscMessage message, int offset, out Quaternion rotation)
+        {
+            rotation = Quaternion.identity;
+            if (message.ArgCount < offset + 4) return false;
+            float x = message.GetFloat(offset), y = message.GetFloat(offset + 1);
+            float z = message.GetFloat(offset + 2), w = message.GetFloat(offset + 3);
+            if (!IsFinite(x) || !IsFinite(y) || !IsFinite(z) || !IsFinite(w)) return false;
+            float norm = Mathf.Sqrt(x * x + y * y + z * z + w * w);
+            if (!IsFinite(norm) || norm < 0.000001f) return false;
+            rotation = new Quaternion(x / norm, y / norm, z / norm, w / norm);
+            return true;
+        }
+
+        private void ReportError(string address, string message)
+        {
+            Debug.LogWarning($"[OscProtocolRouter] {address}: {message}");
+            SendAndLog(new OscMessage("/error", address, message));
         }
 
         private void SendAndLog(OscMessage msg)
@@ -899,6 +996,7 @@ namespace SpatialMAS.Networking
             _bus.OnBoundaryTransitionEvent -= HandleBoundaryTransition;
             _bus.OnUserHeadPoseSampledUnity -= HandleUserHeadPoseSampled;
             _bus.OnUserHandPoseSampledUnity -= HandleUserHandPoseSampled;
+            _bus.OnCalibrationState -= HandleCalibrationState;
         }
     }
 }

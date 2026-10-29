@@ -44,7 +44,7 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [Test]
-        public void ListenerOverride_MovesTheSoleEnabledListenerAndRebasesOnlyWhenDetached()
+        public void ListenerOverride_MovesTheSoleEnabledListenerAndIgnoresCalibration()
         {
             var bus = new SimulationCommandBus();
             var head = NewObject("Head");
@@ -57,14 +57,13 @@ namespace SpatialMAS.Tests.PlayMode
             bus.SetListenerLockedToHead(false);
             bus.SetListenerPositionUnity(new Vector3(2, 3, 4));
             Assert.AreEqual(new Vector3(2, 3, 4), proxy.GetComponent<AudioListener>().transform.position);
-            var oldMapper = new SpatialCoordinateMapper(0.2f, Vector3.zero);
-            var change = new SpatialFrameChange(oldMapper.OriginOffset, Quaternion.identity, oldMapper.WorldScale,
-                Vector3.one, Quaternion.identity, 0.4f);
-            bus.ApplySpatialFrameChange(change);
-            Assert.AreEqual(change.TransformPosition(new Vector3(2, 3, 4)), proxy.transform.position);
+            var reference = NewObject("Reference").AddComponent<SpatialCalibrationReference>();
+            reference.Initialize(bus, Vector3.zero, Quaternion.identity, true, false);
+            bus.SetCalibrationPose(Vector3.one, Quaternion.Euler(0, 90, 0));
+            Assert.AreEqual(new Vector3(2, 3, 4), proxy.transform.position);
             bus.SetListenerLockedToHead(true);
             var position = proxy.transform.position;
-            bus.ApplySpatialFrameChange(change);
+            bus.SetCalibrationPose(Vector3.one * 3f, Quaternion.identity);
             Assert.AreEqual(position, proxy.transform.position);
         }
 
@@ -133,13 +132,46 @@ namespace SpatialMAS.Tests.PlayMode
         {
             var bus = new SimulationCommandBus();
             int requestedScenario = -1;
+            ScenarioLayout requestedLayout = ScenarioLayout.Compact;
+            Vector3 requestedCenter = Vector3.zero;
             bus.OnLoadScenario += scenario => requestedScenario = scenario;
+            bus.OnSetScenarioLayout += layout => requestedLayout = layout;
+            bus.OnSetScenarioCenter += center => requestedCenter = center;
+            var camera = NewObject("Reference Placement Camera").AddComponent<Camera>();
+            camera.tag = "MainCamera";
+            camera.transform.position = new Vector3(2f, 1f, 0f);
+            var reference = NewObject("Reference").AddComponent<SpatialCalibrationReference>();
+            reference.Initialize(bus, Vector3.zero, Quaternion.identity, true, false);
             var hud = NewObject("HUD").AddComponent<SpatialResearcherHUD>();
-            hud.Initialize(bus, new SpatialCoordinateMapper(0.2f, Vector3.zero), null, null, null, null, null, null, null, null);
+            hud.Initialize(bus, new SpatialCoordinateMapper(), null, null, null, null, null, null, null, null, null, reference);
             var panel = hud.transform.Find("SpatialResearcherWorldCanvas");
             Assert.NotNull(panel.GetComponent<TrackedDeviceGraphicRaycaster>());
             Assert.NotNull(EventSystem.current.GetComponent<XRUIInputModule>());
-            Assert.NotNull(panel.GetComponentInChildren<Slider>(true));
+            Assert.IsNull(panel.GetComponentInChildren<Slider>(true), "World-scale controls must not return.");
+            Assert.NotNull(FindWorldButton(panel, "Reference Show / Hide"));
+            Assert.NotNull(FindWorldButton(panel, "Reference Lock / Unlock"));
+            Assert.NotNull(panel.Find("Spawn Next Scenario Here"));
+            panel.Find("Next: Room Layout").GetComponent<Button>().onClick.Invoke();
+            panel.Find("Spawn Next Scenario Here").GetComponent<Button>().onClick.Invoke();
+            FindWorldButton(panel, "Reference Show / Hide").onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            Assert.AreEqual(ScenarioLayout.RoomScale, requestedLayout);
+            Assert.That(Vector3.Distance(requestedCenter, new Vector3(2f, 0.7f, 0.8f)), Is.LessThan(0.0001f));
+            Assert.IsFalse(reference.Visible);
+            Assert.AreEqual(Vector3.zero, reference.Snapshot.Position, "Next spawn placement cannot move the reference.");
+            FindWorldButton(panel, "Reference Lock / Unlock").onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            Assert.IsTrue(reference.Locked);
+            panel.Find("Place Reference Ahead").GetComponent<Button>().onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            Assert.AreEqual(Vector3.zero, reference.Snapshot.Position, "A locked reference must reject UI placement.");
+            FindWorldButton(panel, "Reference Lock / Unlock").onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            panel.Find("Place Reference Ahead").GetComponent<Button>().onClick.Invoke();
+            panel.Find("Rotate Reference 90°").GetComponent<Button>().onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            Assert.That(Vector3.Distance(reference.Snapshot.Position, requestedCenter), Is.LessThan(0.0001f));
+            Assert.That(Quaternion.Angle(reference.Snapshot.Rotation, Quaternion.Euler(0, 90, 0)), Is.LessThan(0.001f));
             var button = panel.Find("5 · Self-Assembly").GetComponent<Button>();
             button.onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
@@ -186,9 +218,37 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.IsFalse(agent.IsGrabbedByUser);
         }
 
+        [Test]
+        public void MouseReferenceDrag_ChangesOnlyReferenceAndHonorsVisibilityAndLock()
+        {
+            var bus = new SimulationCommandBus();
+            int agentEvents = 0;
+            bus.OnAgentControlClickEvent += (_, __, ___) => agentEvents++;
+            var rig = CreateDesktopRig(bus, out var camera);
+            var reference = NewObject("Reference").AddComponent<SpatialCalibrationReference>();
+            reference.Initialize(bus, new Vector3(0.2f, 0.1f, 3f), Quaternion.identity, true, false);
+            Vector3 initial = reference.Snapshot.Position;
+            Vector2 pointer = camera.WorldToScreenPoint(initial);
+            Physics.SyncTransforms();
+            ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left));
+            Assert.IsTrue(rig.IsDraggingObject);
+            Assert.That(Vector3.Distance(initial, reference.Snapshot.Position), Is.LessThan(0.0001f));
+            ProcessMouse(rig, new MouseState { position = pointer + Vector2.right * 30f }.WithButton(MouseButton.Left));
+            Assert.Greater(reference.Snapshot.Position.x, initial.x);
+            bus.SetCalibrationLocked(true);
+            Vector3 lockedPosition = reference.Snapshot.Position;
+            ProcessMouse(rig, new MouseState { position = pointer + Vector2.right * 60f }.WithButton(MouseButton.Left));
+            Assert.IsFalse(rig.IsDraggingObject);
+            Assert.AreEqual(lockedPosition, reference.Snapshot.Position);
+            Assert.AreEqual(0, agentEvents);
+            bus.SetCalibrationVisible(false);
+            Assert.IsFalse(reference.GetComponent<Collider>().enabled);
+        }
+
         private DesktopInteractionRig CreateDesktopRig(SimulationCommandBus bus, out Camera camera)
         {
             camera = NewObject("Desktop Camera").AddComponent<Camera>();
+            camera.stereoTargetEye = StereoTargetEyeMask.None;
             camera.pixelRect = new Rect(0, 0, 800, 600);
             var rig = NewObject("Desktop Rig").AddComponent<DesktopInteractionRig>();
             rig.Initialize(camera, bus);
@@ -211,6 +271,14 @@ namespace SpatialMAS.Tests.PlayMode
             InputSystem.QueueStateEvent(_mouse, state);
             InputSystem.Update();
             Invoke(rig, "HandleMouseAgentInteraction", _mouse, null);
+        }
+
+        private static Button FindWorldButton(Transform panel, string label)
+        {
+            foreach (var button in panel.GetComponentsInChildren<Button>(true))
+                if (button.name == label) return button;
+            Assert.Fail("World panel button missing: " + label);
+            return null;
         }
 
         private static void Invoke(object target, string method, params object[] args)

@@ -4,7 +4,7 @@
 
 Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 2026), it provides:
 1. **Desktop and OpenXR implementation**: Includes desktop controls and Android/PC OpenXR setup for head tracking and tracked-hand interaction. Headset passthrough, performance, and platform builds require validation on the target hardware. The **Apple Vision Pro (`visionOS`) build menu is experimental scaffolding**; a visionOS XR provider and device validation are still required.
-2. **`HS-ims` OSC v1 Compatibility + v2 XR Extensions**: Implements the legacy signatures documented in the [OSC API specification](./docs/OSC_API_SPECIFICATION.md) on UDP port `6011`, plus **MR/VR switching** (`/xr/mode`), **live arena scale and origin changes** (`/xr/scale`, `/xr/origin`), and **head/hand pose streaming** (`/xr/user/pose`, `/xr/hands/pose`). Regression tests cover selected compatibility cases; full Python/Max/C++ application compatibility is not yet certified.
+2. **`HS-ims` OSC v1 Compatibility + v2 XR Extensions**: Implements the legacy signatures documented in the [OSC API specification](./docs/OSC_API_SPECIFICATION.md) on UDP port `6011`, plus **MR/VR switching** (`/xr/mode`), **physical Unity-world coordinates**, canonical `/world/...` millimeter messages, an independent `/calibration/...` reference, and **head/hand pose streaming** (`/xr/user/pose`, `/xr/hands/pose`). Regression tests cover selected compatibility cases; full Python/Max/C++ application compatibility is not yet certified.
 3. **Zero-Dependency Native C# Procedural DSP Synthesizer (`NativeDspSynthesizer`)**: Per-agent 3D spatialized audio synthesis (`OnAudioFilterRead`) featuring anti-aliased PolyBLEP oscillators (Sine, Square, Saw, Triangle), ADSR envelopes, 12 dB/oct Biquad Low-Pass Filter with Resonance, Schroeder Reverb, and **dual CC ID compatibility** (`0/1` Waveform, `82/74` Attack, `83/71` Decay, `85/72` Sustain, `17/73` Release).
 4. **Five Built-In No-Code Interactive Scenarios**:
    - **Scenario 0**: *External OSC Controller Mode (`HS-ims` Compatible)*
@@ -13,7 +13,9 @@ Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 
    - **Scenario 3**: *Orbital Attractors & Repellers* (Interactive Cyan Attractor & Red Repeller cubes + expanding wavefront `/agents/localcomm`)
    - **Scenario 4**: *Musical Encounters* (SysMus25 workshop elastic boundary reflection + radial-quantized musical encounters)
    - **Scenario 5**: *Self-Assembly* (ACSOS 2024 autonomous & hand-assemblable 6-face musical cubes with $90^\circ$ face snapping and coupled polyrhythmic phasors)
-5. **Dual Buffered CSV Telemetry + Wi-Fi HTTP Log Export Server (`:8080`)**: Records `osc_traffic_*.csv` and `xr_embodiment_*.csv` (head position/rotation, hand positions, pinch state, and frame time). Every session uses a unique ID and refuses to overwrite an existing file. Telemetry targets 50 Hz, limited by frame rate. Download logs from `http://<device-ip>:8080/` over the local network.
+5. **Physical-world recording + Wi-Fi export (`:8080`)**: Synchronized participant and object samples in Unity-world meters, full head/hand rotations and tracking validity, versioned calibration history, tracking-origin events, raw OSC traffic, and a session metadata JSON. Every session has unique files that cannot overwrite earlier data. Sampling targets 50 Hz, limited by frame rate. Download the CSVs and metadata together from `http://<device-ip>:8080/`.
+
+All runtime and saved poses use Unity XYZ (X right, Y up, Z forward), meters, and quaternion order `x,y,z,w`. Global world scaling and coordinate-origin rebasing have been removed. Choose an explicit **Compact** or **RoomScale** physical layout for the next scenario/reset. The movable reference defines an optional export/analysis frame; moving it never moves agents or changes raw recorded world poses. [Coordinate and recording contract](./docs/ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract).
 
 ---
 
@@ -70,9 +72,9 @@ pip install -r ExternalTools/requirements.txt
 python ExternalTools/verify_osc_compatibility.py --ip 127.0.0.1 --port 6011
 ```
 
-The live verifier requires an actual `/test/alive/` acknowledgment before sending its demonstration sequence and exits with an error if Unity does not reply. It checks connectivity and sends traffic; inspect Unity for rendering/audio behavior.
+The live verifier requires an actual `/test/alive/` acknowledgment before sending its demonstration sequence and exits with an error if Unity does not reply. It checks connectivity and sends traffic; inspect Unity for rendering/audio behavior. It removes its demonstration agents (IDs `0..17`) and boundary (`1`) when finished, including on Ctrl+C or a streaming error. Add `--keep-scene` to leave them for inspection. Unity stays in Play mode; existing scene settings and recording state are not reset. The demo uses explicit physical dimensions: 50 mm spheres, 70 mm cubes, and a 600 mm boundary radius centered at Unity `(0,1.2,0.8)` meters.
 
-GitHub CI installs only `python-osc` and runs asset/JSON integrity checks, four Python feedback/packet tests, and `--dry-run` packet validation. It does not install Unity, containers, NumPy, or a .NET SDK. Run Unity regressions locally:
+GitHub CI installs only `python-osc` and runs asset/JSON integrity checks, Python feedback/packet/cleanup tests, and `--dry-run` packet validation. It does not install Unity, containers, NumPy, or a .NET SDK. Run Unity regressions locally:
 
 ```powershell
 unity test . --mode EditMode --output Logs/editmode-results.xml

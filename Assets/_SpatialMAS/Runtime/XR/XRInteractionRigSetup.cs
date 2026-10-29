@@ -54,6 +54,9 @@ namespace SpatialMAS.XR
             Transform trackingOrigin = GetTrackingOrigin(camera);
             if (trackingOrigin == null) return;
             var rig = camera.GetComponentInParent<XROrigin>(true);
+            // Repair already-generated fallback rigs as well as newly built scenes.
+            foreach (var driver in rig.GetComponentsInChildren<XRTrackedHandInteractor>(true))
+                driver.EnsureHandSupport();
             // Imported/custom rigs retain their own tracking drivers and interactors.
             if (rig.GetComponentInChildren<XRBaseInputInteractor>(true) != null) return;
 

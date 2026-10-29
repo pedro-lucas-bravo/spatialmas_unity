@@ -25,7 +25,7 @@ namespace SpatialMAS.Tests.PlayMode
                 {
                     Bus = bus,
                     AgentManager = agents,
-                    CoordinateMapper = new SpatialCoordinateMapper(0.2f, Vector3.zero)
+                    ScenarioCenter = Vector3.zero
                 });
                 foreach (var node in scenario.Nodes)
                 {
@@ -58,6 +58,47 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator NextPlacementAndLayout_DoNotMoveLiveEntitiesUntilReset()
+        {
+            var root = new GameObject("PhysicalScenarioPlacementRegression");
+            try
+            {
+                var bus = new SimulationCommandBus();
+                var agents = root.AddComponent<AgentManager>();
+                agents.Initialize(bus);
+                var manager = root.AddComponent<ScenarioManager>();
+                manager.Initialize(bus, Vector3.zero, agents, null, 4);
+                manager.SetPaused(true);
+                Assert.IsTrue(agents.TryGetAgent(0, out var agent));
+                Vector3 originalPosition = agent.transform.position;
+                float originalSize = agent.BaseScaleMeters;
+                Vector3 newCenter = new Vector3(4f, 2f, 3f);
+                bus.SetScenarioCenter(newCenter);
+                bus.SetScenarioLayout(ScenarioLayout.RoomScale);
+                Assert.AreEqual(originalPosition, agent.transform.position);
+                Assert.AreEqual(originalSize, agent.BaseScaleMeters);
+                Assert.AreEqual(ScenarioLayout.Compact, manager.ActiveLayout);
+                Assert.AreEqual(ScenarioLayout.RoomScale, manager.NextLayout);
+                Assert.AreEqual(newCenter, manager.NextScenarioCenter);
+
+                manager.ResetActiveScenario();
+                manager.SetPaused(true);
+                Assert.AreEqual(ScenarioLayout.RoomScale, manager.ActiveLayout);
+                Assert.IsTrue(agents.TryGetAgent(0, out var restarted));
+                Assert.AreEqual(0.14f, restarted.BaseScaleMeters, 0.000001f);
+                Assert.Less(Vector3.Distance(restarted.transform.position, newCenter), 2.5f);
+                Vector3 restartedPosition = restarted.transform.position;
+                manager.ResetActiveScenario();
+                manager.SetPaused(true);
+                Assert.IsTrue(agents.TryGetAgent(0, out var repeated));
+                Assert.Less(Vector3.Distance(restartedPosition, repeated.transform.position), 0.00001f);
+                Assert.AreEqual(0.14f, repeated.BaseScaleMeters, 0.000001f);
+                yield return null;
+            }
+            finally { Object.Destroy(root); }
+        }
+
+        [UnityTest]
         public IEnumerator ExternalOscTransfer_PreservesAndUnmutesExistingAgents()
         {
             var root = new GameObject("ExternalOscTransferRegression");
@@ -67,7 +108,7 @@ namespace SpatialMAS.Tests.PlayMode
                 var agents = root.AddComponent<AgentManager>();
                 agents.Initialize(bus);
                 var manager = root.AddComponent<ScenarioManager>();
-                manager.Initialize(bus, new SpatialCoordinateMapper(0.2f, Vector3.zero), agents, null, 1);
+                manager.Initialize(bus, Vector3.zero, agents, null, 1);
                 Assert.IsTrue(agents.TryGetAgent(0, out var preservedAgent));
                 int count = agents.ActiveCount;
 

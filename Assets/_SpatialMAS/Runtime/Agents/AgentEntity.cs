@@ -215,18 +215,15 @@ namespace SpatialMAS.Agents
             _smoothDampVelocity = Vector3.zero;
         }
 
-        public void ApplySpatialFrameChange(SpatialFrameChange change)
+        /// <summary>Uniform full mesh dimension in meters; sphere diameter or cube edge, independent of motion.</summary>
+        public void SetSizeMeters(float fullDimensionMeters)
         {
-            transform.position = change.TransformPosition(transform.position);
-            transform.rotation = change.TransformRotation(transform.rotation);
-            BaseScaleMeters *= change.ScaleRatio;
-            transform.localScale *= change.ScaleRatio;
-            _targetPosition = change.TransformPosition(_targetPosition);
-            _lastReportedUserGrabPosition = change.TransformPosition(_lastReportedUserGrabPosition);
-            _velocityVector = change.TransformVector(_velocityVector);
-            _smoothDampVelocity = change.TransformVector(_smoothDampVelocity);
-            _directionVector = change.TransformDirection(_directionVector);
-            if (_explicitSpeedMetersPerSec >= 0f) _explicitSpeedMetersPerSec *= change.ScaleRatio;
+            if (float.IsNaN(fullDimensionMeters) || float.IsInfinity(fullDimensionMeters)) return;
+            float dimension = Mathf.Max(0.005f, fullDimensionMeters);
+            // The influence sphere is an independent physical radius, despite being a visual child.
+            if (_radiusSphereGo != null) _radiusSphereGo.transform.localScale *= BaseScaleMeters / dimension;
+            BaseScaleMeters = dimension;
+            transform.localScale = Vector3.one * dimension;
         }
 
         public void SetSpeedMetersPerSec(float speedMetersPerSec)

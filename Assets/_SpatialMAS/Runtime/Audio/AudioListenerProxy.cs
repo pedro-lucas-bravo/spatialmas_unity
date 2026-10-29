@@ -48,7 +48,6 @@ namespace SpatialMAS.Audio
                 _bus.OnSetListenerPositionUnity += HandleSetPosition;
                 _bus.OnSetListenerRotationUnity += HandleSetRotation;
                 _bus.OnSetListenerLockedToHead += HandleSetLockedToHead;
-                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
 
             UpdateVisualVisibility();
@@ -61,7 +60,6 @@ namespace SpatialMAS.Audio
                 _bus.OnSetListenerPositionUnity -= HandleSetPosition;
                 _bus.OnSetListenerRotationUnity -= HandleSetRotation;
                 _bus.OnSetListenerLockedToHead -= HandleSetLockedToHead;
-                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
         }
 
@@ -101,12 +99,6 @@ namespace SpatialMAS.Audio
         private void HandleSetLockedToHead(bool locked)
         {
             LockedToHead = locked;
-        }
-
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
-        {
-            if (!_lockedToHead)
-                transform.SetPositionAndRotation(change.TransformPosition(transform.position), change.TransformRotation(transform.rotation));
         }
 
         private void UpdateVisualVisibility()

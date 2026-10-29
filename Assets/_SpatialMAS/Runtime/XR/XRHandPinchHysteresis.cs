@@ -76,7 +76,7 @@ namespace SpatialMAS.XR
             }
         }
 
-        private bool TryGetTrackedHand(out XRHand hand)
+        public bool TryGetTrackedHand(out XRHand hand)
         {
             SubsystemManager.GetSubsystems(s_Subsystems);
             foreach (var subsystem in s_Subsystems)
@@ -86,6 +86,26 @@ namespace SpatialMAS.XR
                 if (hand.isTracked) return true;
             }
             hand = default;
+            return false;
+        }
+
+        private bool TryGetMetaAim(out MetaAimHand aim)
+        {
+            aim = _handedness == Handedness.Left ? MetaAimHand.left : MetaAimHand.right;
+            return aim != null && aim.added && aim.isTracked.isPressed &&
+                (((MetaAimFlags)aim.aimFlags.ReadValue()) & MetaAimFlags.Valid) != 0;
+        }
+
+        /// <summary>Native pointing pose is for the far ray; physical hand telemetry retains the joint/root pose.</summary>
+        public bool TryGetAimPoseWorld(out Pose pose)
+        {
+            if (TryGetMetaAim(out MetaAimHand aim))
+            {
+                pose = XRInteractionRigSetup.TrackingPoseToWorld(
+                    new Pose(aim.devicePosition.ReadValue(), aim.deviceRotation.ReadValue()), TrackingOrigin);
+                return true;
+            }
+            pose = default;
             return false;
         }
 
@@ -172,7 +192,15 @@ namespace SpatialMAS.XR
                 }
             }
 
-            if (!hasJointData && _fallbackInput != null)
+            if (TryGetMetaAim(out MetaAimHand aim))
+            {
+                // The runtime's gesture classifier supplies deliberate pinch activation and suppresses
+                // the palm-facing system gesture. This is more reliable for far UI than raw joint distance.
+                bool systemGesture = (((MetaAimFlags)aim.aimFlags.ReadValue()) & MetaAimFlags.SystemGesture) != 0;
+                _isPerformed = !systemGesture && (aim.indexPressed.isPressed || aim.middlePressed.isPressed);
+                _currentValue = systemGesture ? 0f : Mathf.Max(aim.pinchStrengthIndex.ReadValue(), aim.pinchStrengthMiddle.ReadValue());
+            }
+            else if (!hasJointData && _fallbackInput != null)
             {
                 _isPerformed = _fallbackInput.ReadIsPerformed();
                 _currentValue = _fallbackInput.ReadValue();

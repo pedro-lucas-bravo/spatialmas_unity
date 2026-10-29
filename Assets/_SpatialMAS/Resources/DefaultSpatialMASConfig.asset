@@ -19,8 +19,12 @@ MonoBehaviour:
   httpLogServerPort: 8080
   autoStartRecording: 1
   telemetrySampleRateHz: 50
-  worldScale: 0.2
-  originOffset: {x: 0, y: 1.2, z: 0.8}
+  scenarioCenter: {x: 0, y: 1.2, z: 0.8}
+  scenarioLayout: 0
+  calibrationPosition: {x: 0, y: 0, z: 0}
+  calibrationRotation: {x: 0, y: 0, z: 0, w: 1}
+  calibrationVisible: 1
+  calibrationLocked: 1
   defaultXRMode: 0
   targetRefreshRate: 90
   lockAudioListenerToHead: 1

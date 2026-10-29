@@ -1,13 +1,15 @@
 using SpatialMAS.Agents;
 using SpatialMAS.Core;
 using SpatialMAS.XR;
+using UnityEngine;
 
 namespace SpatialMAS.Scenarios
 {
     public struct ScenarioContext
     {
         public SimulationCommandBus Bus;
-        public SpatialCoordinateMapper CoordinateMapper;
+        public Vector3 ScenarioCenter;
+        public ScenarioLayout Layout;
         public AgentManager AgentManager;
         public XRUserEmbodimentBridge Embodiment;
     }
@@ -28,9 +30,4 @@ namespace SpatialMAS.Scenarios
         void ApplyPreset(int presetIndex);
     }
 
-    /// <summary>Rebases simulation state when the arena's spatial calibration changes.</summary>
-    public interface ISpatialFrameAwareScenario
-    {
-        void ApplySpatialFrameChange(SpatialFrameChange change);
-    }
 }

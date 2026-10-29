@@ -26,7 +26,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private float _paramK = -0.75f; // Default: Active Phase Wave
         private float _speedMultiplier = 1.2f;
 
-        private Vector3[] _localPositions; // Normalized simulation coordinates (~ -1.5 to +1.5)
+        private Vector3[] _positions; // Actual Unity-world positions in meters
+        private float _interactionLengthMeters = 0.5f;
         private float[] _phases;           // In radians [0, 2*PI)
         private float[] _naturalFreqs;
 
@@ -45,34 +46,37 @@ namespace SpatialMAS.Scenarios.BuiltIn
         {
             if (_ctx.Bus == null) return;
 
-            float worldScale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
-            float sphereRadius = Mathf.Clamp(0.28f * worldScale, 0.035f, 0.14f);
+            bool room = _ctx.Layout == ScenarioLayout.RoomScale;
+            float sphereSizeMeters = room ? 0.12f : 0.056f;
+            float cubeSizeMeters = room ? 0.15f : 0.07f;
+            _interactionLengthMeters = room ? 1.5f : 0.5f;
 
             int sphereCount = Mathf.Max(2, _count - _interactiveCubes);
-            _ctx.Bus.InstantiateAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, sphereCount, sphereRadius, "127.0.0.1", 6012);
+            _ctx.Bus.InstantiateAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, sphereCount, sphereSizeMeters, "127.0.0.1", 6012);
 
             if (_interactiveCubes > 0)
             {
                 int[] cubeIds = new int[_interactiveCubes];
                 for (int i = 0; i < _interactiveCubes; i++) cubeIds[i] = sphereCount + i;
-                _ctx.Bus.AddAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, sphereRadius * 1.25f, "127.0.0.1", 6012, cubeIds);
+                _ctx.Bus.AddAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, cubeSizeMeters, "127.0.0.1", 6012, cubeIds);
                 for (int i = 0; i < cubeIds.Length; i++)
                 {
                     _ctx.Bus.SetAgentInteractable(cubeIds[i], true);
                 }
             }
 
-            _localPositions = new Vector3[_count];
+            _positions = new Vector3[_count];
             _phases = new float[_count];
             _naturalFreqs = new float[_count];
 
             var rng = new System.Random(101);
             for (int i = 0; i < _count; i++)
             {
-                _localPositions[i] = new Vector3(
+                _positions[i] = _ctx.ScenarioCenter + new Vector3(
                     (float)(rng.NextDouble() * 1.6 - 0.8),
                     (float)(rng.NextDouble() * 1.6 - 0.8),
-                    (float)(rng.NextDouble() * 1.6 - 0.8));
+                    (float)(rng.NextDouble() * 1.6 - 0.8)) * _interactionLengthMeters;
+                _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
                 _phases[i] = (float)(rng.NextDouble() * Mathf.PI * 2.0);
                 _naturalFreqs[i] = 1.2f + (float)(rng.NextDouble() * 0.25 - 0.125);
 
@@ -87,26 +91,24 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
         public void OnScenarioTick(float deltaTime)
         {
-            if (_ctx.Bus == null || _localPositions == null || _localPositions.Length != _count) return;
+            if (_ctx.Bus == null || _positions == null || _positions.Length != _count) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.04f) * _speedMultiplier;
-            Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
-            float arenaScale = (_ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f) * 2.5f;
-            Quaternion arenaRotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
+            Vector3 origin = _ctx.ScenarioCenter;
 
-            // Sync user-grabbed cubes from world space back into local Swarmalator coordinates
+            // User-grabbed cubes and autonomous agents share the same world-meter coordinate system.
             for (int i = 0; i < _count; i++)
             {
                 if (_ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var agent) && agent != null && agent.IsGrabbedByUser)
                 {
-                    _localPositions[i] = Quaternion.Inverse(arenaRotation) * (agent.transform.position - origin) / Mathf.Max(0.0001f, arenaScale);
+                    _positions[i] = agent.transform.position;
                 }
             }
 
             float[] prevPhases = new float[_count];
             System.Array.Copy(_phases, prevPhases, _count);
 
-            StepSwarmalators(_localPositions, _phases, _naturalFreqs, _paramJ, _paramK, dt);
+            StepSwarmalators(_positions, _phases, _naturalFreqs, _paramJ, _paramK, dt, _interactionLengthMeters);
 
             for (int i = 0; i < _count; i++)
             {
@@ -116,8 +118,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
                 if (!isGrabbed)
                 {
-                    Vector3 worldPos = origin + arenaRotation * (_localPositions[i] * arenaScale);
-                    _ctx.Bus.SetAgentPositionUnity(i, worldPos);
+                    _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
                 }
 
                 float normPhase = Mathf.Repeat(_phases[i] / (2.0f * Mathf.PI), 1.0f);
@@ -127,7 +128,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 // Trigger pentatonic note when oscillator phase wraps past 2*PI -> 0
                 if (_phases[i] < prevPhases[i])
                 {
-                    float radialDist = Mathf.Clamp01(_localPositions[i].magnitude / 1.5f);
+                    float radialDist = Mathf.Clamp01(Vector3.Distance(_positions[i], origin) / (_interactionLengthMeters * 1.5f));
                     int noteIdx = Mathf.Clamp(Mathf.RoundToInt((1.0f - radialDist) * (s_PentatonicNotes.Length - 1)), 0, s_PentatonicNotes.Length - 1);
                     _ctx.Bus.SetAgentSynthNote(i, 1, s_PentatonicNotes[noteIdx], 90);
                 }
@@ -135,7 +136,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
         }
 
         /// <summary>
-        /// Pure mathematical ODE step for 3D Swarmalators (callable from EditMode unit tests).
+        /// Pure mathematical ODE step for 3D Swarmalators in meters (callable from EditMode unit tests).
+        /// interactionLengthMeters sets the physical attraction/repulsion length; it does not transform coordinates.
         /// </summary>
         public static void StepSwarmalators(
             Vector3[] positions,
@@ -143,8 +145,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
             float[] naturalFreqs,
             float J,
             float K,
-            float dt)
+            float dt,
+            float interactionLengthMeters = 0.5f)
         {
+            float length = Mathf.Max(0.001f, interactionLengthMeters);
             int n = positions.Length;
             if (n <= 1) return;
 
@@ -161,20 +165,20 @@ namespace SpatialMAS.Scenarios.BuiltIn
                 {
                     if (i == j) continue;
                     Vector3 diff = positions[j] - positions[i];
-                    float distSqr = diff.sqrMagnitude + 0.015f; // Softening to avoid singularity
+                    float distSqr = diff.sqrMagnitude + 0.015f * length * length; // Physical softening length avoids singularity
                     float dist = Mathf.Sqrt(distSqr);
                     float phaseDiff = phases[j] - phases[i];
 
                     // Spatial attraction (1 + J*cos(theta_j - theta_i)) - repulsion (1 / dist^2)
                     Vector3 unit = diff / dist;
-                    float spatialFactor = (1.0f + J * Mathf.Cos(phaseDiff)) - (1.0f / distSqr);
+                    float spatialFactor = (1.0f + J * Mathf.Cos(phaseDiff)) - (length * length / distSqr);
                     posSum += unit * spatialFactor;
 
                     // Phase coupling sin(theta_j - theta_i) / dist
-                    thetaSum += Mathf.Sin(phaseDiff) / dist;
+                    thetaSum += Mathf.Sin(phaseDiff) * length / dist;
                 }
 
-                dPos[i] = posSum * invN;
+                dPos[i] = posSum * invN * length;
                 float w0 = (naturalFreqs != null && i < naturalFreqs.Length) ? naturalFreqs[i] : 1.0f;
                 dTheta[i] = w0 + (K * invN * thetaSum);
             }

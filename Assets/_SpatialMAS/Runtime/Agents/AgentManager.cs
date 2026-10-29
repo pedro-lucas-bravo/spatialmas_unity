@@ -22,7 +22,6 @@ namespace SpatialMAS.Agents
         private readonly Stack<AgentEntity> _agentPool = new Stack<AgentEntity>(256);
 
         private SimulationCommandBus _bus;
-        private SpatialCoordinateMapper _mapper;
         private Transform _agentsRoot;
         private bool _showAgentIds;
         private int _nextAutoId;
@@ -37,11 +36,9 @@ namespace SpatialMAS.Agents
             set => HandleSetShowAgentIds(value);
         }
 
-        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null, Material translucentMaterial = null,
-            SpatialCoordinateMapper mapper = null)
+        public void Initialize(SimulationCommandBus bus, Material defaultMaterial = null, Material translucentMaterial = null)
         {
             _bus = bus;
-            _mapper = mapper;
             if (defaultMaterial != null) _defaultAgentMaterial = defaultMaterial;
             if (translucentMaterial != null) _translucentRadiusMaterial = translucentMaterial;
 
@@ -63,8 +60,9 @@ namespace SpatialMAS.Agents
                 _bus.OnRemoveAgents += HandleRemoveAgents;
                 _bus.OnAddAgentsAutomatically += HandleAddAgentsAutomatically;
                 _bus.OnRemoveLastAgents += HandleRemoveLastAgents;
-                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
                 _bus.OnSetAgentPositionUnity += HandleSetAgentPosition;
+                _bus.OnSetAgentRotationUnity += HandleSetAgentRotation;
+                _bus.OnSetAgentSizeMeters += HandleSetAgentSize;
                 _bus.OnSetBatchAgentPositionsUnity += HandleSetBatchAgentPositions;
                 _bus.OnSetAgentSpeedMetersPerSec += HandleSetAgentSpeed;
                 _bus.OnSetAgentDirectionUnity += HandleSetAgentDirection;
@@ -92,8 +90,9 @@ namespace SpatialMAS.Agents
                 _bus.OnRemoveAgents -= HandleRemoveAgents;
                 _bus.OnAddAgentsAutomatically -= HandleAddAgentsAutomatically;
                 _bus.OnRemoveLastAgents -= HandleRemoveLastAgents;
-                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
                 _bus.OnSetAgentPositionUnity -= HandleSetAgentPosition;
+                _bus.OnSetAgentRotationUnity -= HandleSetAgentRotation;
+                _bus.OnSetAgentSizeMeters -= HandleSetAgentSize;
                 _bus.OnSetBatchAgentPositionsUnity -= HandleSetBatchAgentPositions;
                 _bus.OnSetAgentSpeedMetersPerSec -= HandleSetAgentSpeed;
                 _bus.OnSetAgentDirectionUnity -= HandleSetAgentDirection;
@@ -207,7 +206,7 @@ namespace SpatialMAS.Agents
 
             entity.transform.SetParent(_agentsRoot, false);
             entity.Configure(id, shape, movMode, scaleMeters, _bus);
-            entity.PlaceImmediately(_mapper != null ? _mapper.OriginOffset : Vector3.zero);
+            entity.PlaceImmediately(Vector3.zero);
             entity.SetShowIdLabel(_showAgentIds);
             _activeAgents[id] = entity;
             _orderedAgentIds.Add(id);
@@ -262,12 +261,6 @@ namespace SpatialMAS.Agents
             }
         }
 
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
-        {
-            foreach (AgentEntity entity in _activeAgents.Values)
-                entity.ApplySpatialFrameChange(change);
-        }
-
         private void HandleRemoveAgents(int[] ids)
         {
             if (ids == null || ids.Length == 0)
@@ -291,6 +284,17 @@ namespace SpatialMAS.Agents
                     }
                 }
             }
+        }
+
+        private void HandleSetAgentSize(int id, float dimensionMeters)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity)) entity.SetSizeMeters(dimensionMeters);
+        }
+
+        private void HandleSetAgentRotation(int id, Quaternion rotation)
+        {
+            if (_activeAgents.TryGetValue(id, out AgentEntity entity) && !entity.IsGrabbedByUser)
+                entity.transform.rotation = rotation;
         }
 
         private void HandleSetAgentPosition(int id, Vector3 posUnity)

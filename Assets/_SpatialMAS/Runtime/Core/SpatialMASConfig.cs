@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace SpatialMAS.Core
 {
+    public enum ScenarioLayout { Compact = 0, RoomScale = 1 }
+
     public enum AgentShapeType
     {
         Sphere = 0,
@@ -65,13 +67,16 @@ namespace SpatialMAS.Core
         [Range(10f, 90f)]
         public float telemetrySampleRateHz = 50f;
 
-        [Header("Spatial Coordinate Frame & Scale")]
-        [Tooltip("Multiplier applied after millimeter-to-meter (0.001) conversion. 1.0 = Room-Scale, 0.20 = Tabletop/Lab Arena Scale.")]
-        [Range(0.05f, 5.0f)]
-        public float worldScale = 0.20f;
+        [Header("Physical Scenario Placement")]
+        [Tooltip("Spawn center for the next built-in scenario, in Unity-world meters. Does not redefine the coordinate frame.")]
+        public Vector3 scenarioCenter = new Vector3(0f, 1.2f, 0.8f);
+        public ScenarioLayout scenarioLayout = ScenarioLayout.Compact;
 
-        [Tooltip("Default center of the simulation arena in Unity world space (meters). Chest height (1.2m) in front of user (0.8m).")]
-        public Vector3 originOffset = new Vector3(0f, 1.2f, 0.8f);
+        [Header("External Calibration Reference (Unity World)")]
+        public Vector3 calibrationPosition = Vector3.zero;
+        public Quaternion calibrationRotation = Quaternion.identity;
+        public bool calibrationVisible = true;
+        public bool calibrationLocked = true;
 
         [Header("XR & Multiplatform Display")]
         [Tooltip("Default display mode on startup (0 = MR Passthrough, 1 = VR Immersive Studio).")]
@@ -108,10 +113,12 @@ namespace SpatialMAS.Core
             public int defaultRemotePort = 6012;
             public int httpLogServerPort = 8080;
             public bool autoStartRecording = true;
-            public float worldScale = 0.20f;
-            public float originX = 0f;
-            public float originY = 1.2f;
-            public float originZ = 0.8f;
+            public Vector3 scenarioCenter = new Vector3(0f, 1.2f, 0.8f);
+            public int scenarioLayout = 0;
+            public Vector3 calibrationPosition = Vector3.zero;
+            public Quaternion calibrationRotation = Quaternion.identity;
+            public bool calibrationVisible = true;
+            public bool calibrationLocked = true;
             public int defaultXRMode = 0;
             public bool lockAudioListenerToHead = true;
             public bool streamUserPoseOverOsc = true;
@@ -130,27 +137,54 @@ namespace SpatialMAS.Core
                 string path = GetJsonConfigPath();
                 if (!File.Exists(path)) return;
 
-                string json = File.ReadAllText(path);
-                JsonConfigData data = JsonUtility.FromJson<JsonConfigData>(json);
-                if (data == null) return;
-
-                oscListenPort = data.oscListenPort > 0 ? data.oscListenPort : oscListenPort;
-                if (!string.IsNullOrWhiteSpace(data.defaultRemoteIp)) defaultRemoteIp = data.defaultRemoteIp;
-                defaultRemotePort = data.defaultRemotePort > 0 ? data.defaultRemotePort : defaultRemotePort;
-                httpLogServerPort = data.httpLogServerPort > 0 ? data.httpLogServerPort : httpLogServerPort;
-                autoStartRecording = data.autoStartRecording;
-                worldScale = Mathf.Clamp(data.worldScale, 0.05f, 5.0f);
-                originOffset = new Vector3(data.originX, data.originY, data.originZ);
-                defaultXRMode = (XRDisplayMode)Mathf.Clamp(data.defaultXRMode, 0, 1);
-                lockAudioListenerToHead = data.lockAudioListenerToHead;
-                streamUserPoseOverOsc = data.streamUserPoseOverOsc;
-                startupScenarioIndex = Mathf.Clamp(data.startupScenarioIndex, 0, 5);
+                ApplyJsonOverrides(File.ReadAllText(path));
             }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[SpatialMASConfig] Failed to load JSON config override: {ex.Message}");
             }
         }
+
+        public void ApplyJsonOverrides(string json)
+        {
+            // Start with the actual asset defaults so a partial or legacy JSON cannot zero new fields.
+            var data = new JsonConfigData
+            {
+                oscListenPort = oscListenPort, defaultRemoteIp = defaultRemoteIp,
+                defaultRemotePort = defaultRemotePort, httpLogServerPort = httpLogServerPort,
+                autoStartRecording = autoStartRecording, scenarioCenter = scenarioCenter,
+                scenarioLayout = (int)scenarioLayout, calibrationPosition = calibrationPosition,
+                calibrationRotation = calibrationRotation, calibrationVisible = calibrationVisible,
+                calibrationLocked = calibrationLocked, defaultXRMode = (int)defaultXRMode,
+                lockAudioListenerToHead = lockAudioListenerToHead, streamUserPoseOverOsc = streamUserPoseOverOsc,
+                startupScenarioIndex = startupScenarioIndex
+            };
+            JsonUtility.FromJsonOverwrite(json, data);
+            // Legacy worldScale/originX/Y/Z are ignored; reference pose never changes world coordinates.
+            if (!Finite(data.scenarioCenter) || !Finite(data.calibrationPosition) ||
+                !Finite(new Vector3(data.calibrationRotation.x, data.calibrationRotation.y, data.calibrationRotation.z)) ||
+                float.IsNaN(data.calibrationRotation.w) || float.IsInfinity(data.calibrationRotation.w) ||
+                Quaternion.Dot(data.calibrationRotation, data.calibrationRotation) < 0.000001f)
+                throw new ArgumentException("Scenario/reference poses must be finite and rotation must be nonzero.");
+            oscListenPort = data.oscListenPort > 0 ? data.oscListenPort : oscListenPort;
+            if (!string.IsNullOrWhiteSpace(data.defaultRemoteIp)) defaultRemoteIp = data.defaultRemoteIp;
+            defaultRemotePort = data.defaultRemotePort > 0 ? data.defaultRemotePort : defaultRemotePort;
+            httpLogServerPort = data.httpLogServerPort > 0 ? data.httpLogServerPort : httpLogServerPort;
+            autoStartRecording = data.autoStartRecording;
+            scenarioCenter = data.scenarioCenter;
+            scenarioLayout = (ScenarioLayout)Mathf.Clamp(data.scenarioLayout, 0, 1);
+            calibrationPosition = data.calibrationPosition;
+            calibrationRotation = data.calibrationRotation.normalized;
+            calibrationVisible = data.calibrationVisible;
+            calibrationLocked = data.calibrationLocked;
+            defaultXRMode = (XRDisplayMode)Mathf.Clamp(data.defaultXRMode, 0, 1);
+            lockAudioListenerToHead = data.lockAudioListenerToHead;
+            streamUserPoseOverOsc = data.streamUserPoseOverOsc;
+            startupScenarioIndex = Mathf.Clamp(data.startupScenarioIndex, 0, 5);
+        }
+
+        private static bool Finite(Vector3 value) => !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y) && !float.IsNaN(value.z) && !float.IsInfinity(value.z);
 
         public void SaveJsonOverrides()
         {
@@ -163,10 +197,12 @@ namespace SpatialMAS.Core
                     defaultRemotePort = defaultRemotePort,
                     httpLogServerPort = httpLogServerPort,
                     autoStartRecording = autoStartRecording,
-                    worldScale = worldScale,
-                    originX = originOffset.x,
-                    originY = originOffset.y,
-                    originZ = originOffset.z,
+                    scenarioCenter = scenarioCenter,
+                    scenarioLayout = (int)scenarioLayout,
+                    calibrationPosition = calibrationPosition,
+                    calibrationRotation = calibrationRotation,
+                    calibrationVisible = calibrationVisible,
+                    calibrationLocked = calibrationLocked,
                     defaultXRMode = (int)defaultXRMode,
                     lockAudioListenerToHead = lockAudioListenerToHead,
                     streamUserPoseOverOsc = streamUserPoseOverOsc,

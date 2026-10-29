@@ -5,13 +5,13 @@
 SpatialMAS uses strict **Assembly Definitions (`.asmdef`)** under `Assets/_SpatialMAS/` for fast incremental compilation and clean test isolation:
 
 - **`SpatialMAS.Runtime.asmdef`** (`Assets/_SpatialMAS/Runtime/`):
-  - `Core/`: `SpatialMASBootstrapper`, `SimulationCommandBus`, `SpatialCoordinateMapper`, `SpatialMASConfig`
+  - `Core/`: `SpatialMASBootstrapper`, `SimulationCommandBus`, `SpatialCoordinateMapper`, `SpatialMASConfig`, `SpatialCalibrationReference`
   - `Networking/`: `OscPacketCodec`, `OscUdpServer`, `OscUdpClient`, `OscProtocolRouter`
   - `Audio/`: `IAgentAudioSynth`, `NativeDspSynthesizer`, `SpatialAudioBankPlayer`, `AudioListenerProxy`
   - `Agents/`: `AgentManager`, `AgentEntity`, `AgentVisualController`, `ProceduralMeshFactory`
   - `Environment/`: `BoundaryManager`, `EnvironmentArrowManager`
   - `LocalComm/`: `LocalCommManager`
-  - `XR/`: `XRPlatformAdapter`, `XRModeSwitcher`, `XRInteractionRigSetup`, `XRTrackedHandInteractor`, `XRHandTrackingProcessor`, `XRHandPinchHysteresis`, `XRUserEmbodimentBridge`, `DesktopInteractionRig`
+  - `XR/`: `XRPlatformAdapter`, `XRModeSwitcher`, `XRInteractionRigSetup`, `XRTrackedHandInteractor`, `XRHandSkeletonVisual`, `XRHandTrackingProcessor`, `XRHandPinchHysteresis`, `XRUserEmbodimentBridge`, `DesktopInteractionRig`
   - `Scenarios/`: `IScenarioModule`, `ScenarioManager`, and `BuiltIn/` scenarios (`0..5`)
   - `Logging/`: `DataRecordingService`, `EmbodimentTelemetrySampler`, `WifiLogExportServer`
   - `UI/`: `SpatialResearcherHUD`
@@ -48,9 +48,17 @@ Use the **`SpatialMAS > Build Target`** menu in Unity Editor:
 - **Windows / macOS / Linux Standalone**: Select the corresponding desktop target under `SpatialMAS > Build Target`.
 
 ### How Multiplatform Differences Are Handled Automatically
-- [`XRPlatformAdapter.cs`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) detects whether the app is running on **Meta Quest (`Android`)**, **Apple Vision Pro (`visionOS`)**, **Generic OpenXR**, or **Desktop** at startup. On Desktop without an HMD, it disables `TrackedPoseDriver` and `ARSession` so `XRSimulation` never interferes with [`DesktopInteractionRig.cs`](../Assets/_SpatialMAS/Runtime/XR/DesktopInteractionRig.cs).
-- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) reads optical finger joints or fallback controller actions. Hand poses are transformed from tracking space through the rig's Camera Offset. Missing hand tracking does not create a repulsion field at a stale position.
-- The generated world panel uses `TrackedDeviceGraphicRaycaster` and `XRUIInputModule` for scenario, preset, pause/reset, MR/VR, recording, IDs, scale, and arena placement controls. The desktop IMGUI panel remains available.
+- [`XRPlatformAdapter.cs`](../Assets/_SpatialMAS/Runtime/XR/XRPlatformAdapter.cs) rechecks running displays, including delayed Link initialization, and enables tracked camera input only with an active headset. Desktop navigation yields to headset tracking. [`XRModeSwitcher.cs`](../Assets/_SpatialMAS/Runtime/XR/XRModeSwitcher.cs) independently checks Meta passthrough capability/provider availability before enabling AR managers and removing the preview grid. `DisplayStatus` distinguishes VR, MR starting, active MR, desktop preview, and unavailable MR; a requested MR mode alone does not mean passthrough is running.
+- [`XRHandPinchHysteresis.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandPinchHysteresis.cs) prefers valid native Meta Aim pointing poses and classified index/middle pinch input, suppressing system gestures. Optical joint pinch hysteresis and configured controller actions provide fallbacks. Physical hand telemetry retains joint/root poses transformed through Camera Offset; it does not substitute the aiming pose or a stale untracked hand.
+- [`XRHandSkeletonVisual.cs`](../Assets/_SpatialMAS/Runtime/XR/XRHandSkeletonVisual.cs) retains its component name/GUID for scene compatibility, but now instantiates the Quest skinned hand meshes used by `helping_sources/laser-xr/Assets/Scenes/MR_HandsInteraction.unity`. The minimal asset closure is under `Assets/_SpatialMAS/Resources/Hands/`: `Models/LeftHand.fbx` and `RightHand.fbx`, the reference translucent **Unity_Hand_Medium** and **DepthOnly** materials, shaders, four shader subgraphs, and the highlight mask texture. Setup is programmatic; it does not import the complete demo rig or visual prefabs. The medium material preserves the reference settings, while the depth shader includes explicit URP stereo support. Asset provenance and license notices are in `Assets/_SpatialMAS/ThirdPartyNotices/`. `XRHandTrackingEvents` supplies Dynamic and BeforeRender updates to `XRHandSkeletonDriver` and `XRHandMeshController`, including visibility changes on tracking acquisition/loss.
+- Hand visuals share the same tracking-origin frame as interactions and recorded physical poses. The visual container stays at identity under that origin; its skeleton driver applies the tracked wrist/root pose. Do not also position its parent at the wrist/aim pose or add a manual calibration offset, which would apply tracking twice. Provider wrist/tip pose comparisons validate this coordinate path; visual overlap with real hands in passthrough remains an in-headset check.
+- The generated world panel uses `TrackedDeviceGraphicRaycaster`, `XRUIInputModule`, and tracked ray/button input. Its Text/Image graphics use `Resources/Mat_SpatialMAS_WorldUI.mat` with the `SpatialMAS/World UI Stereo` shader and explicit single-pass instanced stereo handling. Runtime setup repairs canvas camera/input references and pending interactor registrations. Initial placement waits for tracked head poses, then leaves the panel anchored in the world; **Move Panel Here** repositions it. Scenario, preset, pause/reset, MR/VR, recording, IDs, next physical layout/placement, and calibration reference controls are available, alongside the desktop IMGUI panel.
+
+### Quest Link Configuration and Passthrough Diagnostics
+
+`SpatialMASEditorBuilder` enables **Composition Layers Support** explicitly alongside Meta Session/Camera features for both Standalone and Android; enabling the camera feature alone is insufficient. Editor Play uses Standalone XR settings regardless of the selected build target. Camera/pipeline HDR are disabled, and MR disables camera post-processing while clearing to transparent black. Meta's `ARCameraManager` starts the compositor passthrough layer; `ARCameraBackground` is unnecessary. See [Unity's passthrough setup](https://docs.unity3d.com/Packages/com.unity.xr.meta-openxr@2.6/manual/features/camera/passthrough.html) and [graphics settings](https://docs.unity3d.com/Packages/com.unity.xr.meta-openxr@2.6/manual/get-started/graphics-settings.html).
+
+Windows Link testing additionally requires the Meta OpenXR runtime and Link's developer passthrough/spatial-data options; restart the Editor after changing them. The headset receives compositor passthrough, while Game view can remain black behind virtual content. See [Unity's Link requirements](https://docs.unity3d.com/Packages/com.unity.xr.meta-openxr@2.6/manual/get-started/link.html) and the [setup guide's Link workflow](SETUP_AND_USAGE_GUIDE.md#411-quest-link-passthrough-in-the-windows-editor). Provider/status and generated-rig regressions are automated checks; visual passthrough, stereo UI, hand/controller interactions, and performance require a headset test.
 
 ---
 
@@ -88,7 +96,7 @@ To add a new scenario (or commercial Logic Pack):
    ```
 2. Register it in `ScenarioManager.Initialize()` via `RegisterScenario(new CustomFlockingLogicPack())`.
 
-If a scenario caches world-space state, also implement `ISpatialFrameAwareScenario.ApplySpatialFrameChange(SpatialFrameChange change)`. Transform cached positions with `TransformPosition`, velocities with `TransformVector`, orientations with `TransformRotation`, and scalar sizes with `ScaleRatio`. World managers already transform the entities, so a scenario should rebase only its own caches.
+Scenarios store world-meter state and use `ScenarioContext.ScenarioCenter` plus `ScenarioContext.Layout` for the next spawn. Layouts contain literal physical dimensions and motion defaults. There is no global scale or frame-rebasing interface. Calibration reference changes must not affect simulation state. `ScenarioManager.ParameterApplied` and `PresetApplied` record direct UI/module changes as session events. See [the coordinate and recording contract](ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract).
 
 ---
 
@@ -98,6 +106,6 @@ Every agent currently uses [`NativeDspSynthesizer.cs`](../Assets/_SpatialMAS/Run
 
 ## 6. Regression Tests
 
-Keep Unity NUnit regressions in the existing EditMode/PlayMode assemblies and run them locally through Unity CLI or Test Runner. Coverage includes recording restarts, continuous-tone ordering, XR settings and generated inputs/UI, listener ownership, desktop click/drag lifecycle, OSC targeting/movement/boundaries, arena rebasing, and scenario controls/assembly graphs. Hardware interaction and platform performance remain device checks.
+Keep Unity NUnit regressions in the existing EditMode/PlayMode assemblies and run them locally through Unity CLI or Test Runner. Coverage includes recording restarts and synchronized world samples, calibration independence/locking/history, physical layout reset stability, canonical and legacy OSC units, continuous-tone ordering, XR settings and generated inputs/UI, listener ownership, desktop click/drag lifecycle, OSC targeting/movement/boundaries, explicit physical sizes/placement, and scenario controls/assembly graphs. Hardware interaction and platform performance remain device checks.
 
 GitHub CI intentionally runs only asset/JSON integrity and Python packet/feedback tests. It installs `python-osc` and requires no Unity license, Unity Docker image, .NET SDK, NumPy, or device simulator. The live OSC verifier first requires a matching handshake and reports traffic transmission separately from runtime behavior; `--dry-run` sends no traffic.

@@ -47,6 +47,7 @@ namespace SpatialMAS.Core
         public SpatialMASConfig Config => _config;
         public SimulationCommandBus CommandBus { get; private set; }
         public SpatialCoordinateMapper CoordinateMapper { get; private set; }
+        public SpatialCalibrationReference CalibrationReference { get; private set; }
         public OscUdpServer OscServer { get; private set; }
         public OscUdpClient OscClient { get; private set; }
         public OscProtocolRouter OscRouter { get; private set; }
@@ -87,11 +88,10 @@ namespace SpatialMAS.Core
 
             // 1. Core Bus & Coordinate Mapper
             CommandBus = new SimulationCommandBus();
-            CoordinateMapper = new SpatialCoordinateMapper(_config.worldScale, _config.originOffset);
-            CoordinateMapper.OnFrameChanged += CommandBus.ApplySpatialFrameChange;
-
-            CommandBus.OnSetWorldScale += s => CoordinateMapper.WorldScale = s;
-            CommandBus.OnSetOriginOffset += o => CoordinateMapper.OriginOffset = o;
+            CoordinateMapper = new SpatialCoordinateMapper();
+            CalibrationReference = GetOrAddChildComponent<SpatialCalibrationReference>("CalibrationReference");
+            CalibrationReference.Initialize(CommandBus, _config.calibrationPosition, _config.calibrationRotation,
+                _config.calibrationVisible, _config.calibrationLocked);
 
             // 2. Multiplatform XR Adapter & Mode Switcher
             PlatformAdapter = GetOrAddComponent<XRPlatformAdapter>(gameObject);
@@ -131,7 +131,7 @@ namespace SpatialMAS.Core
 
             // 4. Pooled World Entities & 3D Audio Listener Proxy
             AgentManager = GetOrAddChildComponent<AgentManager>("AgentManager");
-            AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial, CoordinateMapper);
+            AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial);
 
             BoundaryManager = GetOrAddChildComponent<BoundaryManager>("BoundaryManager");
             BoundaryManager.Initialize(CommandBus, AgentManager, _boundaryMaterial);
@@ -156,7 +156,7 @@ namespace SpatialMAS.Core
             };
 
             // 6. Data Logging & Wi-Fi HTTP Export Server
-            RecordingService = new DataRecordingService(CommandBus);
+            RecordingService = new DataRecordingService(CommandBus, calibrationReference: CalibrationReference, config: _config);
             if (_config.autoStartRecording)
             {
                 RecordingService.StartRecording();
@@ -167,7 +167,8 @@ namespace SpatialMAS.Core
 
             // 7. Scenario Manager (Built-In Scenarios 0..5)
             ScenarioManager = GetOrAddChildComponent<ScenarioManager>("ScenarioManager");
-            ScenarioManager.Initialize(CommandBus, CoordinateMapper, AgentManager, EmbodimentBridge, _config.startupScenarioIndex);
+            ScenarioManager.Initialize(CommandBus, _config.scenarioCenter, AgentManager, EmbodimentBridge,
+                _config.startupScenarioIndex, _config.scenarioLayout);
 
             TelemetrySampler = GetOrAddChildComponent<EmbodimentTelemetrySampler>("EmbodimentTelemetrySampler");
             TelemetrySampler.Initialize(
@@ -176,8 +177,12 @@ namespace SpatialMAS.Core
                 ModeSwitcher,
                 ScenarioManager,
                 AgentManager,
-                CoordinateMapper,
-                _config.telemetrySampleRateHz);
+                CalibrationReference,
+                _config.telemetrySampleRateHz,
+                PlatformAdapter,
+                _mainCamera,
+                BoundaryManager,
+                ArrowManager);
 
             // 8. Spatial Researcher HUD
             ResearcherHud = GetOrAddChildComponent<SpatialResearcherHUD>("SpatialResearcherHUD");
@@ -192,7 +197,8 @@ namespace SpatialMAS.Core
                 OscClient,
                 RecordingService,
                 WifiLogServer,
-                DesktopRig);
+                DesktopRig,
+                CalibrationReference);
         }
 
         private void Update()

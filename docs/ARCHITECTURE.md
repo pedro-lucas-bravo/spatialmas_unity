@@ -20,7 +20,7 @@ flowchart TD
     subgraph Runtime["SpatialMAS.Runtime Assembly (Unity 6000.6.6f1)"]
         Boot["SpatialMASBootstrapper\n(Composition Root)"]
         Bus["SimulationCommandBus\n(Unified Event & Command Router)"]
-        Mapper["SpatialCoordinateMapper\n((X,Z,Y) mm <-> m + WorldScale + OriginOffset)"]
+        Mapper["SpatialCoordinateMapper\nLegacy XZY mm / Canonical XYZ mm <-> Unity meters"]
 
         subgraph Net["Networking & Telemetry"]
             UdpSrv["OscUdpServer\n(Async Socket, 1MB Buffer, ConcurrentQueue)"]
@@ -112,10 +112,44 @@ flowchart TD
 | **Unity Audio DSP Thread** | `NativeDspSynthesizer.OnAudioFilterRead` | Reads `volatile` synth parameters (`_targetFrequencyHz`, `_targetGain`, `_filterCutoffHz`, `_adsrStageInt`) with zero locks or heap allocations. |
 | **HTTP Export Thread Pool** | `WifiLogExportServer.HandleClientAsync` | Calls `DataRecordingService.Flush()` (protected by `_lock`) and reads CSV files using `FileShare.ReadWrite`. |
 
-## 5. Arena Calibration and Session Integrity
+## 5. Physical Coordinate and Calibration Contract
 
-`SpatialCoordinateMapper.OnFrameChanged` carries the previous/new origin, rotation delta, and scale ratio through `SimulationCommandBus.OnSpatialFrameChanged`. World managers transform existing entities and pending communication wavefronts. `ISpatialFrameAwareScenario` implementations transform their cached positions, velocities, radii, and orbit bases. A later simulation tick therefore stays in the calibrated frame. Physical participant tracking remains in room space.
+Unity world space is the authoritative data frame: X right, Y up, Z forward, left-handed; positions/dimensions are meters, velocities use meters/second, orientations are world quaternions ordered `x,y,z,w`, and durations use seconds unless labelled milliseconds. No runtime world scale or implicit origin offset exists. Mesh hierarchies may use local transforms, but APIs and recording expose world quantities. Agent uniform size is a sphere diameter, cube edge, or unit-mesh dimension; sphere boundary size is a radius. Object size changes do not move objects or change their speed, repulsion, or audio attenuation settings.
 
-`AudioListenerProxy` owns the active listener and disables the old camera listener. Head lock copies the camera pose; detached OSC control moves the real listener and follows arena calibration changes.
+Legacy OSC positions use physical millimeters with Y/Z swapped; `/world/...` positions use physical millimeters with Unity XYZ axes. Neither adapter applies a calibration transform. `/xr/user/pose` and `/xr/hands/pose` use Unity XYZ millimeters; head quaternion and position share the same basis. The old `/xr/scale` and `/xr/origin` operations return `/error` instead of silently modifying the experiment. Old JSON scale/origin settings are ignored.
 
-Recording creates paired filenames with millisecond timestamps and unique session IDs using `FileMode.CreateNew`. Streams are published as an active session only after both open successfully. Optional session tags are sanitized, and multiline CSV fields are quoted. Writes are buffered and synchronized, but not performed on a dedicated asynchronous writer thread.
+`SpatialCalibrationReference` is a separate unit-scale frame, never the parent of the simulation or participant. Its marker can be shown/hidden, unlocked, translated, rotated, and locked through desktop/XR controls or OSC. Hiding graphics does not deactivate its pose or history. A reference change increments its revision and is recorded without transforming existing world poses. Defaults: reference at world zero/identity, visible, locked.
+
+For a reference pose `(t_ref, q_ref)` in Unity world coordinates:
+
+```text
+p_reference_m = inverse(q_ref) * (p_world_m - t_ref)
+q_reference   = inverse(q_ref) * q_world
+```
+
+Both sides of these formulas use Unity axes. An external system with different axes/handedness requires a documented basis adapter; millimeters require a factor of 1000 at that boundary. To establish spatial alignment, observe the same physical reference frame in Unity and the external system. An arbitrarily placed virtual marker does not automatically calibrate a motion-capture system. This spatial reference does not synchronize external clocks.
+
+Scenario placement is an ordinary world-meter spawn center. Compact/RoomScale layouts contain explicit physical dimensions and model defaults. Changing the next center/layout leaves the current scene unchanged and takes effect on the next load/reset. There is no multiplication of the participant's physical interaction properties by a scenario layout.
+
+## 6. Recording Schema Version 2
+
+Each session creates five CSVs and one JSON sharing a unique session ID. Files use `CreateNew`; rapid restart cannot truncate an earlier session. Every session starts with a calibration snapshot; its first sampled frame records the current scenario identity/layout/centers/pause state and tracking frame, including after a stop/start within one frame.
+
+| File prefix | Contents |
+| --- | --- |
+| `osc_traffic_` | Raw inbound/outbound protocol messages; interpretation follows each endpoint's units and axis convention. |
+| `xr_embodiment_` | World head/hand poses, full quaternions, tracking flags, desktop/XR source, physical repeller settings, active scenario/layout/center, reference ID/revision, tracking revision, and XR-origin pose/scale. |
+| `object_state_` | Actual sampled agents, boundaries, and active arrows: kind/ID, world pose, dimensions, movement mode, grabbed/interactable flags, and calibration/tracking revisions. |
+| `calibration_` | Initial reference snapshot and every reference pose/visibility/lock revision. |
+| `session_events_` | Recording lifecycle, scenario states/parameters/presets, calibration changes, and tracking-frame changes. |
+| `session_metadata_` (`.json`) | Schema version, coordinate/unit/rotation conventions, initial reference, configuration snapshot, file inventory, and sampling semantics. |
+
+Join participant and object rows by `(SessionId, SampleId)`. Their `TimestampISO`, `ElapsedMs`, and `Frame` are shared within a sample. `ElapsedMs` is monotonic session time; UTC provides a wall-clock label. Sampling occurs after simulation updates in LateUpdate, targets the configured frequency, and emits at most one observation per frame. These are Unity observations, not hardware acquisition timestamps or uniformly spaced synthetic samples. Estimate motion using actual timestamps.
+
+Object dimensions are the mesh's local bounds multiplied by its world scale, measured along the object's own axes; boundary dimensions are full extents/diameters. They are not rotated world-axis AABBs. Text floats use round-trip precision; raw Unity floats remain the source precision.
+
+Untracked hands may contain fallback poses: exclude rows with their tracked flag false from measured-hand analyses. `HeadSource=DesktopCamera` identifies simulation; `XRUntracked` indicates unavailable head tracking. `CoordinatesValid` checks the unit-scale XR hierarchy; it does not certify tracking accuracy or external calibration. Non-unit XR scale is recorded and flagged rather than silently normalized. Origin transform changes and provider `trackingOriginUpdated` events increment the tracking revision. Segment/revalidate external calibration across tracking-origin changes.
+
+Config JSON in metadata is a configuration snapshot, while sampled active scenario state and subsequent events describe runtime changes. The initial scenario event does not snapshot every live behavior parameter or a preset applied before recording; parameter/preset events capture changes made during recording. Start recording before applying experimental settings when their history is needed. Raw world data is retained; reference-relative coordinates can be derived later using the matching reference revision. Old recordings are not converted and must retain their original schema interpretation.
+
+The proxy owns the active `AudioListener`; head lock copies the camera pose and detached control accepts an explicit world pose. Calibration changes affect neither listening pose nor audio parameters. Buffered file writes are synchronized, not performed on a dedicated asynchronous writer thread.

@@ -9,7 +9,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// Autonomous agents flock smoothly within an arena while physically dispersing around the XR participant's
     /// head and hands using Helbing's Social Force Model, emitting proximity-mapped spatial audio cues.
     /// </summary>
-    public class CrowdAvoidanceScenario : IScenarioModule, ISpatialFrameAwareScenario
+    public class CrowdAvoidanceScenario : IScenarioModule
     {
         public int ScenarioId => 1;
         public string DisplayName => "1. Crowd Navigation & Human Avoidance";
@@ -21,6 +21,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private float _cruiseSpeed = 0.65f;
         private float _personalSpaceRadius = 0.65f;
         private float _humanRepulsionStrength = 2.2f;
+        private ScenarioLayout _lastLayout;
+        private bool _hasLayout;
 
         private Vector3[] _positions;
         private Vector3[] _velocities;
@@ -31,6 +33,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
         public void OnScenarioStart(ScenarioContext context)
         {
+            if (!_hasLayout || _lastLayout != context.Layout)
+                _cruiseSpeed = context.Layout == ScenarioLayout.RoomScale ? 1.2f : 0.65f;
+            _lastLayout = context.Layout;
+            _hasLayout = true;
             _ctx = context;
             if (_ctx.Embodiment != null)
             {
@@ -44,14 +50,13 @@ namespace SpatialMAS.Scenarios.BuiltIn
         {
             if (_ctx.Bus == null) return;
 
-            Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
-            float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
-            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
-            _arenaRadiusMeters = Mathf.Clamp(6.5f * scale, 0.6f, 4.0f);
-            float agentScale = Mathf.Clamp(0.32f * scale, 0.04f, 0.18f);
+            Vector3 center = _ctx.ScenarioCenter;
+            bool room = _ctx.Layout == ScenarioLayout.RoomScale;
+            _arenaRadiusMeters = room ? 3.0f : 1.3f;
+            float agentSizeMeters = room ? 0.16f : 0.064f;
 
             _ctx.Bus.AddBoundaryUnity(1, AgentShapeType.Sphere, center, _arenaRadiusMeters);
-            _ctx.Bus.InstantiateAgents(AgentShapeType.Pyramid, AgentMovementMode.Teleport, _agentCount, agentScale, "127.0.0.1", 6012);
+            _ctx.Bus.InstantiateAgents(AgentShapeType.Pyramid, AgentMovementMode.Teleport, _agentCount, agentSizeMeters, "127.0.0.1", 6012);
 
             _positions = new Vector3[_agentCount];
             _velocities = new Vector3[_agentCount];
@@ -63,8 +68,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
             {
                 Vector3 offset = RandomInsideSphere(rng) * (_arenaRadiusMeters * 0.75f);
                 offset.y *= 0.35f; // Flattened crowd corridor layer
-                _positions[i] = center + rotation * offset;
-                _velocities[i] = rotation * (RandomInsideSphere(rng).normalized * _cruiseSpeed);
+                _positions[i] = center + offset;
+                _velocities[i] = RandomInsideSphere(rng).normalized * _cruiseSpeed;
                 _pulseTimers[i] = (float)rng.NextDouble() * 1.5f;
 
                 _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
@@ -82,7 +87,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (_ctx.Bus == null || _positions == null || _positions.Length != _agentCount) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
-            Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
+            Vector3 center = _ctx.ScenarioCenter;
             Vector3 userHead = _ctx.Embodiment != null ? _ctx.Embodiment.HeadPositionWorld : center;
             if (_ctx.Embodiment != null)
             {
@@ -283,16 +288,5 @@ namespace SpatialMAS.Scenarios.BuiltIn
             }
         }
 
-        public void ApplySpatialFrameChange(SpatialFrameChange change)
-        {
-            if (_positions == null) return;
-            for (int i = 0; i < _positions.Length; i++)
-            {
-                _positions[i] = change.TransformPosition(_positions[i]);
-                _velocities[i] = change.TransformVector(_velocities[i]);
-            }
-            _arenaRadiusMeters *= change.ScaleRatio;
-            _cruiseSpeed *= change.ScaleRatio;
-        }
     }
 }

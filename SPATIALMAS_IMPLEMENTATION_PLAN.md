@@ -1,5 +1,7 @@
 # SpatialMAS: Master Architecture & Single-Run AI Implementation Plan
 
+> The current physical-coordinate architecture supersedes this plan's WorldScale, OriginOffset, and frame-rebasing proposals. See `docs/ARCHITECTURE.md` sections 5–6 and `docs/OSC_API_SPECIFICATION.md`.
+
 > This is the original design plan, not a release or hardware-validation report. Current behavior, supported signatures, known platform limits, and local test commands are documented in `README.md` and `docs/`. In particular, full compatibility, performance targets, and visionOS integration remain subject to validation.
 
 > [!IMPORTANT]

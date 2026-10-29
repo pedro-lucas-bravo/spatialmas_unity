@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.XR;
 using UnityEngine.XR;
+using UnityEngine.XR.OpenXR;
 
 #if UNITY_ANDROID && !UNITY_EDITOR && SPATIALMAS_META_OPENXR
 using Unity.Collections;
@@ -22,6 +23,7 @@ namespace SpatialMAS.XR
     public class XRPlatformAdapter : MonoBehaviour
     {
         [SerializeField] private float _targetRefreshRate = 90.0f;
+        private readonly List<XRDisplaySubsystem> _displays = new List<XRDisplaySubsystem>();
 
         public XRHardwarePlatform ActivePlatform { get; private set; } = XRHardwarePlatform.DesktopStandalone;
         public string ActiveDeviceName { get; private set; } = "Desktop Standalone";
@@ -42,9 +44,8 @@ namespace SpatialMAS.XR
         private void DetectPlatform()
         {
             string model = SystemInfo.deviceModel ?? string.Empty;
-            var displays = new List<XRDisplaySubsystem>();
-            SubsystemManager.GetSubsystems(displays);
-            IsXRHeadsetActive = displays.Exists(display => display != null && display.running);
+            SubsystemManager.GetSubsystems(_displays);
+            IsXRHeadsetActive = _displays.Exists(display => display != null && display.running);
 
 #if UNITY_VISIONOS
             ActivePlatform = XRHardwarePlatform.AppleVisionPro;
@@ -72,6 +73,12 @@ namespace SpatialMAS.XR
                     ActivePlatform = XRHardwarePlatform.AppleVisionPro;
                     ActiveDeviceName = "Apple Vision Pro";
                 }
+                else if ((OpenXRRuntime.name ?? string.Empty).IndexOf("Oculus", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         (OpenXRRuntime.name ?? string.Empty).IndexOf("Meta", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    ActivePlatform = XRHardwarePlatform.MetaQuestOpenXR;
+                    ActiveDeviceName = "Meta Quest (Link / OpenXR)";
+                }
                 else
                 {
                     ActivePlatform = XRHardwarePlatform.GenericOpenXR;
@@ -92,6 +99,13 @@ namespace SpatialMAS.XR
                     tpd.enabled = IsXRHeadsetActive;
                 }
             }
+        }
+
+        private void Update()
+        {
+            // Link can finish initializing after Awake and the first Start frame.
+            // Keep desktop controls, tracked pose input, and telemetry source in sync.
+            DetectPlatform();
         }
 
         private void ConfigureFramePacing()

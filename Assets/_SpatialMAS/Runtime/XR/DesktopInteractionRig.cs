@@ -30,6 +30,7 @@ namespace SpatialMAS.XR
         private SimulationCommandBus _bus;
         private AgentEntity _hoveredAgent;
         private AgentEntity _grabbedAgent;
+        private SpatialCalibrationReference _grabbedReference;
         private int _leftPressedAgentId = -1;
         private int _rightPressedAgentId = -1;
         private readonly RaycastHit[] _agentHits = new RaycastHit[1024];
@@ -50,6 +51,7 @@ namespace SpatialMAS.XR
         public Rect IgnoredScreenGuiRect { get; set; } = new Rect(12f, 12f, 430f, 480f);
         public AgentEntity HoveredAgent => _hoveredAgent;
         public AgentEntity CurrentlyGrabbedAgent => _grabbedAgent;
+        public bool IsDraggingObject => _grabbedAgent != null || _grabbedReference != null;
         public bool IsFpsCursorLocked => _fpsCursorLockMode;
 
         public void Initialize(Camera cam, SimulationCommandBus bus = null)
@@ -113,6 +115,7 @@ namespace SpatialMAS.XR
         {
             if (_grabbedAgent != null) _grabbedAgent.EndUserGrab();
             _grabbedAgent = null;
+            _grabbedReference = null;
             ReleaseLeftClick();
             ReleaseRightClick();
             if (_hoveredAgent != null) _hoveredAgent.Visuals?.SetHighlight(false);
@@ -226,7 +229,7 @@ namespace SpatialMAS.XR
             }
 
             // Scroll Wheel Dolly/Zoom when not currently grabbing an agent (and pointer not over HUD)
-            if (_grabbedAgent == null && !IsMouseOverHud(mouse))
+            if (!IsDraggingObject && !IsMouseOverHud(mouse))
             {
                 float scroll = mouse.scroll.ReadValue().y;
                 if (Mathf.Abs(scroll) > 0.01f)
@@ -247,6 +250,7 @@ namespace SpatialMAS.XR
                 : mouse.position.ReadValue();
 
             Ray ray = _camera.ScreenPointToRay(screenPos);
+            if (HandleReferenceInteraction(ray, mouse, kb, pointerOverHud)) return;
 
             // 1. Update Hovered Agent when not dragging
             if (_grabbedAgent == null)
@@ -367,6 +371,49 @@ namespace SpatialMAS.XR
             }
             // Arena boundary triggers and communication visuals must not block picking agents inside them.
             return agent != null;
+        }
+
+        private bool HandleReferenceInteraction(Ray ray, Mouse mouse, Keyboard keyboard, bool pointerOverHud)
+        {
+            if (_grabbedAgent != null) return false;
+            if (_grabbedReference == null && mouse.leftButton.wasPressedThisFrame && !pointerOverHud)
+            {
+                SpatialCalibrationReference nearest = null;
+                Vector3 hitPoint = default;
+                float distance = float.PositiveInfinity;
+                int count = Physics.RaycastNonAlloc(ray, _agentHits, 30f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
+                for (int i = 0; i < count; i++)
+                {
+                    var hit = _agentHits[i];
+                    var candidate = hit.collider.GetComponentInParent<SpatialCalibrationReference>();
+                    if (candidate == null || !candidate.CanManipulate || hit.distance >= distance) continue;
+                    nearest = candidate;
+                    distance = hit.distance;
+                    hitPoint = hit.point;
+                }
+                if (nearest != null && (!TryRaycastAgent(ray, out _, out Vector3 agentPoint) || Vector3.Distance(ray.origin, agentPoint) >= distance))
+                {
+                    _grabbedReference = nearest;
+                    _grabDepthMeters = Mathf.Max(0.01f, Vector3.Dot(hitPoint - _camera.transform.position, _camera.transform.forward));
+                    _grabOffsetWorld = nearest.Snapshot.Position - hitPoint;
+                    if (_hoveredAgent != null) _hoveredAgent.Visuals?.SetHighlight(false);
+                    _hoveredAgent = null;
+                }
+            }
+            if (_grabbedReference == null) return false;
+            if (!mouse.leftButton.isPressed || !_grabbedReference.CanManipulate)
+            {
+                _grabbedReference = null;
+                return true;
+            }
+            float scroll = mouse.scroll.ReadValue().y;
+            _grabDepthMeters = Mathf.Clamp(_grabDepthMeters + scroll * 0.0018f, 0.01f, 20f);
+            _dragPlane = new Plane(-_camera.transform.forward, _camera.transform.position + _camera.transform.forward * _grabDepthMeters);
+            Quaternion rotation = _grabbedReference.Snapshot.Rotation;
+            if (keyboard != null && keyboard[Key.R].wasPressedThisFrame) rotation *= Quaternion.Euler(0f, 90f, 0f);
+            if (_dragPlane.Raycast(ray, out float enter))
+                _grabbedReference.TrySetPose(ray.GetPoint(enter) + _grabOffsetWorld, rotation);
+            return true;
         }
 
         private bool IsMouseOverHud(Mouse mouse)

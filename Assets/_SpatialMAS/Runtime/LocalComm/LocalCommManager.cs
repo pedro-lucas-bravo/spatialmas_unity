@@ -74,7 +74,6 @@ namespace SpatialMAS.LocalComm
             {
                 _bus.OnConfigureLocalComm += HandleConfigureLocalComm;
                 _bus.OnTriggerLocalComm += HandleTriggerLocalComm;
-                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
         }
 
@@ -84,7 +83,6 @@ namespace SpatialMAS.LocalComm
             {
                 _bus.OnConfigureLocalComm -= HandleConfigureLocalComm;
                 _bus.OnTriggerLocalComm -= HandleTriggerLocalComm;
-                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
         }
 
@@ -93,19 +91,6 @@ namespace SpatialMAS.LocalComm
             _defaultMaxRangeMeters = Mathf.Max(0.01f, maxRangeMeters);
             _defaultLatencySeconds = Mathf.Max(0.005f, latencySec);
             _renderWavefrontSpheres = showVisuals;
-        }
-
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
-        {
-            _defaultMaxRangeMeters *= change.ScaleRatio;
-            foreach (ActiveWavefront wavefront in _activeWavefronts)
-            {
-                wavefront.OriginUnity = change.TransformPosition(wavefront.OriginUnity);
-                wavefront.MaxRangeMeters *= change.ScaleRatio;
-                if (wavefront.VisualSphere == null) continue;
-                wavefront.VisualSphere.transform.position = wavefront.OriginUnity;
-                wavefront.VisualSphere.transform.localScale *= change.ScaleRatio;
-            }
         }
 
         private void HandleTriggerLocalComm(string msgType, int senderId, float rangeMeters, float latencySec, object[] extraArgs)

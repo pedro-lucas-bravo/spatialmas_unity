@@ -10,6 +10,7 @@ using UnityEngine.UI;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.XR.Interaction.Toolkit.UI;
+using UnityEngine.XR;
 
 namespace SpatialMAS.UI
 {
@@ -24,7 +25,7 @@ namespace SpatialMAS.UI
         [SerializeField] private bool _showScreenOverlayOnDesktop = true;
 
         private SimulationCommandBus _bus;
-        private SpatialCoordinateMapper _mapper;
+        private SpatialCalibrationReference _calibration;
         private ScenarioManager _scenarioManager;
         private XRModeSwitcher _modeSwitcher;
         private XRPlatformAdapter _platformAdapter;
@@ -37,7 +38,10 @@ namespace SpatialMAS.UI
 
         private Text _worldHudStatusText;
         private GameObject _worldCanvasObject;
-        private Slider _worldScaleSlider;
+        private Canvas _worldCanvas;
+        private XRUIInputModule _worldInputModule;
+        private bool _worldPanelWasInXr;
+        private bool _worldPanelNeedsTrackedPlacement = true;
         private readonly Button[] _worldPresetButtons = new Button[5];
         private float _smoothedFps = 90f;
 
@@ -52,10 +56,17 @@ namespace SpatialMAS.UI
         private bool _pendingToggleFpsLook;
         private bool _pendingToggleAgentIds;
         private bool _pendingToggleRecording;
-        private float _pendingWorldScale = -1f;
+        private bool _pendingToggleReferenceVisible;
+        private bool _pendingToggleReferenceLocked;
+        private bool _pendingPlaceReference;
+        private bool _pendingResetReference;
+        private bool _pendingRotateReference;
+        private bool _pendingSetScenarioCenter;
+        private int _pendingLayout = -1;
 
-        private readonly Rect _hudRect = new Rect(14f, 14f, 430f, 485f);
-        private bool IsHeadsetActive => _platformAdapter != null && _platformAdapter.IsXRHeadsetActive;
+        private readonly Rect _hudRect = new Rect(14f, 14f, 450f, 610f);
+        private bool IsHeadsetActive => (_platformAdapter != null && _platformAdapter.IsXRHeadsetActive) ||
+            (Camera.main != null && Camera.main.stereoEnabled);
 
         public bool ShowScreenOverlayOnDesktop
         {
@@ -74,10 +85,11 @@ namespace SpatialMAS.UI
             OscUdpClient oscClient,
             DataRecordingService recorder,
             WifiLogExportServer wifiServer,
-            DesktopInteractionRig desktopRig = null)
+            DesktopInteractionRig desktopRig = null,
+            SpatialCalibrationReference calibrationReference = null)
         {
             _bus = bus;
-            _mapper = mapper;
+            _calibration = calibrationReference;
             _scenarioManager = scenarioManager;
             _modeSwitcher = modeSwitcher;
             _platformAdapter = platformAdapter;
@@ -98,23 +110,22 @@ namespace SpatialMAS.UI
             {
                 _worldHudStatusText = existing.GetComponentInChildren<Text>();
                 _worldCanvasObject = existing.gameObject;
+                ConfigureWorldCanvas();
                 return;
             }
 
             var canvasGo = new GameObject("SpatialResearcherWorldCanvas");
             _worldCanvasObject = canvasGo;
             canvasGo.transform.SetParent(transform, false);
-            canvasGo.transform.localScale = Vector3.one * 0.0012f;
+            canvasGo.transform.localScale = Vector3.one * 0.0010f;
 
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.dynamicPixelsPerUnit = 10f;
-            canvasGo.AddComponent<TrackedDeviceGraphicRaycaster>();
-            EnsureXRUIEventSystem(transform);
 
             RectTransform rt = canvasGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(620f, 750f);
+            rt.sizeDelta = new Vector2(620f, 865f);
 
             var bgGo = new GameObject("PanelBackground");
             bgGo.transform.SetParent(canvasGo.transform, false);
@@ -156,31 +167,43 @@ namespace SpatialMAS.UI
                     () => _pendingPresetToApply = preset);
             }
 
-            var scaleLabel = CreateWorldText(rt, "World scale", 18);
-            SetTopLeftRect(scaleLabel.rectTransform, new Rect(18, 560, 140, 35));
-            var sliderGo = new GameObject("World Scale", typeof(RectTransform), typeof(Image), typeof(Slider));
-            sliderGo.transform.SetParent(rt, false);
-            SetTopLeftRect(sliderGo.GetComponent<RectTransform>(), new Rect(160, 560, 442, 35));
-            sliderGo.GetComponent<Image>().color = new Color(0.18f, 0.25f, 0.32f);
-            var handleGo = new GameObject("Handle", typeof(RectTransform), typeof(Image));
-            handleGo.transform.SetParent(sliderGo.transform, false);
-            var handle = handleGo.GetComponent<RectTransform>();
-            handle.sizeDelta = new Vector2(32f, 45f);
-            handleGo.GetComponent<Image>().color = new Color(0.2f, 0.85f, 1f);
-            _worldScaleSlider = sliderGo.GetComponent<Slider>();
-            _worldScaleSlider.handleRect = handle;
-            _worldScaleSlider.targetGraphic = handleGo.GetComponent<Image>();
-            _worldScaleSlider.minValue = 0.05f;
-            _worldScaleSlider.maxValue = 1.5f;
-            _worldScaleSlider.SetValueWithoutNotify(_mapper != null ? _mapper.WorldScale : 0.2f);
-            _worldScaleSlider.onValueChanged.AddListener(scale => _pendingWorldScale = scale);
-            CreateWorldButton(rt, "Center Arena Ahead", new Rect(18, 624, 288, 46), CenterArenaAhead);
-            CreateWorldButton(rt, "Clear All", new Rect(314, 624, 288, 46), () => _pendingRemoveAllAgents = true);
-            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 680, 584, 46), PositionWorldPanel);
+            CreateWorldButton(rt, "Next: Compact", new Rect(18, 554, 288, 42), () => _pendingLayout = 0);
+            CreateWorldButton(rt, "Next: Room Layout", new Rect(314, 554, 288, 42), () => _pendingLayout = 1);
+            CreateWorldButton(rt, "Spawn Next Scenario Here", new Rect(18, 604, 584, 42), () => _pendingSetScenarioCenter = true);
+            CreateWorldButton(rt, "Reference Show / Hide", new Rect(18, 654, 288, 42), () => _pendingToggleReferenceVisible = true);
+            CreateWorldButton(rt, "Reference Lock / Unlock", new Rect(314, 654, 288, 42), () => _pendingToggleReferenceLocked = true);
+            CreateWorldButton(rt, "Place Reference Ahead", new Rect(18, 704, 288, 42), () => _pendingPlaceReference = true);
+            CreateWorldButton(rt, "Rotate Reference 90°", new Rect(314, 704, 288, 42), () => _pendingRotateReference = true);
+            CreateWorldButton(rt, "Reset Reference Pose", new Rect(18, 754, 288, 42), () => _pendingResetReference = true);
+            CreateWorldButton(rt, "Clear All", new Rect(314, 754, 288, 42), () => _pendingRemoveAllAgents = true);
+            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 804, 584, 42), PositionWorldPanel);
+            ConfigureWorldCanvas();
             PositionWorldPanel();
         }
 
-        private static void EnsureXRUIEventSystem(Transform parent)
+        private void ConfigureWorldCanvas()
+        {
+            _worldCanvas = _worldCanvasObject.GetComponent<Canvas>();
+            if (_worldCanvas == null) _worldCanvas = _worldCanvasObject.AddComponent<Canvas>();
+            _worldCanvas.renderMode = RenderMode.WorldSpace;
+            _worldCanvas.worldCamera = Camera.main;
+            var raycaster = _worldCanvasObject.GetComponent<TrackedDeviceGraphicRaycaster>();
+            if (raycaster == null) raycaster = _worldCanvasObject.AddComponent<TrackedDeviceGraphicRaycaster>();
+            raycaster.ignoreReversedGraphics = false;
+            raycaster.checkFor2DOcclusion = false;
+            raycaster.checkFor3DOcclusion = false;
+            _worldInputModule = EnsureXRUIEventSystem(transform);
+            _worldInputModule.uiCamera = _worldCanvas.worldCamera;
+            _worldInputModule.RegisterWaitlistInteractors();
+
+            // Keep explicit SPI variants in Resources, including in headset builds. Text still supplies its font atlas.
+            Material material = Resources.Load<Material>("Mat_SpatialMAS_WorldUI");
+            if (material != null)
+                foreach (var graphic in _worldCanvasObject.GetComponentsInChildren<Graphic>(true))
+                    graphic.material = material;
+        }
+
+        private static XRUIInputModule EnsureXRUIEventSystem(Transform parent)
         {
             var system = EventSystem.current;
             if (system == null)
@@ -196,6 +219,7 @@ namespace SpatialMAS.UI
             module.enableXRInput = true;
             module.enableMouseInput = true;
             module.enabled = true;
+            return module;
         }
 
         private static void SetTopLeftRect(RectTransform rect, Rect bounds)
@@ -239,20 +263,76 @@ namespace SpatialMAS.UI
 
         private void PositionWorldPanel()
         {
-            if (_worldCanvasObject == null || Camera.main == null) return;
-            Transform head = Camera.main.transform;
-            Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
-            if (forward.sqrMagnitude < 0.1f) forward = Vector3.forward;
-            Vector3 position = head.position + forward * 1.1f - Vector3.Cross(Vector3.up, forward) * 0.55f - Vector3.up * 0.1f;
-            _worldCanvasObject.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - head.position, Vector3.up));
+            if (_worldCanvasObject == null) return;
+            if (TryGetWorldHeadPose(out Pose trackedPose))
+            {
+                PlaceWorldPanel(trackedPose);
+                return;
+            }
+            // A stereo camera can still contain its authored desktop pose while the XR provider starts.
+            // Keep the request pending until real tracking is available, including "Move Panel Here".
+            if (IsHeadsetActive)
+            {
+                _worldPanelNeedsTrackedPlacement = true;
+                return;
+            }
+            if (Camera.main != null)
+                PlaceWorldPanel(new Pose(Camera.main.transform.position, Camera.main.transform.rotation));
         }
 
-        private void CenterArenaAhead()
+        protected virtual bool TryGetWorldHeadPose(out Pose pose)
         {
-            if (Camera.main == null) return;
+            var device = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+            if (device.isValid && device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.isTracked, out bool tracked) && tracked &&
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.devicePosition, out Vector3 position) &&
+                device.TryGetFeatureValue(UnityEngine.XR.CommonUsages.deviceRotation, out Quaternion rotation))
+            {
+                Transform origin = XRInteractionRigSetup.GetTrackingOrigin(Camera.main);
+                pose = XRInteractionRigSetup.TrackingPoseToWorld(new Pose(position, rotation), origin);
+                return true;
+            }
+            pose = default;
+            return false;
+        }
+
+        private void PlaceWorldPanel(Pose head)
+        {
+            Vector3 forward = Vector3.ProjectOnPlane(head.rotation * Vector3.forward, Vector3.up).normalized;
+            if (forward.sqrMagnitude < 0.1f) forward = Vector3.forward;
+            Vector3 position = head.position + forward * 1.25f - Vector3.up * 0.1f;
+            _worldCanvasObject.transform.SetPositionAndRotation(position, Quaternion.LookRotation(position - head.position, Vector3.up));
+            _worldPanelNeedsTrackedPlacement = false;
+        }
+
+        private void LateUpdate()
+        {
+            UpdateWorldPanelTracking(IsHeadsetActive);
+        }
+
+        private void UpdateWorldPanelTracking(bool headsetActive)
+        {
+            if (_worldCanvasObject == null) return;
+            if (!headsetActive)
+            {
+                _worldPanelWasInXr = false;
+                _worldPanelNeedsTrackedPlacement = true;
+                return;
+            }
+            if (!_worldPanelWasInXr || (_worldCanvas != null && _worldCanvas.worldCamera != Camera.main))
+            {
+                ConfigureWorldCanvas();
+                _worldPanelNeedsTrackedPlacement = true;
+            }
+            _worldPanelWasInXr = true;
+            if (_worldPanelNeedsTrackedPlacement && TryGetWorldHeadPose(out Pose trackedPose)) PlaceWorldPanel(trackedPose);
+        }
+
+        private Vector3 PositionAhead()
+        {
+            if (Camera.main == null) return new Vector3(0f, 1.2f, 0.8f);
             Transform head = Camera.main.transform;
             Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
-            _bus?.SetOriginOffset(head.position + forward * 0.8f - Vector3.up * 0.3f);
+            return head.position + forward * 0.8f - Vector3.up * 0.3f;
         }
 
         private void Update()
@@ -265,7 +345,6 @@ namespace SpatialMAS.UI
                 _desktopRig.IgnoredScreenGuiRect = _showScreenOverlayOnDesktop && !IsHeadsetActive ? _hudRect : Rect.zero;
             }
             if (_worldCanvasObject != null) _worldCanvasObject.SetActive(IsHeadsetActive);
-            if (_worldScaleSlider != null && _mapper != null) _worldScaleSlider.SetValueWithoutNotify(_mapper.WorldScale);
             for (int i = 0; i < _worldPresetButtons.Length; i++)
                 if (_worldPresetButtons[i] != null) _worldPresetButtons[i].gameObject.SetActive(i < 3 || (_scenarioManager != null && _scenarioManager.ActiveScenarioId == 2));
 
@@ -346,12 +425,17 @@ namespace SpatialMAS.UI
                 }
             }
 
-            if (_pendingWorldScale > 0f)
+            if (_pendingLayout >= 0)
             {
-                float newScale = _pendingWorldScale;
-                _pendingWorldScale = -1f;
-                _bus?.SetWorldScale(newScale);
+                _bus?.SetScenarioLayout((ScenarioLayout)_pendingLayout);
+                _pendingLayout = -1;
             }
+            if (_pendingSetScenarioCenter) { _pendingSetScenarioCenter = false; _bus?.SetScenarioCenter(PositionAhead()); }
+            if (_pendingToggleReferenceVisible) { _pendingToggleReferenceVisible = false; if (_calibration != null) _bus?.SetCalibrationVisible(!_calibration.Visible); }
+            if (_pendingToggleReferenceLocked) { _pendingToggleReferenceLocked = false; if (_calibration != null) _bus?.SetCalibrationLocked(!_calibration.Locked); }
+            if (_pendingPlaceReference) { _pendingPlaceReference = false; if (_calibration != null) _bus?.SetCalibrationPose(PositionAhead(), _calibration.Snapshot.Rotation); }
+            if (_pendingResetReference) { _pendingResetReference = false; _bus?.SetCalibrationPose(Vector3.zero, Quaternion.identity); }
+            if (_pendingRotateReference) { _pendingRotateReference = false; if (_calibration != null) _bus?.SetCalibrationPose(_calibration.Snapshot.Position, Quaternion.AngleAxis(90f, Vector3.up) * _calibration.Snapshot.Rotation); }
         }
 
         private void HandleKeyboardShortcuts()
@@ -379,7 +463,7 @@ namespace SpatialMAS.UI
             }
 
             // [R]: Reset active scenario (only when not currently dragging an agent, where R rotates the grabbed cube)
-            if (kb[Key.R].wasPressedThisFrame && (_desktopRig == null || _desktopRig.CurrentlyGrabbedAgent == null))
+            if (kb[Key.R].wasPressedThisFrame && (_desktopRig == null || !_desktopRig.IsDraggingObject))
             {
                 _scenarioManager?.ResetActiveScenario();
             }
@@ -408,11 +492,10 @@ namespace SpatialMAS.UI
             if (_worldHudStatusText == null) return;
 
             string platform = _platformAdapter != null ? _platformAdapter.ActiveDeviceName : "XR/Desktop";
-            string mode = _modeSwitcher != null ? _modeSwitcher.CurrentMode.ToString() : "MRPassthrough";
+            string mode = _modeSwitcher != null ? _modeSwitcher.DisplayStatus : "MR preview (no headset)";
             string scenario = _scenarioManager != null ? _scenarioManager.ActiveScenarioName : "0. External OSC";
             string runState = (_scenarioManager != null && _scenarioManager.IsPaused) ? " [PAUSED]" : "";
             int agents = _agentManager != null ? _agentManager.ActiveCount : 0;
-            float scale = _mapper != null ? _mapper.WorldScale : 0.2f;
             int oscPort = _oscServer != null ? _oscServer.ListenPort : 6011;
             long rxCount = _oscServer != null ? _oscServer.TotalMessagesReceived : 0;
             string wifiUrl = _wifiServer != null ? _wifiServer.DashboardUrl : "http://127.0.0.1:8080/";
@@ -421,10 +504,11 @@ namespace SpatialMAS.UI
             _worldHudStatusText.text =
                 $"<b>SPATIALMAS — MULTIPLATFORM XR LAB</b>\n" +
                 $"Platform: {platform} | FPS: {_smoothedFps:F0}\n" +
-                $"Display Mode: <b>{mode}</b>  |  World Scale: <b>{scale:F2}x</b>\n" +
+                $"Display: <b>{mode}</b> | Units: Unity world meters\n" +
                 $"Scenario: <b>{scenario}{runState}</b>\n" +
                 $"Active Agents: <b>{agents}</b>  |  OSC In (:{oscPort}): <b>{rxCount} msgs</b>\n" +
-                $"Telemetry: <b>{recState}</b>\n" +
+                $"Telemetry: <b>{recState}</b> | Next layout: {_scenarioManager?.NextLayout}\n" +
+                $"Reference: {(_calibration == null ? "unavailable" : (_calibration.Locked ? "LOCKED" : "UNLOCKED"))} | Visible: {_calibration?.Visible}\n" +
                 $"Wi-Fi Log Download: <b>{wifiUrl}</b>";
         }
 
@@ -462,7 +546,7 @@ namespace SpatialMAS.UI
             }
             GUILayout.EndHorizontal();
 
-            string mode = _modeSwitcher != null ? _modeSwitcher.CurrentMode.ToString() : "MR";
+            string mode = _modeSwitcher != null ? _modeSwitcher.DisplayStatus : "MR preview (no headset)";
             string wifiUrl = _wifiServer != null ? _wifiServer.DashboardUrl : "http://127.0.0.1:8080/";
             int agents = _agentManager != null ? _agentManager.ActiveCount : 0;
             long rxMsgs = _oscServer != null ? _oscServer.TotalMessagesReceived : 0;
@@ -489,17 +573,28 @@ namespace SpatialMAS.UI
             if (GUILayout.Button(fpsLocked ? "Unlock [F]" : "FPS Look [F]")) _pendingToggleFpsLook = true;
             GUILayout.EndHorizontal();
 
-            // Row 3: World Scale Calibration Slider
-            if (_mapper != null)
+            GUILayout.Label($"Unity world meters | Next layout: {_scenarioManager?.NextLayout}");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Next: Compact")) _pendingLayout = 0;
+            if (GUILayout.Button("Next: Room Layout")) _pendingLayout = 1;
+            if (GUILayout.Button("Spawn Next Here")) _pendingSetScenarioCenter = true;
+            if (GUILayout.Button("Clear All")) _pendingRemoveAllAgents = true;
+            GUILayout.EndHorizontal();
+            GUILayout.Label("Placement/layout apply on next scenario load or reset.");
+            if (_calibration != null)
             {
+                var state = _calibration.Snapshot;
+                GUILayout.Label($"Reference #{state.Revision}: {state.Position:F3} m | {(state.Locked ? "LOCKED" : "UNLOCKED (drag marker; R rotates)")}");
                 GUILayout.BeginHorizontal();
-                GUILayout.Label($"World Scale ({_mapper.WorldScale:F2}x):", GUILayout.Width(135f));
-                float newScale = GUILayout.HorizontalSlider(_mapper.WorldScale, 0.05f, 1.5f);
-                if (!Mathf.Approximately(newScale, _mapper.WorldScale))
-                {
-                    _pendingWorldScale = newScale;
-                }
-                if (GUILayout.Button("Clear All", GUILayout.Width(72f))) _pendingRemoveAllAgents = true;
+                if (GUILayout.Button(state.Visible ? "Hide Reference" : "Show Reference")) _pendingToggleReferenceVisible = true;
+                if (GUILayout.Button(state.Locked ? "Unlock Reference" : "Lock Reference")) _pendingToggleReferenceLocked = true;
+                GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                GUI.enabled = !state.Locked;
+                if (GUILayout.Button("Reference Ahead")) _pendingPlaceReference = true;
+                if (GUILayout.Button("Rotate 90°")) _pendingRotateReference = true;
+                if (GUILayout.Button("Reset Reference")) _pendingResetReference = true;
+                GUI.enabled = true;
                 GUILayout.EndHorizontal();
             }
 

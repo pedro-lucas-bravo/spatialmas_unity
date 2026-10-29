@@ -17,7 +17,7 @@ namespace SpatialMAS.Tests.PlayMode
         public IEnumerator OscProtocolRouter_ProcessesInstantiatePositionColorAndSynthMessages()
         {
             var bus = new SimulationCommandBus();
-            var mapper = new SpatialCoordinateMapper(worldScale: 1.0f, originOffset: Vector3.zero);
+            var mapper = new SpatialCoordinateMapper();
             var server = new OscUdpServer();
             var client = new OscUdpClient("127.0.0.1", 6099);
             var router = new OscProtocolRouter(bus, mapper, server, client);
@@ -67,7 +67,7 @@ namespace SpatialMAS.Tests.PlayMode
         }
     }
 
-    public class LegacyOscAndFrameRegressionTests
+    public class LegacyOscAndWorldCoordinatesRegressionTests
     {
         private GameObject _root;
         private SimulationCommandBus _bus;
@@ -84,10 +84,9 @@ namespace SpatialMAS.Tests.PlayMode
         {
             _bus = new SimulationCommandBus();
             _mapper = new SpatialCoordinateMapper();
-            _mapper.OnFrameChanged += _bus.ApplySpatialFrameChange;
             _root = new GameObject("OscRegressionRoot");
             _agents = _root.AddComponent<AgentManager>();
-            _agents.Initialize(_bus, mapper: _mapper);
+            _agents.Initialize(_bus);
             _boundaries = _root.AddComponent<BoundaryManager>();
             _boundaries.Initialize(_bus, _agents);
             _root.AddComponent<EnvironmentArrowManager>().Initialize(_bus);
@@ -132,22 +131,41 @@ namespace SpatialMAS.Tests.PlayMode
         [UnityTest]
         public IEnumerator AddInSameFrame_AllocatesDistinctIdsAndAppliesInitialPositions()
         {
-            _mapper.OriginOffset = new Vector3(2f, 1f, 3f);
             _router.DispatchMessage(new OscMessage("/agents/add", 2, 0, 0));
             _router.DispatchMessage(new OscMessage("/agents/add", 2, 0, 0, 2,
                 1000f, 2000f, 500f, -1000f, 0f, 0f));
             Assert.AreEqual(4, _agents.ActiveCount);
             Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity first));
             Assert.IsTrue(_agents.TryGetAgent(2, out AgentEntity explicitPosition));
-            Assert.That(Vector3.Distance(first.transform.position, _mapper.OriginOffset), Is.LessThan(0.0001f));
+            Assert.That(Vector3.Distance(first.transform.position, Vector3.zero), Is.LessThan(0.0001f));
             Assert.That(Vector3.Distance(explicitPosition.transform.position,
                 _mapper.OscMillimetersToUnityMeters(1000f, 2000f, 500f)), Is.LessThan(0.0001f));
             _router.DispatchMessage(new OscMessage("/agents/add", 1, 0, 0, 1, 2f));
             Assert.IsTrue(_agents.TryGetAgent(4, out AgentEntity randomPosition));
-            Assert.That(Vector3.Distance(randomPosition.transform.position, _mapper.OriginOffset), Is.LessThanOrEqualTo(2f));
+            Assert.That(Vector3.Distance(randomPosition.transform.position, Vector3.zero), Is.LessThanOrEqualTo(2f));
             _router.DispatchMessage(new OscMessage("/agents/instantiate", 1, 0, 1));
             Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity reusedFollowAgent));
-            Assert.That(Vector3.Distance(reusedFollowAgent.transform.position, _mapper.OriginOffset), Is.LessThan(0.0001f));
+            Assert.That(Vector3.Distance(reusedFollowAgent.transform.position, Vector3.zero), Is.LessThan(0.0001f));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator CanonicalRandomSpawning_UsesMillimetersWhileLegacyRadiusUsesMeters()
+        {
+            UnityEngine.Random.State state = UnityEngine.Random.state;
+            try
+            {
+                UnityEngine.Random.InitState(1234);
+                _router.DispatchMessage(new OscMessage("/agents/add", 1, 0, 0, 1, 2f));
+                Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity legacy));
+                Vector3 expected = legacy.transform.position;
+                UnityEngine.Random.InitState(1234);
+                _router.DispatchMessage(new OscMessage("/world/agents/add", 1, 0, 0, 1, 2000f));
+                Assert.IsTrue(_agents.TryGetAgent(1, out AgentEntity canonical));
+                Assert.Less(Vector3.Distance(expected, canonical.transform.position), 0.0001f);
+                Assert.LessOrEqual(canonical.transform.position.magnitude, 2f);
+            }
+            finally { UnityEngine.Random.state = state; }
             yield return null;
         }
 
@@ -240,33 +258,107 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator FrameChanges_RebaseExistingWorldSizesTargetsAndWavefronts()
+        public IEnumerator CanonicalCoordinates_UsePhysicalDimensionsAndNeverChangeLegacyAxes()
         {
-            _router.DispatchMessage(new OscMessage("/agents/instantiate", 2));
-            _router.DispatchMessage(new OscMessage("/agents/position/id", 0, 0f, 0f, 0f, 1, 500f, 0f, 0f));
-            _router.DispatchMessage(new OscMessage("/agents/radius/id", 1, 1000f, 0.2f, "ffffff"));
-            _router.DispatchMessage(new OscMessage("/boundary/add/id", 7, 0, 0f, 0f, 0f, 1000f));
-            _router.DispatchMessage(new OscMessage("/environment/set_arrow", 4, 0f, 0f, 0f, 1000f, 0f, 0f, 20f));
-            _bus.ConfigureLocalComm(1f, 0.04f, false);
-            int deliveries = 0;
-            _bus.OnLocalCommDeliveredUnity += (type, sender, receiver, distance, args) => deliveries++;
-            _bus.TriggerLocalComm("test", 0, 0f, 0f, new object[] { "payload" });
-            _mapper.WorldScale = 0.5f;
-            _mapper.OriginOffset = new Vector3(2f, 1f, -3f);
-            _mapper.OriginRotation = Quaternion.Euler(0f, 90f, 0f);
+            _router.DispatchMessage(new OscMessage("/world/agents/instantiate", 0, 0, 2, 250f, "127.0.0.1", 6099));
+            _router.DispatchMessage(new OscMessage("/world/agents/position/id", 0, 1000f, 2000f, 3000f));
+            _router.DispatchMessage(new OscMessage("/agents/position/id", 1, 1000f, 2000f, 3000f));
+            Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity canonical));
+            Assert.IsTrue(_agents.TryGetAgent(1, out AgentEntity legacy));
+            Assert.Less(Vector3.Distance(new Vector3(1f, 2f, 3f), canonical.transform.position), 0.0001f);
+            Assert.Less(Vector3.Distance(new Vector3(1f, 3f, 2f), legacy.transform.position), 0.0001f);
+            Assert.AreEqual(0.25f, canonical.BaseScaleMeters, 0.0001f, "250 wire mm must create a 0.25-meter unit-mesh dimension.");
+            Quaternion rotation = Quaternion.Euler(15f, 40f, 5f);
+            _router.DispatchMessage(new OscMessage("/world/agents/rotation/id", 0, rotation.x, rotation.y, rotation.z, rotation.w));
+            Assert.Less(Quaternion.Angle(rotation, canonical.transform.rotation), 0.001f);
+            _router.DispatchMessage(new OscMessage("/world/boundary/add/id", 7, 1, 1000f, 2000f, 3000f, 2000f, 4000f, 6000f));
+            Assert.Less(Vector3.Distance(new Vector3(1f, 2f, 3f), _boundaries.ActiveBoundaries[7].CenterUnity), 0.0001f);
+            Assert.Less(Vector3.Distance(new Vector3(2f, 4f, 6f), _boundaries.ActiveBoundaries[7].GameObject.transform.localScale), 0.0001f);
+            yield return null;
+        }
 
-            Assert.IsTrue(_agents.TryGetAgent(1, out AgentEntity agent));
-            Assert.That(Vector3.Distance(agent.transform.position,
-                _mapper.OscMillimetersToUnityMeters(500f, 0f, 0f)), Is.LessThan(0.0001f));
-            Assert.AreEqual(0.14f, agent.BaseScaleMeters, 0.0001f);
-            Assert.AreEqual(1f, agent.transform.Find("RadiusVisualizer").lossyScale.x, 0.0001f);
-            Assert.AreEqual(0.5f, _boundaries.ActiveBoundaries[7].SizeMeters, 0.0001f);
-            Transform arrow = _root.transform.Find("EnvironmentArrow_4");
-            Assert.AreEqual(0.5f, arrow.localScale.z, 0.0001f);
-            Assert.That(Vector3.Distance(arrow.position, _mapper.OriginOffset), Is.LessThan(0.0001f));
-            Assert.AreEqual(0.5f, _localComm.DefaultMaxRangeMeters, 0.0001f);
-            yield return new WaitForSeconds(0.08f);
-            Assert.AreEqual(1, deliveries, "A pending packet must follow the transformed arena and reach the same neighbor.");
+        [UnityTest]
+        public IEnumerator ExplicitSizeChange_OnlyChangesGeometryAndPreservesPhysicalInfluenceRadius()
+        {
+            _router.DispatchMessage(new OscMessage("/world/agents/instantiate", 0, 2, 1, 100f, "127.0.0.1", 6099));
+            _router.DispatchMessage(new OscMessage("/world/agents/position/id", 0, 1000f, 2000f, 3000f));
+            _router.DispatchMessage(new OscMessage("/world/agents/velocity/id", 0, 1000f, 0f, 0f));
+            _router.DispatchMessage(new OscMessage("/world/agents/radius/id", 0, 500f, 0.2f, "ffffff"));
+            Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity agent));
+            Vector3 position = agent.transform.position;
+            var velocityField = typeof(AgentEntity).GetField("_velocityVector", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Vector3 velocity = (Vector3)velocityField.GetValue(agent);
+            Transform influence = agent.transform.Find("RadiusVisualizer");
+            Assert.AreEqual(1f, influence.lossyScale.x, 0.0001f);
+            _router.DispatchMessage(new OscMessage("/world/agents/size/id", 0, 200f));
+            Assert.AreEqual(position, agent.transform.position);
+            Assert.AreEqual(velocity, (Vector3)velocityField.GetValue(agent));
+            Assert.AreEqual(0.2f, agent.BaseScaleMeters, 0.0001f);
+            Assert.AreEqual(0.2f, agent.transform.localScale.x, 0.0001f);
+            Assert.AreEqual(1f, influence.lossyScale.x, 0.0001f, "Object resizing must not resize its independent half-meter influence field.");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator RemovedGlobalTransforms_ReturnErrorsAndLeaveExistingGeometryUnchanged()
+        {
+            _router.DispatchMessage(new OscMessage("/agents/instantiate", 1));
+            _router.DispatchMessage(new OscMessage("/agents/position/id", 0, 1000f, 2000f, 3000f));
+            Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity agent));
+            var position = agent.transform.position;
+            float size = agent.BaseScaleMeters;
+            int errors = 0;
+            _bus.OnOscTrafficLogged += (direction, address, payload) => { if (direction == "OUT" && address == "/error") errors++; };
+            const string message = "Global scale/origin transforms were removed. Use actual world dimensions and /calibration/pose for external alignment.";
+            LogAssert.Expect(LogType.Warning, "[OscProtocolRouter] /xr/scale: " + message);
+            _router.DispatchMessage(new OscMessage("/xr/scale", 0.2f));
+            LogAssert.Expect(LogType.Warning, "[OscProtocolRouter] /xr/origin: " + message);
+            _router.DispatchMessage(new OscMessage("/xr/origin", 2f, 1f, -3f));
+            Assert.AreEqual(position, agent.transform.position);
+            Assert.AreEqual(size, agent.BaseScaleMeters);
+            Assert.AreEqual(2, errors);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PoseFeedback_UsesWorldPositionAndQuaternionInTheSameBasis()
+        {
+            var output = new Dictionary<string, string>();
+            _bus.OnOscTrafficLogged += (direction, address, args) => { if (direction == "OUT") output[address] = args; };
+            Vector3 position = new Vector3(1f, 2f, 3f);
+            Quaternion rotation = Quaternion.Euler(20f, 30f, 40f);
+            _bus.EmitUserHeadPoseUnity(position, rotation);
+            _bus.EmitUserHandPoseUnity(0, position, true);
+            _bus.EmitAgentMovedByUserUnity(12, position);
+            StringAssert.StartsWith("1000,2000,3000,", output["/xr/user/pose"]);
+            StringAssert.StartsWith("0,1000,2000,3000,", output["/xr/hands/pose"]);
+            StringAssert.StartsWith("12,1000,2000,3000", output["/world/agents/position/id"]);
+            StringAssert.StartsWith("12,1000,3000,2000", output["/agents/position/id"]);
+            string[] values = output["/xr/user/pose"].Split(',');
+            var recorded = new Quaternion(float.Parse(values[3], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(values[4], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(values[5], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(values[6], System.Globalization.CultureInfo.InvariantCulture)).normalized;
+            Assert.Less(Quaternion.Angle(rotation, recorded), 0.01f);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator CalibrationCommands_UseWorldUnitsWithoutRepositioningAgents()
+        {
+            _router.DispatchMessage(new OscMessage("/agents/instantiate", 1));
+            _router.DispatchMessage(new OscMessage("/world/agents/position/id", 0, 1000f, 2000f, 3000f));
+            Assert.IsTrue(_agents.TryGetAgent(0, out AgentEntity agent));
+            Vector3 requestedPosition = Vector3.zero;
+            Quaternion requestedRotation = Quaternion.identity;
+            _bus.OnSetCalibrationPose += (position, rotation) => { requestedPosition = position; requestedRotation = rotation; };
+            Quaternion expectedRotation = Quaternion.Euler(0f, 90f, 0f);
+            _router.DispatchMessage(new OscMessage("/calibration/pose", 4000f, 5000f, 6000f,
+                expectedRotation.x * 2f, expectedRotation.y * 2f, expectedRotation.z * 2f, expectedRotation.w * 2f));
+            Assert.Less(Vector3.Distance(new Vector3(4f, 5f, 6f), requestedPosition), 0.0001f);
+            Assert.Less(Quaternion.Angle(expectedRotation, requestedRotation), 0.001f);
+            Assert.Less(Vector3.Distance(new Vector3(1f, 2f, 3f), agent.transform.position), 0.0001f);
+            yield return null;
         }
     }
 }

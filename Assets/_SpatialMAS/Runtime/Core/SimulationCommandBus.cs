@@ -17,6 +17,8 @@ namespace SpatialMAS.Core
         public event Action<AgentShapeType, AgentMovementMode, float, Vector3[]> OnAddAgentsAutomatically;
         public event Action<int, int, int> OnRemoveLastAgents; // count, shape filter, movement filter
         public event Action<int, Vector3> OnSetAgentPositionUnity;
+        public event Action<int, Quaternion> OnSetAgentRotationUnity;
+        public event Action<int, float> OnSetAgentSizeMeters;
         public event Action<Vector3[]> OnSetBatchAgentPositionsUnity;
         public event Action<int, float> OnSetAgentSpeedMetersPerSec;
         public event Action<int, Vector3> OnSetAgentDirectionUnity;
@@ -56,9 +58,8 @@ namespace SpatialMAS.Core
 
         // --- SpatialMAS v2 XR & Scenario Commands ---
         public event Action<XRDisplayMode> OnSetXRDisplayMode;
-        public event Action<float> OnSetWorldScale;
-        public event Action<Vector3> OnSetOriginOffset;
-        public event Action<SpatialFrameChange> OnSpatialFrameChanged;
+        public event Action<Vector3> OnSetScenarioCenter;
+        public event Action<ScenarioLayout> OnSetScenarioLayout;
         public event Action<bool, float, float> OnConfigureUserRepeller;
         public event Action<int> OnLoadScenario;
         public event Action<string, float> OnSetScenarioParam;
@@ -96,6 +97,9 @@ namespace SpatialMAS.Core
 
         public void SetAgentPositionUnity(int id, Vector3 posUnity)
             => OnSetAgentPositionUnity?.Invoke(id, posUnity);
+
+        public void SetAgentRotationUnity(int id, Quaternion rotation) => OnSetAgentRotationUnity?.Invoke(id, rotation);
+        public void SetAgentSizeMeters(int id, float fullDimensionMeters) => OnSetAgentSizeMeters?.Invoke(id, fullDimensionMeters);
 
         public void SetBatchAgentPositionsUnity(Vector3[] positionsUnity)
             => OnSetBatchAgentPositionsUnity?.Invoke(positionsUnity);
@@ -184,14 +188,20 @@ namespace SpatialMAS.Core
         public void SetXRDisplayMode(XRDisplayMode mode)
             => OnSetXRDisplayMode?.Invoke(mode);
 
-        public void SetWorldScale(float scale)
-            => OnSetWorldScale?.Invoke(scale);
+        /// <summary>Placement for subsequent built-in scenario spawns, in Unity world meters.</summary>
+        public void SetScenarioCenter(Vector3 centerMeters) => OnSetScenarioCenter?.Invoke(centerMeters);
+        public void SetScenarioLayout(ScenarioLayout layout) => OnSetScenarioLayout?.Invoke(layout);
 
-        public void SetOriginOffset(Vector3 offsetMeters)
-            => OnSetOriginOffset?.Invoke(offsetMeters);
-
-        public void ApplySpatialFrameChange(SpatialFrameChange change)
-            => OnSpatialFrameChanged?.Invoke(change);
+        public event Action<Vector3, Quaternion> OnSetCalibrationPose;
+        public event Action<bool> OnSetCalibrationVisible;
+        public event Action<bool> OnSetCalibrationLocked;
+        public event Action OnGetCalibration;
+        public event Action<CalibrationSnapshot> OnCalibrationState;
+        public void SetCalibrationPose(Vector3 position, Quaternion rotation) => OnSetCalibrationPose?.Invoke(position, rotation);
+        public void SetCalibrationVisible(bool visible) => OnSetCalibrationVisible?.Invoke(visible);
+        public void SetCalibrationLocked(bool locked) => OnSetCalibrationLocked?.Invoke(locked);
+        public void GetCalibration() => OnGetCalibration?.Invoke();
+        public void EmitCalibrationState(CalibrationSnapshot snapshot) => OnCalibrationState?.Invoke(snapshot);
 
         public void ConfigureUserRepeller(bool enabled, float radiusMeters, float force)
             => OnConfigureUserRepeller?.Invoke(enabled, radiusMeters, force);

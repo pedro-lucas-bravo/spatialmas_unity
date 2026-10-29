@@ -1,0 +1,25 @@
+Hand visual assets
+
+These hand visuals reproduce the mesh/material setup in helping_sources/laser-xr:
+XR Interaction Toolkit 3.6.1, Hands Interaction Demo, Quest hand visuals.
+
+Included assets:
+- XR Hands 1.9.0 HandVisualizer Models/LeftHand.fbx and RightHand.fbx.
+- XRI 3.6.1 Hands Interaction Demo DepthOnly and Unity_Hand_Medium materials.
+- Their depth shader, Unity_Hand_Noise shader graph, four subgraphs, and finger mask.
+
+The reference project's FBX and PNG files are Git LFS pointers. Actual asset bytes
+were recovered from the installed matching Unity package samples and verified
+against the reference LFS SHA256 values:
+LeftHand.fbx: 828996c1e01f710222a90caa3451a2099ec82f0651242a9b4847091a508ec521
+RightHand.fbx: 215bd9c9782a74c95b47e08e802bd2e37b9bd0e2205428543dbdef9da7990db3
+CombinedFingerIndexHighlight_M.png: 34030fd4daca368ba7cc794cf3f910d5227b440d7105c02440acc11ed84b7ffe
+
+The reference medium material is retained unchanged. The copied depth-only
+shader retains its depth-writing/color-masking behavior and adds explicit URP
+stereo instancing support. No sample assemblies or sample helper scripts are
+included. Tracking uses the already installed XRHandTrackingEvents,
+XRHandSkeletonDriver, and XRHandMeshController runtime components.
+
+See XRHands-LICENSE.txt and XRInteractionToolkit-LICENSE.txt in this folder for
+the corresponding Unity package license notices.

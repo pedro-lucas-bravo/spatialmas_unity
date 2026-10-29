@@ -127,14 +127,15 @@ namespace SpatialMAS.Logging
                             string fullPath = Path.Combine(_recordingService.LogsDirectory, fileName);
 
                             _recordingService.Flush();
-                            if (File.Exists(fullPath) && fullPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                            bool isMetadata = fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+                            if (File.Exists(fullPath) && (isMetadata || fullPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)))
                             {
                                 byte[] fileBytes = ReadFileShared(fullPath);
-                                await WriteHttpResponseAsync(stream, "200 OK", "text/csv; charset=utf-8", fileBytes, fileName).ConfigureAwait(false);
+                                await WriteHttpResponseAsync(stream, "200 OK", isMetadata ? "application/json; charset=utf-8" : "text/csv; charset=utf-8", fileBytes, fileName).ConfigureAwait(false);
                             }
                             else
                             {
-                                byte[] notFound = Encoding.UTF8.GetBytes("404 CSV Log Not Found");
+                                byte[] notFound = Encoding.UTF8.GetBytes("404 Session Log Not Found");
                                 await WriteHttpResponseAsync(stream, "404 Not Found", "text/plain; charset=utf-8", notFound, null).ConfigureAwait(false);
                             }
                         }
@@ -188,7 +189,7 @@ namespace SpatialMAS.Logging
 
         private string BuildJsonLogsList()
         {
-            FileInfo[] files = _recordingService.GetRecordedCsvFiles();
+            FileInfo[] files = _recordingService.GetRecordedLogFiles();
             var sb = new StringBuilder(512);
             sb.Append('[');
             for (int i = 0; i < files.Length; i++)
@@ -206,7 +207,7 @@ namespace SpatialMAS.Logging
 
         private string BuildHtmlDashboard()
         {
-            FileInfo[] files = _recordingService.GetRecordedCsvFiles();
+            FileInfo[] files = _recordingService.GetRecordedLogFiles();
             var sb = new StringBuilder(2048);
             sb.Append("<!DOCTYPE html><html><head><meta charset='utf-8'><title>SpatialMAS Researcher Telemetry Portal</title>");
             sb.Append("<style>");
@@ -219,12 +220,12 @@ namespace SpatialMAS.Logging
             sb.Append("a.btn:hover{background:#0369a1;}");
             sb.Append("</style></head><body><div class='card'>");
             sb.Append("<h1>SpatialMAS — Wi-Fi Telemetry &amp; OSC Log Export</h1>");
-            sb.Append("<p>Download recorded OSC traffic and 50Hz XR Embodiment (Head 6DoF, Hand Tracking, Pinch Events, Frametime) CSV files directly over Wi-Fi.</p>");
-            sb.Append("<table><thead><tr><th>CSV Filename</th><th>Size (KB)</th><th>Last Updated (UTC)</th><th>Action</th></tr></thead><tbody>");
+            sb.Append("<p>Download synchronized world poses, object dimensions, calibration history, session events, OSC traffic, and coordinate metadata over Wi-Fi.</p>");
+            sb.Append("<table><thead><tr><th>Session File</th><th>Size (KB)</th><th>Last Updated (UTC)</th><th>Action</th></tr></thead><tbody>");
 
             if (files.Length == 0)
             {
-                sb.Append("<tr><td colspan='4'>No CSV logs recorded yet.</td></tr>");
+                sb.Append("<tr><td colspan='4'>No session logs recorded yet.</td></tr>");
             }
             else
             {
@@ -236,7 +237,7 @@ namespace SpatialMAS.Logging
                     sb.Append("<tr><td><code>").Append(f.Name).Append("</code></td>")
                       .Append("<td>").Append(kb.ToString("F1", CultureInfo.InvariantCulture)).Append(" KB</td>")
                       .Append("<td>").Append(f.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append("</td>")
-                      .Append("<td><a class='btn' href='").Append(url).Append("'>Download CSV</a></td></tr>");
+                      .Append("<td><a class='btn' href='").Append(url).Append("'>Download</a></td></tr>");
                 }
             }
 

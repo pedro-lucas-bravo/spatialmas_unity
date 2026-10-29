@@ -22,6 +22,7 @@ using UnityEngine.XR.Interaction.Toolkit.Interactables;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using UnityEngine.XR.Management;
 using UnityEngine.XR.OpenXR;
+using UnityEngine.XR.OpenXR.Features.CompositionLayers;
 
 namespace SpatialMAS.Editor
 {
@@ -116,6 +117,13 @@ namespace SpatialMAS.Editor
 
                 ConfigureBuildTargetOpenXR(BuildTargetGroup.Standalone);
                 ConfigureBuildTargetOpenXR(BuildTargetGroup.Android);
+                foreach (string pipelinePath in new[] { "Assets/Settings/PC_RPAsset.asset", "Assets/Settings/Mobile_RPAsset.asset" })
+                {
+                    var pipeline = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
+                    if (pipeline == null) continue;
+                    pipeline.supportsHDR = false;
+                    EditorUtility.SetDirty(pipeline);
+                }
                 AssetDatabase.SaveAssets();
                 Debug.Log("[SpatialMASEditorBuilder] Configured OpenXR Loader, D3D11 Editor Stability, and Hand/MR Features for Standalone and Android.");
             }
@@ -169,7 +177,8 @@ namespace SpatialMAS.Editor
                 string featName = feature.name ?? string.Empty;
 
                 // Enable cross-platform Hand Tracking, Hand Interaction Profile, Meta Quest MR/Camera, and Controller profiles
-                if (typeName.IndexOf("Hand", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                if (feature is OpenXRCompositionLayersFeature ||
+                    typeName.IndexOf("Hand", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     typeName.IndexOf("MetaQuest", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     typeName.IndexOf("OculusTouch", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     typeName.IndexOf("EyeGaze", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -522,6 +531,8 @@ namespace SpatialMAS.Editor
             mainCam.clearFlags = CameraClearFlags.SolidColor;
             mainCam.backgroundColor = new Color(0f, 0f, 0f, 0f);
             mainCam.nearClipPlane = 0.05f;
+            mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
+            mainCam.allowHDR = false;
 
             var urpCam = mainCam.GetComponent<UniversalAdditionalCameraData>();
             if (urpCam == null) urpCam = mainCam.gameObject.AddComponent<UniversalAdditionalCameraData>();

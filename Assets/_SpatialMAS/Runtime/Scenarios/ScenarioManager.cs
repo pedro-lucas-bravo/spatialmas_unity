@@ -24,20 +24,28 @@ namespace SpatialMAS.Scenarios
         public int ActiveScenarioId => _activeScenario != null ? _activeScenario.ScenarioId : 0;
         public string ActiveScenarioName => _activeScenario != null ? _activeScenario.DisplayName : "None";
         public bool IsPaused => _isPaused;
+        public Vector3 NextScenarioCenter => _context.ScenarioCenter;
+        public ScenarioLayout NextLayout => _context.Layout;
+        public ScenarioLayout ActiveLayout { get; private set; }
+        public Vector3 ActiveScenarioCenter { get; private set; }
 
         public event Action<IScenarioModule> OnScenarioChanged;
+        public event Action<int> PresetApplied;
+        public event Action<string, float> ParameterApplied;
 
         public void Initialize(
             SimulationCommandBus bus,
-            SpatialCoordinateMapper mapper,
+            Vector3 scenarioCenter,
             AgentManager agentManager,
             XRUserEmbodimentBridge embodiment,
-            int initialScenarioId = 0)
+            int initialScenarioId = 0,
+            ScenarioLayout layout = ScenarioLayout.Compact)
         {
             _context = new ScenarioContext
             {
                 Bus = bus,
-                CoordinateMapper = mapper,
+                ScenarioCenter = scenarioCenter,
+                Layout = layout,
                 AgentManager = agentManager,
                 Embodiment = embodiment
             };
@@ -54,7 +62,8 @@ namespace SpatialMAS.Scenarios
             {
                 bus.OnLoadScenario += LoadScenarioById;
                 bus.OnSetScenarioParam += SetActiveScenarioParameter;
-                bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
+                bus.OnSetScenarioCenter += SetNextScenarioCenter;
+                bus.OnSetScenarioLayout += SetNextLayout;
             }
 
             LoadScenarioById(initialScenarioId);
@@ -66,7 +75,8 @@ namespace SpatialMAS.Scenarios
             {
                 _context.Bus.OnLoadScenario -= LoadScenarioById;
                 _context.Bus.OnSetScenarioParam -= SetActiveScenarioParameter;
-                _context.Bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
+                _context.Bus.OnSetScenarioCenter -= SetNextScenarioCenter;
+                _context.Bus.OnSetScenarioLayout -= SetNextLayout;
             }
             _activeScenario?.OnScenarioStop();
         }
@@ -107,6 +117,8 @@ namespace SpatialMAS.Scenarios
                 _context.Bus?.RemoveArrow(-1);
             }
 
+            ActiveLayout = _context.Layout;
+            ActiveScenarioCenter = _context.ScenarioCenter;
             _activeScenario = target;
             _activeScenario.OnScenarioStart(_context);
             OnScenarioChanged?.Invoke(_activeScenario);
@@ -145,20 +157,30 @@ namespace SpatialMAS.Scenarios
 
         public void SetActiveScenarioParameter(string paramName, float value)
         {
-            _activeScenario?.SetParameter(paramName, value);
+            if (_activeScenario == null) return;
+            _activeScenario.SetParameter(paramName, value);
+            ParameterApplied?.Invoke(paramName, value);
         }
 
         public void ApplyActiveScenarioPreset(int presetIndex)
         {
-            _activeScenario?.ApplyPreset(presetIndex);
+            if (_activeScenario == null) return;
+            _activeScenario.ApplyPreset(presetIndex);
+            PresetApplied?.Invoke(presetIndex);
         }
 
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
+        public void SetNextScenarioCenter(Vector3 centerMeters)
         {
-            if (_activeScenario is ISpatialFrameAwareScenario spatialScenario)
-            {
-                spatialScenario.ApplySpatialFrameChange(change);
-            }
+            if (!float.IsNaN(centerMeters.x) && !float.IsInfinity(centerMeters.x) &&
+                !float.IsNaN(centerMeters.y) && !float.IsInfinity(centerMeters.y) &&
+                !float.IsNaN(centerMeters.z) && !float.IsInfinity(centerMeters.z))
+                _context.ScenarioCenter = centerMeters;
+        }
+
+        public void SetNextLayout(ScenarioLayout layout)
+        {
+            if (layout == ScenarioLayout.Compact || layout == ScenarioLayout.RoomScale)
+                _context.Layout = layout;
         }
 
         private void Update()

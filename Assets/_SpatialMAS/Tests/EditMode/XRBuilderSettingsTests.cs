@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.XR.Management;
 using UnityEngine.XR.Management;
 using UnityEngine.XR.OpenXR;
+using UnityEngine.XR.OpenXR.Features.CompositionLayers;
 
 namespace SpatialMAS.Tests.EditMode
 {
@@ -23,6 +24,9 @@ namespace SpatialMAS.Tests.EditMode
                 Assert.IsTrue(settings.Manager.automaticLoading);
                 Assert.IsTrue(settings.Manager.automaticRunning);
                 Assert.That(settings.Manager.activeLoaders, Has.Some.InstanceOf<OpenXRLoader>());
+                Assert.IsTrue(OpenXRSettings.GetSettingsForBuildTargetGroup(target)
+                    .GetFeature<OpenXRCompositionLayersFeature>().enabled,
+                    "Meta passthrough needs the composition layer provider on both Link and Android.");
                 var manager = settings.Manager;
                 int loaderCount = manager.activeLoaders.Count;
                 SpatialMASEditorBuilder.ConfigureOpenXRMultiplatformSettings();

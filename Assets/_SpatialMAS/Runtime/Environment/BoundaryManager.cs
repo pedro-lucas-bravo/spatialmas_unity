@@ -47,7 +47,6 @@ namespace SpatialMAS.Environment
                 _bus.OnAddBoxBoundaryUnity += HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity += HandleUpdateBoundary;
                 _bus.OnSetBoundaryDimensionsUnity += HandleSetBoundaryDimensions;
-                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
                 _bus.OnSetBoundaryVisuals += HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary += HandleRemoveBoundary;
             }
@@ -61,7 +60,6 @@ namespace SpatialMAS.Environment
                 _bus.OnAddBoxBoundaryUnity -= HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity -= HandleUpdateBoundary;
                 _bus.OnSetBoundaryDimensionsUnity -= HandleSetBoundaryDimensions;
-                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
                 _bus.OnSetBoundaryVisuals -= HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary -= HandleRemoveBoundary;
             }
@@ -184,18 +182,6 @@ namespace SpatialMAS.Environment
             }
             else instance.SizeMeters = Mathf.Max(0.01f, dimensions.x);
             ApplyBoundaryTransform(instance);
-        }
-
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
-        {
-            foreach (BoundaryInstance instance in _boundaries.Values)
-            {
-                instance.CenterUnity = change.TransformPosition(instance.CenterUnity);
-                instance.RotationUnity = change.TransformRotation(instance.RotationUnity);
-                instance.SizeMeters *= change.ScaleRatio;
-                instance.HalfExtentsMeters *= change.ScaleRatio;
-                ApplyBoundaryTransform(instance);
-            }
         }
 
         private void HandleSetBoundaryVisuals(int id, Color color, float alpha)

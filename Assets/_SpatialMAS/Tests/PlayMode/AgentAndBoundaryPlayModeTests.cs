@@ -54,7 +54,6 @@ namespace SpatialMAS.Tests.PlayMode
         public IEnumerator ScenarioManager_LoadsAndStepsAllSixScenariosWithoutErrors()
         {
             var bus = new SimulationCommandBus();
-            var mapper = new SpatialCoordinateMapper(worldScale: 0.25f, originOffset: Vector3.zero);
             var rootGo = new GameObject("ScenarioTestRoot");
 
             var agentMgr = rootGo.AddComponent<AgentManager>();
@@ -68,7 +67,7 @@ namespace SpatialMAS.Tests.PlayMode
 
             var embodimentBridge = rootGo.AddComponent<XRUserEmbodimentBridge>();
             var scenarioMgr = rootGo.AddComponent<ScenarioManager>();
-            scenarioMgr.Initialize(bus, mapper, agentMgr, embodimentBridge, 0);
+            scenarioMgr.Initialize(bus, Vector3.zero, agentMgr, embodimentBridge, 0);
 
             int[] scenarioOrder = { 1, 2, 3, 4, 5, 0 };
             foreach (int id in scenarioOrder)

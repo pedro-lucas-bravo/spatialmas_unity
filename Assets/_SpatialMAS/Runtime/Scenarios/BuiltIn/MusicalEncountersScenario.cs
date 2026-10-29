@@ -11,7 +11,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// (or an interactive user-held cube / user hand) cross detection radii, an "encounter" triggers
     /// a quantized musical scale note based on radial distance from the boundary center.
     /// </summary>
-    public class MusicalEncountersScenario : IScenarioModule, ISpatialFrameAwareScenario
+    public class MusicalEncountersScenario : IScenarioModule
     {
         public int ScenarioId => 4;
         public string DisplayName => "4. Musical Encounters (SysMus25)";
@@ -22,6 +22,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private int _interactiveCubeCount = 2;
         private float _boundaryRadiusMeters = 1.2f;
         private float _speed = 0.65f;
+        private ScenarioLayout _lastLayout;
+        private bool _hasLayout;
 
         private Vector3[] _positions;
         private Vector3[] _velocities;
@@ -32,6 +34,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
 
         public void OnScenarioStart(ScenarioContext context)
         {
+            if (!_hasLayout || _lastLayout != context.Layout)
+                _speed = context.Layout == ScenarioLayout.RoomScale ? 1.1f : 0.65f;
+            _lastLayout = context.Layout;
+            _hasLayout = true;
             _ctx = context;
             SpawnEncountersArena();
         }
@@ -40,11 +46,10 @@ namespace SpatialMAS.Scenarios.BuiltIn
         {
             if (_ctx.Bus == null) return;
 
-            Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
-            float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
-            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
-            _boundaryRadiusMeters = Mathf.Clamp(5.0f * scale, 0.5f, 3.5f);
-            float agentSize = Mathf.Clamp(0.35f * scale, 0.04f, 0.15f);
+            Vector3 center = _ctx.ScenarioCenter;
+            bool room = _ctx.Layout == ScenarioLayout.RoomScale;
+            _boundaryRadiusMeters = room ? 2.5f : 1.0f;
+            float agentSize = room ? 0.14f : 0.07f;
 
             _ctx.Bus.AddBoundaryUnity(1, AgentShapeType.Sphere, center, _boundaryRadiusMeters);
             _ctx.Bus.InstantiateAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, _sphereCount, agentSize, "127.0.0.1", 6012);
@@ -75,8 +80,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     (float)(rng.NextDouble() * 2.0 - 1.0),
                     (float)(rng.NextDouble() * 2.0 - 1.0)).normalized;
 
-                _positions[i] = center + rotation * (dir * (_boundaryRadiusMeters * 0.45f * (float)rng.NextDouble()));
-                _velocities[i] = rotation * (dir * (_speed * (0.7f + 0.6f * (float)rng.NextDouble())));
+                _positions[i] = center + dir * (_boundaryRadiusMeters * 0.45f * (float)rng.NextDouble());
+                _velocities[i] = dir * (_speed * (0.7f + 0.6f * (float)rng.NextDouble()));
                 _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
 
                 _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_OscillatorWaveform, (float)(i % 2 == 0 ? SynthWaveformType.Sine : SynthWaveformType.Triangle));
@@ -94,7 +99,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (_ctx.Bus == null || _positions == null) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
-            Vector3 center = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
+            Vector3 center = _ctx.ScenarioCenter;
             int total = _positions.Length;
             float encounterRadius = _boundaryRadiusMeters * 0.20f;
 
@@ -191,16 +196,5 @@ namespace SpatialMAS.Scenarios.BuiltIn
             for (int i = 0; i < _velocities.Length; i++) _velocities[i] *= ratio;
         }
 
-        public void ApplySpatialFrameChange(SpatialFrameChange change)
-        {
-            if (_positions == null) return;
-            for (int i = 0; i < _positions.Length; i++)
-            {
-                _positions[i] = change.TransformPosition(_positions[i]);
-                _velocities[i] = change.TransformVector(_velocities[i]);
-            }
-            _boundaryRadiusMeters *= change.ScaleRatio;
-            _speed *= change.ScaleRatio;
-        }
     }
 }

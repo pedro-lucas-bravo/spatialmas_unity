@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.XR;
 using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+using UnityEngine.XR.OpenXR;
+using UnityEngine.XR.OpenXR.Features.CompositionLayers;
 
 namespace SpatialMAS.XR
 {
@@ -24,10 +27,21 @@ namespace SpatialMAS.XR
         private XRDisplayMode _currentMode = XRDisplayMode.MRPassthrough;
         private GameObject _studioFloorDisc;
         private GameObject _gridLinesRoot;
+        private bool _initialized;
+        private bool _hasPhysicalHmd;
+        private bool _hasPassthroughProvider;
 
         private static readonly List<XRDisplaySubsystem> s_DisplaySubsystems = new List<XRDisplaySubsystem>();
+        private static readonly List<XRCameraSubsystem> s_CameraSubsystems = new List<XRCameraSubsystem>();
 
         public XRDisplayMode CurrentMode => _currentMode;
+        public bool IsPassthroughActive => _currentMode == XRDisplayMode.MRPassthrough &&
+            _hasPhysicalHmd && _hasPassthroughProvider && _arCameraManager != null &&
+            _arCameraManager.enabled && _arCameraManager.subsystem != null && _arCameraManager.subsystem.running;
+        public string DisplayStatus => _currentMode == XRDisplayMode.VRImmersive ? "VR immersive" :
+            !_hasPhysicalHmd ? "MR preview (no headset)" :
+            !_hasPassthroughProvider ? "MR unavailable (check OpenXR / Link settings)" :
+            IsPassthroughActive ? "MR passthrough" : "MR starting";
 
         public void Initialize(
             SimulationCommandBus bus,
@@ -53,6 +67,7 @@ namespace SpatialMAS.XR
                 _bus.OnSetXRDisplayMode += SetDisplayMode;
             }
 
+            _initialized = true;
             SetDisplayMode(initialMode);
         }
 
@@ -71,11 +86,8 @@ namespace SpatialMAS.XR
                 : XRDisplayMode.MRPassthrough);
         }
 
-        private static bool IsPhysicalXRHeadsetRunning()
+        protected virtual bool IsPhysicalXRHeadsetRunning()
         {
-#if UNITY_VISIONOS || (UNITY_ANDROID && !UNITY_EDITOR)
-            return true;
-#else
             SubsystemManager.GetSubsystems(s_DisplaySubsystems);
             for (int i = 0; i < s_DisplaySubsystems.Count; i++)
             {
@@ -85,16 +97,45 @@ namespace SpatialMAS.XR
                 }
             }
             return false;
-#endif
+        }
+
+        protected virtual bool HasPassthroughProvider()
+        {
+            // A running VR display does not imply compositor passthrough support. These
+            // features also apply to Windows Editor Play through Meta Quest Link.
+            if (!OpenXRRuntime.IsExtensionEnabled("XR_FB_passthrough") ||
+                OpenXRSettings.Instance == null ||
+                OpenXRSettings.Instance.GetFeature<OpenXRCompositionLayersFeature>()?.enabled != true)
+                return false;
+            SubsystemManager.GetSubsystems(s_CameraSubsystems);
+            foreach (var camera in s_CameraSubsystems)
+                if (camera != null && camera.subsystemDescriptor.id == "Meta-Camera") return true;
+            return false;
+        }
+
+        private void Update()
+        {
+            if (!_initialized) return;
+            bool hasHmd = IsPhysicalXRHeadsetRunning();
+            bool hasProvider = hasHmd && HasPassthroughProvider();
+            if (hasHmd != _hasPhysicalHmd || hasProvider != _hasPassthroughProvider)
+                ApplyDisplayState(hasHmd, hasProvider);
         }
 
         public void SetDisplayMode(XRDisplayMode mode)
         {
             _currentMode = mode;
+            ApplyDisplayState(IsPhysicalXRHeadsetRunning(), HasPassthroughProvider());
+        }
+
+        private void ApplyDisplayState(bool hasPhysicalHmd, bool hasPassthroughProvider)
+        {
+            _hasPhysicalHmd = hasPhysicalHmd;
+            _hasPassthroughProvider = hasPhysicalHmd && hasPassthroughProvider;
             if (_mainCamera == null) _mainCamera = Camera.main;
 
-            bool isMR = (mode == XRDisplayMode.MRPassthrough);
-            bool hasPhysicalHmd = IsPhysicalXRHeadsetRunning();
+            bool isMR = (_currentMode == XRDisplayMode.MRPassthrough);
+            bool enablePassthrough = isMR && _hasPhysicalHmd && _hasPassthroughProvider;
 
             // 1. Configure AR Passthrough Subsystem ONLY when a real XR headset is active.
             // Keeping ARSession/ARCameraManager disabled on Desktop prevents Unity's XRSimulation
@@ -105,11 +146,11 @@ namespace SpatialMAS.XR
             }
             if (_arCameraManager != null)
             {
-                _arCameraManager.enabled = isMR && hasPhysicalHmd;
+                _arCameraManager.enabled = enablePassthrough;
             }
             if (_arSession != null)
             {
-                _arSession.enabled = isMR && hasPhysicalHmd;
+                _arSession.enabled = enablePassthrough;
             }
 
             // 2. Configure Camera Background Alpha & URP Post-Processing
@@ -120,6 +161,8 @@ namespace SpatialMAS.XR
                 _mainCamera.backgroundColor = isMR
                     ? new Color(0f, 0f, 0f, 0f)
                     : _vrBackdropColor;
+                // LDR color targets retain the transparent clear needed by the compositor.
+                _mainCamera.allowHDR = false;
 
                 var urpData = _mainCamera.GetComponent<UniversalAdditionalCameraData>();
                 if (urpData == null)
@@ -140,7 +183,7 @@ namespace SpatialMAS.XR
                     if (_studioFloorDisc != null) _studioFloorDisc.SetActive(true);
                     if (_gridLinesRoot != null) _gridLinesRoot.SetActive(true);
                 }
-                else if (!hasPhysicalHmd)
+                else if (!enablePassthrough)
                 {
                     // Desktop / Editor MR Preview (no physical camera feed):
                     // Keep the subtle 3D spatial grid lines visible (without the opaque floor disc)

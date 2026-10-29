@@ -45,7 +45,7 @@ Autonomous spheres orbit in spherical coordinates $(r, \theta, \varphi)$ around 
 ### Scenario 4: Musical Encounters (`MusicalEncountersScenario.cs`)
 Autonomous agents bounce elastically inside a translucent spherical boundary. Whenever two agents (or a user-held interactive cube) come within `detectionRadius`, both flash warm gold and trigger a C-Major chord note quantized by radial distance from the boundary center ($r / R_{\text{boundary}}$).
 
-Speed parameters and presets immediately rescale existing velocities. Arena calibration changes rebase active scenario positions, sizes, and velocity caches together.
+Speed parameters and presets immediately rescale existing velocities. Calibration reference changes leave active scenario positions, dimensions, velocities, and audio unchanged.
 
 ### Scenario 5: Self-Assembly (`SelfAssemblyScenario.cs`)
 Cubic agents with 6 orthogonal face connection slots (`+X, -X, +Z, -Z, +Y, -Y`):
@@ -53,3 +53,19 @@ Cubic agents with 6 orthogonal face connection slots (`+X, -X, +Z, -Z, +Y, -Y`):
 - **Coupled Musical Phasors**: When cubes dock at $90^\circ$ orthogonal face slots, their internal musical phasors ($\psi \in [0, 1)$) synchronize to the root structure, stepping sequentially through connected face slots to play polyrhythmic pentatonic melodies whose Attack/Release times grow lusher as the structure size increases.
 
 Docking applies cube rotations to the visible entities. Detachment rebuilds parent/root membership for each remaining connected structure so separated cubes stop following old parents.
+
+## 3. Explicit Physical Layouts
+
+All simulation state uses world meters. Choose Compact or RoomScale for the next load/reset; neither is a global coordinate multiplier. Next-center changes affect only subsequent spawning. Physical user repulsion and pinch/grab distances remain independently specified in meters.
+
+| Scenario | Compact | RoomScale |
+| --- | --- | --- |
+| Crowd | Agent dimension .064 m; arena radius 1.3 m; initial speed .65 m/s | .16 m; 3 m; 1.2 m/s |
+| Swarmalators | Sphere diameter .056 m; cube edge .07 m; model interaction length .5 m | .12 m; .15 m; 1.5 m |
+| Attractors | Sphere diameter .056 m; cube edge .0812 m; orbit radius .22–.36 m; repeller radius .25 m | .12 m; .18 m; .7–1.1 m; .65 m |
+| Musical Encounters | Sphere diameter .07 m; cube edge .091 m; boundary radius 1 m; initial speed .65 m/s | .14 m; .182 m; 2.5 m; 1.1 m/s |
+| Self-Assembly | Cube edge .084 m; arena radius .9 m | .15 m; 2 m |
+
+Live speed/behavior parameters are explicit experimental settings. Reset preserves active behavior parameters when the physical layout is unchanged. Switching layout selects its dimensions and layout-dependent motion defaults, including Crowd and Musical Encounters speed; other settings such as Swarm coupling, Attractor angular speed, and assembly tempo/maximum structure size persist. Agent size means the full primitive/unit-mesh dimension; a sphere radius is half its diameter. Boundary radius/full-extents signatures remain documented separately in the OSC specification.
+
+Swarmalator dynamics use world-meter positions and an explicit interaction-length model parameter to express dimensionless coupling distances; it does not alter coordinate conversion or participant properties. Camera/listener rolloff is physical world-space audio. Calibration metadata permits external analysis without rebasing the simulation.

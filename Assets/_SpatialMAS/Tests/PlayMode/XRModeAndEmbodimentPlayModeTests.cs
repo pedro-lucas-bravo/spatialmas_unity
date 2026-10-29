@@ -12,6 +12,48 @@ namespace SpatialMAS.Tests.PlayMode
     public class XRModeAndEmbodimentPlayModeTests
     {
         [UnityTest]
+        public IEnumerator DelayedXRAndPassthroughInitialization_ReappliesRequestedMode()
+        {
+            var camGo = new GameObject("Delayed XR Camera");
+            var cam = camGo.AddComponent<Camera>();
+            var modeGo = new GameObject("Delayed XR Mode");
+            var mode = modeGo.AddComponent<DelayedXRModeSwitcher>();
+            var studio = new GameObject("Test Studio");
+            var bus = new SimulationCommandBus();
+            try
+            {
+                mode.Initialize(bus, cam, null, null, studio, XRDisplayMode.MRPassthrough);
+                Assert.IsTrue(studio.activeSelf, "Keep a preview until the XR provider has started.");
+                StringAssert.Contains("preview", mode.DisplayStatus);
+
+                mode.HeadsetRunning = true;
+                yield return null;
+                StringAssert.Contains("unavailable", mode.DisplayStatus);
+                Assert.IsTrue(studio.activeSelf);
+
+                mode.PassthroughProviderReady = true;
+                yield return null;
+                Assert.IsFalse(studio.activeSelf, "Late provider initialization must hide the preview without a manual mode toggle.");
+                Assert.AreEqual(XRDisplayMode.MRPassthrough, mode.CurrentMode);
+                Assert.IsFalse(cam.allowHDR);
+
+                bus.SetXRDisplayMode(XRDisplayMode.VRImmersive);
+                mode.PassthroughProviderReady = false;
+                yield return null;
+                mode.PassthroughProviderReady = true;
+                yield return null;
+                Assert.AreEqual(XRDisplayMode.VRImmersive, mode.CurrentMode);
+                Assert.IsTrue(studio.activeSelf, "Provider changes must preserve the user's VR choice.");
+            }
+            finally
+            {
+                Object.Destroy(modeGo);
+                Object.Destroy(studio);
+                Object.Destroy(camGo);
+            }
+        }
+
+        [UnityTest]
         public IEnumerator XRModeSwitcher_TogglesPassthroughAlphaAndVRStudioEnvironment()
         {
             var bus = new SimulationCommandBus();
@@ -53,5 +95,13 @@ namespace SpatialMAS.Tests.PlayMode
             Object.Destroy(switcherGo);
             Object.Destroy(camGo);
         }
+    }
+
+    public class DelayedXRModeSwitcher : XRModeSwitcher
+    {
+        public bool HeadsetRunning;
+        public bool PassthroughProviderReady;
+        protected override bool IsPhysicalXRHeadsetRunning() => HeadsetRunning;
+        protected override bool HasPassthroughProvider() => PassthroughProviderReady;
     }
 }

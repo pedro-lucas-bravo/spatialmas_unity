@@ -187,7 +187,7 @@ namespace SpatialMAS.Tests.EditMode
                 scenario.OnScenarioStart(new ScenarioContext
                 {
                     Bus = bus,
-                    CoordinateMapper = new SpatialCoordinateMapper(0.2f, Vector3.zero),
+                    ScenarioCenter = Vector3.zero,
                     Embodiment = embodiment
                 });
 
@@ -202,35 +202,128 @@ namespace SpatialMAS.Tests.EditMode
             }
         }
 
-        [Test]
-        public void MusicalEncounters_FrameChangePreservesCalibratedMotionOnFollowingTick()
+        [TestCase(ScenarioLayout.Compact)]
+        [TestCase(ScenarioLayout.RoomScale)]
+        public void PhysicalLayouts_ResetAtSameCenterPreservesDimensionsAndPositions(ScenarioLayout layout)
         {
-            var originalMapper = new SpatialCoordinateMapper(0.2f, Vector3.zero);
-            var changedMapper = new SpatialCoordinateMapper(0.2f, Vector3.zero);
-            var originalPositions = new Dictionary<int, Vector3>();
-            var changedPositions = new Dictionary<int, Vector3>();
-            var originalBus = new SimulationCommandBus();
-            var changedBus = new SimulationCommandBus();
-            originalBus.OnSetAgentPositionUnity += (id, position) => originalPositions[id] = position;
-            changedBus.OnSetAgentPositionUnity += (id, position) => changedPositions[id] = position;
-            var original = new MusicalEncountersScenario();
-            var changed = new MusicalEncountersScenario();
-            original.OnScenarioStart(new ScenarioContext { Bus = originalBus, CoordinateMapper = originalMapper });
-            changed.OnScenarioStart(new ScenarioContext { Bus = changedBus, CoordinateMapper = changedMapper });
-            changedMapper.OnFrameChanged += changed.ApplySpatialFrameChange;
-
-            changedMapper.OriginOffset = new Vector3(2f, 3f, 4f);
-            changedMapper.OriginRotation = Quaternion.Euler(0f, 90f, 0f);
-            changedMapper.WorldScale = 0.4f;
-            original.OnScenarioTick(0.02f);
-            changed.OnScenarioTick(0.02f);
-
-            foreach (var pair in originalPositions)
+            foreach (IScenarioModule scenario in new IScenarioModule[]
             {
-                Vector3 wire = originalMapper.UnityMetersToOscMillimeters(pair.Value);
-                Vector3 expected = changedMapper.OscMillimetersToUnityMeters(wire.x, wire.y, wire.z);
-                Assert.Less(Vector3.Distance(expected, changedPositions[pair.Key]), 0.0001f,
-                    "A later scenario tick must retain translation, rotation, scale, and velocity calibration.");
+                new CrowdAvoidanceScenario(), new SwarmalatorsScenario(), new AttractorsRepellersScenario(),
+                new MusicalEncountersScenario(), new SelfAssemblyScenario()
+            })
+            {
+                var bus = new SimulationCommandBus();
+                var positions = new Dictionary<int, Vector3>();
+                var dimensions = new List<float>();
+                bus.OnSetAgentPositionUnity += (id, position) => positions[id] = position;
+                bus.OnInstantiateAgents += (shape, mode, count, size, ip, port) => dimensions.Add(size);
+                bus.OnAddAgents += (shape, mode, size, ip, port, ids) => dimensions.Add(size);
+                bus.OnAddBoundaryUnity += (id, shape, center, radius) => dimensions.Add(radius);
+                var context = new ScenarioContext
+                {
+                    Bus = bus, ScenarioCenter = new Vector3(2f, 1.2f, 3f), Layout = layout
+                };
+                scenario.OnScenarioStart(context);
+                var expectedPositions = new Dictionary<int, Vector3>(positions);
+                var expectedDimensions = dimensions.ToArray();
+                scenario.OnScenarioTick(0.02f);
+                scenario.OnScenarioStop();
+                positions.Clear();
+                dimensions.Clear();
+                scenario.OnScenarioStart(context);
+                CollectionAssert.AreEqual(expectedDimensions, dimensions, scenario.DisplayName);
+                Assert.AreEqual(expectedPositions.Count, positions.Count, scenario.DisplayName);
+                foreach (var pair in expectedPositions)
+                    Assert.Less(Vector3.Distance(pair.Value, positions[pair.Key]), 0.00001f, scenario.DisplayName);
+                scenario.OnScenarioStop();
+            }
+        }
+
+        [Test]
+        public void PhysicalLayouts_SwitchingLayoutsDoesNotCompoundDimensionsOrInitialPositions()
+        {
+            foreach (IScenarioModule scenario in new IScenarioModule[]
+            {
+                new CrowdAvoidanceScenario(), new SwarmalatorsScenario(), new AttractorsRepellersScenario(),
+                new MusicalEncountersScenario(), new SelfAssemblyScenario()
+            })
+            {
+                var bus = new SimulationCommandBus();
+                var positions = new Dictionary<int, Vector3>();
+                var dimensions = new List<float>();
+                bus.OnSetAgentPositionUnity += (id, position) => positions[id] = position;
+                bus.OnInstantiateAgents += (shape, mode, count, size, ip, port) => dimensions.Add(size);
+                bus.OnAddAgents += (shape, mode, size, ip, port, ids) => dimensions.Add(size);
+                bus.OnAddBoundaryUnity += (id, shape, center, radius) => dimensions.Add(radius);
+                var context = new ScenarioContext { Bus = bus, Layout = ScenarioLayout.RoomScale };
+                scenario.OnScenarioStart(context);
+                var expectedPositions = new Dictionary<int, Vector3>(positions);
+                var expectedDimensions = dimensions.ToArray();
+                scenario.OnScenarioStop();
+                context.Layout = ScenarioLayout.Compact;
+                scenario.OnScenarioStart(context);
+                scenario.OnScenarioTick(0.02f);
+                scenario.OnScenarioStop();
+                positions.Clear();
+                dimensions.Clear();
+                context.Layout = ScenarioLayout.RoomScale;
+                scenario.OnScenarioStart(context);
+                CollectionAssert.AreEqual(expectedDimensions, dimensions, scenario.DisplayName);
+                foreach (var pair in expectedPositions)
+                    Assert.Less(Vector3.Distance(pair.Value, positions[pair.Key]), 0.00001f, scenario.DisplayName);
+                scenario.OnScenarioStop();
+            }
+        }
+
+        [Test]
+        public void PhysicalLayouts_UseLiteralDimensionsAndMetersPerSecond()
+        {
+            foreach (var layout in new[] { ScenarioLayout.Compact, ScenarioLayout.RoomScale })
+            {
+                var context = new ScenarioContext { Bus = new SimulationCommandBus(), Layout = layout };
+                var crowd = new CrowdAvoidanceScenario();
+                crowd.OnScenarioStart(context);
+                Assert.AreEqual(layout == ScenarioLayout.RoomScale ? 3f : 1.3f, GetField<float>(crowd, "_arenaRadiusMeters"));
+                Assert.AreEqual(layout == ScenarioLayout.RoomScale ? 1.2f : 0.65f, GetField<float>(crowd, "_cruiseSpeed"));
+                var encounters = new MusicalEncountersScenario();
+                encounters.OnScenarioStart(context);
+                Assert.AreEqual(layout == ScenarioLayout.RoomScale ? 2.5f : 1f, GetField<float>(encounters, "_boundaryRadiusMeters"));
+                Assert.AreEqual(layout == ScenarioLayout.RoomScale ? 1.1f : 0.65f, GetField<float>(encounters, "_speed"));
+                var assembly = new SelfAssemblyScenario();
+                assembly.OnScenarioStart(context);
+                Assert.AreEqual(layout == ScenarioLayout.RoomScale ? 0.15f : 0.084f, GetField<float>(assembly, "_cubeSizeMeters"));
+            }
+        }
+
+        [Test]
+        public void ScenarioPlacement_TranslatesPositionsWithoutChangingDimensions()
+        {
+            Vector3 translation = new Vector3(3f, 2f, -4f);
+            foreach (IScenarioModule scenario in new IScenarioModule[]
+            {
+                new CrowdAvoidanceScenario(), new SwarmalatorsScenario(), new AttractorsRepellersScenario(),
+                new MusicalEncountersScenario(), new SelfAssemblyScenario()
+            })
+            {
+                var bus = new SimulationCommandBus();
+                var positions = new Dictionary<int, Vector3>();
+                var dimensions = new List<float>();
+                bus.OnSetAgentPositionUnity += (id, position) => positions[id] = position;
+                bus.OnInstantiateAgents += (shape, mode, count, size, ip, port) => dimensions.Add(size);
+                bus.OnAddAgents += (shape, mode, size, ip, port, ids) => dimensions.Add(size);
+                var context = new ScenarioContext { Bus = bus, ScenarioCenter = Vector3.zero };
+                scenario.OnScenarioStart(context);
+                var expectedPositions = new Dictionary<int, Vector3>(positions);
+                var expectedDimensions = dimensions.ToArray();
+                scenario.OnScenarioStop();
+                positions.Clear();
+                dimensions.Clear();
+                context.ScenarioCenter = translation;
+                scenario.OnScenarioStart(context);
+                CollectionAssert.AreEqual(expectedDimensions, dimensions, scenario.DisplayName);
+                foreach (var pair in expectedPositions)
+                    Assert.Less(Vector3.Distance(pair.Value + translation, positions[pair.Key]), 0.00001f, scenario.DisplayName);
+                scenario.OnScenarioStop();
             }
         }
 

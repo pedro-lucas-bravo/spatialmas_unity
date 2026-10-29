@@ -15,7 +15,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
     /// - 90-degree face snapping and coupled internal phasor (_cyclePhasor) synchronization across connected structures.
     /// - Polyrhythmic face-slot MIDI note sequencing where Attack/Release scale with structure size.
     /// </summary>
-    public class SelfAssemblyScenario : IScenarioModule, ISpatialFrameAwareScenario
+    public class SelfAssemblyScenario : IScenarioModule
     {
         public enum AssemblyState
         {
@@ -79,7 +79,8 @@ namespace SpatialMAS.Scenarios.BuiltIn
         private float _maxJoinedDuration = 18.0f;
         private float _arenaRadiusMeters;
         private float _dockingSpeedMetersPerSecond = 0.55f;
-        private float _movementScale = 1f;
+        private float _wallReturnSpeedMetersPerSecond = 0.24f;
+        private float _detachSpeedMetersPerSecond = 0.28f;
 
         private CubeNode[] _nodes;
 
@@ -95,13 +96,13 @@ namespace SpatialMAS.Scenarios.BuiltIn
         {
             if (_ctx.Bus == null) return;
 
-            Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
-            float scale = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.WorldScale : 0.2f;
-            Quaternion rotation = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginRotation : Quaternion.identity;
-            _cubeSizeMeters = Mathf.Clamp(0.42f * scale, 0.055f, 0.16f);
-            _arenaRadiusMeters = Mathf.Clamp(4.5f * scale, 0.55f, 2.5f);
-            _dockingSpeedMetersPerSecond = 0.55f;
-            _movementScale = 1f;
+            Vector3 origin = _ctx.ScenarioCenter;
+            bool room = _ctx.Layout == ScenarioLayout.RoomScale;
+            _cubeSizeMeters = room ? 0.15f : 0.084f;
+            _arenaRadiusMeters = room ? 2.0f : 0.9f;
+            _dockingSpeedMetersPerSecond = room ? 0.8f : 0.55f;
+            _wallReturnSpeedMetersPerSecond = room ? 0.4f : 0.24f;
+            _detachSpeedMetersPerSecond = room ? 0.45f : 0.28f;
 
             _ctx.Bus.InstantiateAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, _cubeCount, _cubeSizeMeters, "127.0.0.1", 6012);
 
@@ -118,15 +119,15 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     StateTimer = (float)(rng.NextDouble() * _wanderingDuration),
                     CyclePhasor = (float)rng.NextDouble(),
                     RhythmDivision = s_RhythmDivisions[i % s_RhythmDivisions.Length],
-                    Rotation = rotation,
-                    Position = origin + rotation * new Vector3(
+                    Rotation = Quaternion.identity,
+                    Position = origin + new Vector3(
                         (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.7f,
                         (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.45f,
                         (float)(rng.NextDouble() * 2.0 - 1.0) * _arenaRadiusMeters * 0.7f),
-                    Velocity = rotation * (new Vector3(
+                    Velocity = new Vector3(
                         (float)(rng.NextDouble() * 2.0 - 1.0),
                         (float)(rng.NextDouble() * 2.0 - 1.0),
-                        (float)(rng.NextDouble() * 2.0 - 1.0)).normalized * 0.22f)
+                        (float)(rng.NextDouble() * 2.0 - 1.0)).normalized * (room ? 0.35f : 0.22f)
                 };
 
                 for (int f = 0; f < 6; f++)
@@ -158,7 +159,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             if (_ctx.Bus == null || _nodes == null) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
-            Vector3 origin = _ctx.CoordinateMapper != null ? _ctx.CoordinateMapper.OriginOffset : new Vector3(0f, 1.2f, 0.8f);
+            Vector3 origin = _ctx.ScenarioCenter;
             float joinDetectRadius = _cubeSizeMeters * 3.2f;
 
             // 1. Check User Hand / Mouse Grab States
@@ -260,7 +261,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             Vector3 offset = node.Position - center;
             if (offset.magnitude > radius)
             {
-                node.Velocity = -offset.normalized * (0.24f * _movementScale);
+                node.Velocity = -offset.normalized * _wallReturnSpeedMetersPerSecond;
                 node.Position = center + offset.normalized * (radius * 0.95f);
             }
         }
@@ -367,7 +368,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
             node.RootStructureId = node.Id;
             node.State = AssemblyState.Wandering;
             node.StateTimer = _wanderingDuration;
-            node.Velocity = Random.onUnitSphere * (0.28f * _movementScale);
+            node.Velocity = Random.onUnitSphere * _detachSpeedMetersPerSecond;
             _ctx.Bus?.SetAgentSynthNote(node.Id, 0, 60, 0);
             RebuildStructureMetadata();
         }
@@ -448,21 +449,6 @@ namespace SpatialMAS.Scenarios.BuiltIn
                     }
                 }
             }
-        }
-
-        public void ApplySpatialFrameChange(SpatialFrameChange change)
-        {
-            if (_nodes == null) return;
-            foreach (CubeNode node in _nodes)
-            {
-                node.Position = change.TransformPosition(node.Position);
-                node.Velocity = change.TransformVector(node.Velocity);
-                node.Rotation = change.TransformRotation(node.Rotation);
-            }
-            _cubeSizeMeters *= change.ScaleRatio;
-            _arenaRadiusMeters *= change.ScaleRatio;
-            _dockingSpeedMetersPerSecond *= change.ScaleRatio;
-            _movementScale *= change.ScaleRatio;
         }
 
         private void StepMusicalPhasor(CubeNode node, float dt)

@@ -25,11 +25,11 @@
 
 ---
 
-## 2. Switching Scenarios, MR/VR Mode & Arena Scale
+## 2. Scenarios, Physical Layouts and Calibration Reference
 
 Use either the on-screen **Researcher Control Panel** or quick keyboard shortcuts:
 
-On a configured headset, point at the world-space panel and pinch/press its buttons. It includes scenario/preset selection, pause/reset, MR/VR, recording, IDs, scale, and arena placement controls; keyboard shortcuts below are for desktop.
+On a configured headset, point at the world-space panel and pinch/press its buttons. It includes scenario/preset selection, pause/reset, MR/VR, recording, IDs, physical layout/placement, and calibration reference controls; keyboard shortcuts below are for desktop.
 
 - **Keys `0` – `5` (or Scenario Buttons)**:
   - **`0`**: *External OSC Mode* (Waits for Python/Max/C++ commands on UDP port `6011`)
@@ -44,20 +44,28 @@ On a configured headset, point at the world-space panel and pinch/press its butt
   - Switches instantly between **MR Passthrough** and **VR Immersive Studio** (dark studio backdrop with a holographic reference floor grid).
 - **Key `I` (or `[Show IDs]` button)**: Toggle floating 3D Agent ID labels above every agent.
 - **Key `H` (or `[Hide]` button)**: Show / Hide the Researcher Control Panel.
-- **World Scale Slider (`0.05x – 1.50x`)**:
-  - Rescales the entire simulation from a compact **Tabletop scale (`0.15x – 0.25x`)** to full **Room-Scale (`1.0x`)**.
+- **Next Compact / Next Room Layout**: Choose a physical configuration for the next scenario load/reset. These presets specify sizes and speeds in meters and meters/second; they do not resize the current scene or participant.
+- **Spawn Next Scenario Here**: Sets the next spawn center ahead of you. Load/reset to apply it.
+- **Reference controls**: The reference starts visible and locked at world zero. Unlock it, use Reference Ahead or drag the marker (desktop scroll adjusts depth; R rotates 90 degrees), then lock it again. XR users can grab the unlocked marker. Hide/Show changes only its graphics. Reference movement leaves all raw world coordinates and existing objects unchanged.
 
 ---
 
 ## 3. Downloading CSV Telemetry Logs Over Wi-Fi (No USB Cable Needed!)
 
-SpatialMAS automatically records two synchronized, timestamped CSV files during your experiment:
-1. **`osc_traffic_<timestamp>_<session-id>.csv`**: Incoming and outgoing OSC messages (`TimestampISO, ElapsedMs, Direction, OscAddress, Arguments`).
-2. **`xr_embodiment_<timestamp>_<session-id>.csv`**: Targets **50 Hz** (limited by frame rate), capturing **head position/rotation**, **hand positions**, **pinch state**, **scenario**, **world scale**, **agent count**, and **frame time**. Hand rotations are not included.
+SpatialMAS records five CSV files and one metadata JSON per session:
 
-Both files share a unique session ID. Restarting recording creates a new pair without overwriting the previous session.
+1. `osc_traffic_`: Raw incoming/outgoing OSC messages.
+2. `xr_embodiment_`: Head/hand world poses, full rotations, tracking validity, simulation/desktop source, scenario/layout, and calibration/tracking revisions.
+3. `object_state_`: Sampled agents, boundaries, and arrows with actual world poses and physical dimensions.
+4. `calibration_`: Initial reference pose and subsequent changes, including lock/visibility.
+5. `session_events_`: Scenario, parameter/preset, calibration, and tracking-frame changes.
+6. `session_metadata_*.json`: Schema version, coordinate conventions, configuration and file inventory.
+
+Download all six files for a session. Join object and participant rows by `(SessionId, SampleId)`; their timestamps match. Positions and dimensions are Unity-world meters, rotations are world quaternions `x,y,z,w`. Sampling targets 50 Hz but is frame-limited; use actual `ElapsedMs` values. Exclude untracked-hand samples from measured-hand analysis. Changing the reference never rewrites raw world data. See the [coordinate/recording contract](ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract) for reference-relative conversion and motion-capture alignment.
+
+Each restart creates a new session without overwriting previous recordings.
 
 ### How to Download Logs to Your Laptop:
 1. Look at the **SpatialMAS Researcher HUD** inside the app to see the Wi-Fi Log URL (for example: `http://192.168.1.42:8080/`).
 2. Open that URL in any web browser on a laptop connected to the same Wi-Fi network.
-3. Click **`[Download CSV]`** next to any session file to save it directly to your laptop!
+3. Click the download button next to each CSV/JSON session file to save it directly to your laptop!

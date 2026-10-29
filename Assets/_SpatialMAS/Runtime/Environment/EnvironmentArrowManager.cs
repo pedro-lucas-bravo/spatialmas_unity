@@ -13,6 +13,7 @@ namespace SpatialMAS.Environment
         private readonly Dictionary<int, GameObject> _arrows = new Dictionary<int, GameObject>();
         private SimulationCommandBus _bus;
         private Material _arrowMaterial;
+        public IReadOnlyDictionary<int, GameObject> ActiveArrows => _arrows;
 
         public void Initialize(SimulationCommandBus bus, Material arrowMaterial = null)
         {
@@ -33,7 +34,6 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnSetArrowUnity += HandleSetArrow;
                 _bus.OnRemoveArrow += HandleRemoveArrow;
-                _bus.OnSpatialFrameChanged += HandleSpatialFrameChanged;
             }
         }
 
@@ -43,7 +43,6 @@ namespace SpatialMAS.Environment
             {
                 _bus.OnSetArrowUnity -= HandleSetArrow;
                 _bus.OnRemoveArrow -= HandleRemoveArrow;
-                _bus.OnSpatialFrameChanged -= HandleSpatialFrameChanged;
             }
         }
 
@@ -94,15 +93,5 @@ namespace SpatialMAS.Environment
             }
         }
 
-        private void HandleSpatialFrameChanged(SpatialFrameChange change)
-        {
-            foreach (GameObject arrow in _arrows.Values)
-            {
-                if (arrow == null) continue;
-                arrow.transform.position = change.TransformPosition(arrow.transform.position);
-                arrow.transform.rotation = change.TransformRotation(arrow.transform.rotation);
-                arrow.transform.localScale *= change.ScaleRatio;
-            }
-        }
     }
 }

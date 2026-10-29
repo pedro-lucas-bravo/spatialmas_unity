@@ -38,6 +38,19 @@ namespace SpatialMAS.Tests.PlayMode
 
                 Assert.IsFalse(jsonTask.IsFaulted);
                 StringAssert.Contains(fileName, jsonTask.Result);
+                string metadataName = Path.GetFileName(recorder.ActiveMetadataPath);
+                StringAssert.Contains(metadataName, jsonTask.Result);
+                var metadataTask = httpClient.GetAsync($"http://127.0.0.1:{boundPort}/logs/{metadataName}");
+                while (!metadataTask.IsCompleted) yield return null;
+                Assert.IsFalse(metadataTask.IsFaulted);
+                using (var response = metadataTask.Result)
+                {
+                    Assert.IsTrue(response.IsSuccessStatusCode);
+                    Assert.AreEqual("application/json", response.Content.Headers.ContentType.MediaType);
+                    var bodyTask = response.Content.ReadAsStringAsync();
+                    while (!bodyTask.IsCompleted) yield return null;
+                    StringAssert.Contains("\"schemaVersion\":2", bodyTask.Result);
+                }
 
                 csvTask = httpClient.GetStringAsync($"http://127.0.0.1:{boundPort}/logs/{fileName}");
                 while (!csvTask.IsCompleted) yield return null;
