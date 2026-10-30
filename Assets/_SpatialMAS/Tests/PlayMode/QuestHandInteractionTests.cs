@@ -31,6 +31,10 @@ namespace SpatialMAS.Tests.PlayMode
         private readonly List<GameObject> _objects = new List<GameObject>();
         private MetaAimHand _testAim;
         private MetaAimHand _previousLeftAim;
+        private SyntheticInputScope _inputScope;
+
+        [SetUp]
+        public void SetUp() => _inputScope = new SyntheticInputScope();
 
         private GameObject NewObject(string name)
         {
@@ -50,6 +54,7 @@ namespace SpatialMAS.Tests.PlayMode
             }
             foreach (var go in _objects) if (go != null) Object.DestroyImmediate(go);
             _objects.Clear();
+            _inputScope.Dispose();
         }
 
         [Test]

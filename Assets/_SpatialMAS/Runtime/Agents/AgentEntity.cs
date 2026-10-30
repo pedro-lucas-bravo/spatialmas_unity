@@ -172,6 +172,17 @@ namespace SpatialMAS.Agents
 
             }
 
+            // XRI's automatic collider discovery skips triggers. Agent colliders intentionally
+            // remain triggers so autonomous motion does not cause physical collisions.
+            // Disable before changing this list: the manager caches collider mappings on registration.
+            if (_collider != null && !_grabInteractable.colliders.Contains(_collider))
+            {
+                bool wasEnabled = _grabInteractable.enabled;
+                _grabInteractable.enabled = false;
+                _grabInteractable.colliders.Add(_collider);
+                _grabInteractable.enabled = wasEnabled;
+            }
+
             // Prefabs can already contain an XRGrabInteractable when Awake caches it.
             // Always attach our lifecycle listeners, including when reusing a pooled agent.
             _grabInteractable.selectEntered.RemoveListener(OnXRSelectEntered);

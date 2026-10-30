@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
@@ -12,6 +13,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem.XR;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Inputs.Readers;
@@ -26,6 +28,10 @@ namespace SpatialMAS.Tests.PlayMode
     {
         private readonly List<GameObject> _objects = new List<GameObject>();
         private Mouse _mouse;
+        private SyntheticInputScope _inputScope;
+
+        [SetUp]
+        public void SetUp() => _inputScope = new SyntheticInputScope();
 
         private GameObject NewObject(string name)
         {
@@ -41,6 +47,7 @@ namespace SpatialMAS.Tests.PlayMode
             _mouse = null;
             foreach (var go in _objects) if (go != null) Object.DestroyImmediate(go);
             _objects.Clear();
+            _inputScope.Dispose();
         }
 
         [Test]
@@ -125,6 +132,116 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.IsTrue(agent.IsGrabbedByUser);
             grab.selectExited.Invoke(new SelectExitEventArgs());
             Assert.IsFalse(agent.IsGrabbedByUser);
+        }
+
+        [Test]
+        public void TriggerCollider_RegistersForExistingInteractableAndPooledReuse()
+        {
+            var manager = NewObject("Interaction Manager").AddComponent<XRInteractionManager>();
+            var go = NewObject("Trigger Agent");
+            var collider = go.AddComponent<SphereCollider>();
+            collider.isTrigger = true;
+            go.AddComponent<Rigidbody>().isKinematic = true;
+            var grab = go.AddComponent<XRGrabInteractable>();
+            grab.interactionManager = manager;
+            Assert.IsEmpty(grab.colliders, "XRI excludes triggers from automatic discovery.");
+            var agent = go.AddComponent<AgentEntity>();
+            var bus = new SimulationCommandBus();
+            agent.Configure(7, AgentShapeType.Cube, AgentMovementMode.Teleport, 0.07f, bus);
+            AssertColliderMapped(manager, grab, collider);
+
+            agent.SetInteractable(false);
+            Assert.IsFalse(manager.TryGetInteractableForCollider(collider, out IXRInteractable _));
+            agent.SetInteractable(true);
+            agent.SetInteractable(true);
+            AssertColliderMapped(manager, grab, collider);
+            Assert.AreEqual(1, grab.colliders.Count, "Repeated setup must not duplicate the collider.");
+
+            agent.ResetForPool();
+            Assert.IsFalse(manager.TryGetInteractableForCollider(collider, out IXRInteractable _));
+            go.SetActive(true);
+            agent.Configure(8, AgentShapeType.Sphere, AgentMovementMode.Teleport, 0.06f, bus);
+            Assert.IsFalse(manager.TryGetInteractableForCollider(collider, out IXRInteractable _));
+            agent.Configure(9, AgentShapeType.Cube, AgentMovementMode.Teleport, 0.07f, bus);
+            AssertColliderMapped(manager, grab, collider);
+            Assert.AreEqual(1, grab.colliders.Count);
+        }
+
+        [UnityTest]
+        public IEnumerator NearPinch_GrabsMovesAndReleasesTriggerCube() => GrabTriggerCube(false);
+
+        [UnityTest]
+        public IEnumerator FarPinch_GrabsMovesAndReleasesTriggerCube() => GrabTriggerCube(true);
+
+        private IEnumerator GrabTriggerCube(bool far)
+        {
+            var manager = NewObject("Interaction Manager").AddComponent<XRInteractionManager>();
+            var rigGo = NewObject("XR Origin");
+            rigGo.SetActive(false);
+            var origin = rigGo.AddComponent<XROrigin>();
+            var offset = new GameObject("Camera Offset");
+            offset.transform.SetParent(rigGo.transform, false);
+            origin.CameraFloorOffsetObject = offset;
+            var cameraObject = new GameObject("Head Camera");
+            cameraObject.transform.SetParent(offset.transform, false);
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            origin.Camera = camera;
+            XRInteractionRigSetup.EnsureHandInteractors(camera);
+            // Exercise the generated rig without depending on attached hardware or real hand poses.
+            foreach (var driver in rigGo.GetComponentsInChildren<XRTrackedHandInteractor>(true)) driver.enabled = false;
+            foreach (var reader in rigGo.GetComponentsInChildren<XRHandPinchHysteresis>(true)) reader.enabled = false;
+            foreach (var visual in rigGo.GetComponentsInChildren<XRHandSkeletonVisual>(true)) visual.enabled = false;
+            var interactors = rigGo.GetComponentsInChildren<NearFarInteractor>(true);
+            var interactor = interactors[0];
+            interactors[1].enabled = false;
+            interactor.interactionManager = manager;
+            interactor.enableUIInteraction = false;
+            var pinch = new XRInputButtonReader("Test Pinch", inputSourceMode: XRInputButtonReader.InputSourceMode.ManualValue);
+            interactor.selectInput = pinch;
+            interactor.transform.position = new Vector3(0f, 1.2f, 0f);
+            rigGo.SetActive(true);
+
+            var bus = new SimulationCommandBus();
+            var clicks = new List<int>();
+            int movedEvents = 0;
+            bus.OnAgentControlClickEvent += (_, __, state) => clicks.Add(state);
+            bus.OnAgentMovedByUserUnity += (_, __) => movedEvents++;
+            var agent = NewObject("Trigger Cube").AddComponent<AgentEntity>();
+            agent.Configure(7, AgentShapeType.Cube, AgentMovementMode.Teleport, 0.07f, bus);
+            var grab = agent.GetComponent<XRGrabInteractable>();
+            grab.interactionManager = manager;
+            agent.PlaceImmediately(new Vector3(0f, 1.2f, far ? 0.9f : 0.05f));
+            Physics.SyncTransforms();
+            yield return null;
+            yield return null;
+            Assert.IsTrue(interactor.interactablesHovered.Contains(grab), "The generated caster must discover the trigger cube.");
+
+            pinch.QueueManualState(true, 1f);
+            yield return null;
+            yield return null;
+            Assert.IsTrue(agent.IsGrabbedByUser);
+            Assert.IsTrue(interactor.interactablesSelected.Contains(grab));
+            Assert.AreEqual(far ? NearFarInteractor.Region.Far : NearFarInteractor.Region.Near, interactor.selectionRegion.Value);
+            Vector3 start = agent.transform.position;
+            interactor.transform.position += Vector3.right * 0.2f;
+            for (int frame = 0; frame < 8; frame++) yield return null;
+            Assert.That(agent.transform.position.x - start.x, Is.GreaterThan(0.03f), "A selected cube must follow hand movement.");
+            Assert.That(movedEvents, Is.GreaterThan(0), "Grab movement must reach the telemetry/OSC bus.");
+
+            pinch.QueueManualState(false, 0f);
+            yield return null;
+            Assert.IsFalse(agent.IsGrabbedByUser);
+            Assert.IsFalse(interactor.hasSelection);
+            CollectionAssert.AreEqual(new[] { 1, 0 }, clicks);
+        }
+
+        private static void AssertColliderMapped(XRInteractionManager manager, XRGrabInteractable grab, Collider collider)
+        {
+            Assert.Contains(collider, grab.colliders);
+            Assert.IsTrue(collider.isTrigger, "Agent motion must retain trigger-only collision behavior.");
+            Assert.IsTrue(manager.TryGetInteractableForCollider(collider, out IXRInteractable mapped));
+            Assert.AreSame(grab, mapped);
         }
 
         [Test]
@@ -284,6 +401,37 @@ namespace SpatialMAS.Tests.PlayMode
         private static void Invoke(object target, string method, params object[] args)
         {
             target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, args);
+        }
+    }
+
+    /// <summary>Route synthetic input to player state even when CLI tests run without Game view focus.</summary>
+    internal sealed class SyntheticInputScope : System.IDisposable
+    {
+        private readonly InputSettings _previousSettings = InputSystem.settings;
+        private readonly InputSettings _testSettings;
+        private readonly HideFlags _previousHideFlags;
+
+        public SyntheticInputScope()
+        {
+            // Clone so test-only focus behavior never changes the project's input settings asset.
+            _previousHideFlags = _previousSettings.hideFlags;
+            _testSettings = Object.Instantiate(_previousSettings);
+            _testSettings.hideFlags = HideFlags.DontSave;
+            _testSettings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            _testSettings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            // Input System destroys its default HideAndDontSave settings when replaced.
+            // Retain that instance so teardown can restore it, including its original flags.
+            if (_previousHideFlags == HideFlags.HideAndDontSave)
+                _previousSettings.hideFlags = HideFlags.DontSave;
+            InputSystem.settings = _testSettings;
+            InputSystem.Update();
+        }
+
+        public void Dispose()
+        {
+            InputSystem.settings = _previousSettings;
+            _previousSettings.hideFlags = _previousHideFlags;
+            Object.DestroyImmediate(_testSettings);
         }
     }
 }
