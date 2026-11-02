@@ -75,7 +75,9 @@ namespace SpatialMAS.Tests.PlayMode
             InputState.Change(_testAim, state);
             var reader = NewObject("Left Pinch").AddComponent<XRHandPinchHysteresis>();
             reader.Handedness = Handedness.Left;
-            var uiInput = XRInteractionRigSetup.ObjectReader("UI Press", reader);
+            var uiReader = reader.gameObject.AddComponent<XRHandUISelectReader>();
+            uiReader.Configure(reader);
+            var uiInput = XRInteractionRigSetup.ObjectReader("UI Press", uiReader);
             Invoke(reader, "Update");
             Assert.IsTrue(uiInput.ReadIsPerformed());
             Assert.IsTrue(uiInput.ReadWasPerformedThisFrame());
@@ -153,17 +155,17 @@ namespace SpatialMAS.Tests.PlayMode
                 Assert.That(visual.HandRenderer.sharedMesh.vertexCount, Is.GreaterThan(100));
                 Assert.AreEqual(26, visual.SkeletonDriver.jointTransformReferences.Count);
                 Assert.AreEqual(handedness, visual.TrackingEvents.handedness);
-                Assert.AreEqual(XRHandTrackingEvents.UpdateTypes.Dynamic | XRHandTrackingEvents.UpdateTypes.BeforeRender, visual.TrackingEvents.updateType);
+                Assert.AreEqual(XRHandTrackingEvents.UpdateTypes.Dynamic, visual.TrackingEvents.updateType);
                 Assert.AreSame(visual.TrackingEvents, visual.SkeletonDriver.handTrackingEvents);
                 Assert.AreSame(visual.TrackingEvents, visual.MeshController.handTrackingEvents);
                 Assert.IsTrue(visual.MeshController.hideMeshWhenTrackingIsLost);
                 Assert.AreEqual(Vector3.one, visual.HandModel.transform.localScale);
                 Material[] materials = visual.HandRenderer.sharedMaterials;
                 Assert.AreEqual(2, materials.Length);
-                Assert.AreEqual("DepthOnly", materials[0].name);
-                Assert.AreEqual("Unity_Hand_Medium", materials[1].name);
+                Assert.AreSame(materials[0], materials[1]);
+                Assert.AreEqual("SpatialMAS_HandOverlay", materials[1].name);
                 Assert.IsTrue(materials[1].HasProperty("_MainColor"));
-                Assert.That(materials[1].GetColor("_MainColor").a, Is.EqualTo(0.65882355f).Within(0.001f));
+                Assert.That(materials[1].GetColor("_MainColor").a, Is.EqualTo(0.02f).Within(0.001f));
                 Assert.AreEqual("Transparent", materials[1].GetTag("RenderType", false));
                 Assert.That(materials[1].renderQueue, Is.GreaterThanOrEqualTo(3000));
                 Vector3 physicalSize = Vector3.Scale(visual.HandRenderer.sharedMesh.bounds.size, visual.HandRenderer.transform.lossyScale);
@@ -171,6 +173,78 @@ namespace SpatialMAS.Tests.PlayMode
                 Assert.That(largestSide, Is.InRange(0.05f, 0.5f), "Imported hand dimensions must remain in physical meters.");
             }
         }
+
+        [Test]
+        public void PhysicalPinch_TransfersBetweenFingersAndReleasesOnlyWhenBothOpen()
+        {
+            var reader = NewObject("Physical Pinch").AddComponent<XRHandPinchHysteresis>();
+            Sample(reader, Pose.identity, Vector3.zero, Vector3.right * 0.02f, Vector3.up * 0.02f);
+            Assert.IsTrue(reader.IsPinching);
+            Sample(reader, Pose.identity, Vector3.zero, Vector3.right * 0.05f, Vector3.up * 0.035f);
+            Assert.IsTrue(reader.IsPinching, "Middle finger must stay latched in its release band after index opens.");
+            Sample(reader, Pose.identity, Vector3.zero, Vector3.right * 0.05f, Vector3.up * 0.05f);
+            Assert.IsFalse(reader.IsPinching);
+        }
+
+        [Test]
+        public void PhysicalAnchor_UsesTrackingOriginAndWristRotationAndLocksFingerOpening()
+        {
+            var origin = NewObject("Moved Origin").transform;
+            origin.SetPositionAndRotation(new Vector3(4f, 1f, -2f), Quaternion.Euler(0f, 90f, 0f));
+            origin.localScale = Vector3.one * 2f;
+            var reader = NewObject("Physical Pinch").AddComponent<XRHandPinchHysteresis>();
+            reader.ConfigureTrackingOrigin(origin);
+            Pose wrist = new Pose(Vector3.forward, Quaternion.Euler(12f, 23f, 34f));
+            Sample(reader, wrist, Vector3.forward, Vector3.forward + Vector3.right * 0.02f, Vector3.one * 9f, false);
+            Assert.IsTrue(reader.TryGetInteractionPoseWorld(out Pose initial));
+            Assert.That(Vector3.Distance(origin.TransformPoint(Vector3.forward + Vector3.right * 0.01f), initial.position), Is.LessThan(0.0001f));
+            Assert.That(Quaternion.Angle(origin.rotation * wrist.rotation, initial.rotation), Is.LessThan(0.001f));
+            Sample(reader, wrist, Vector3.forward, Vector3.forward + Vector3.right * 0.035f, Vector3.one * 9f, false);
+            reader.TryGetInteractionPoseWorld(out Pose opening);
+            Assert.That(Vector3.Distance(initial.position, opening.position), Is.LessThan(0.0001f));
+            Sample(reader, wrist, Vector3.forward, Vector3.forward + Vector3.right * 0.035f, Vector3.one * 9f, false);
+            reader.TryGetInteractionPoseWorld(out Pose paused);
+            Assert.That(Vector3.Distance(initial.position, paused.position), Is.LessThan(0.0001f), "Release lock must survive a pause inside the release band.");
+            reader.enabled = false;
+            Assert.IsFalse(reader.HasPhysicalAnchor);
+            Assert.IsFalse(reader.IsPinching);
+        }
+
+        [Test]
+        public void PalmGrasp_RejectsExtendedIndexPokeAndCannotPressUI()
+        {
+            var reader = NewObject("Palm Grasp").AddComponent<XRHandPinchHysteresis>();
+            var ui = reader.gameObject.AddComponent<XRHandUISelectReader>();
+            ui.Configure(reader);
+            Invoke(reader, "EvaluatePhysicalSample", Pose.identity, Vector3.right * 0.1f,
+                Vector3.up * 0.1f, Vector3.up * 0.03f, Vector3.right * 0.03f, Vector3.zero, true, true, 1f / 90f);
+            Assert.IsFalse(reader.IsPinching, "An extended-index poke must not trigger a palm grab.");
+            Invoke(reader, "EvaluatePhysicalSample", Pose.identity, Vector3.right * 0.1f,
+                Vector3.up * 0.06f, Vector3.up * 0.03f, Vector3.right * 0.03f, Vector3.zero, true, true, 1f / 90f);
+            Assert.IsTrue(reader.IsPalmGrasp);
+            Assert.IsTrue(reader.IsPinching);
+            Assert.IsFalse(ui.ReadIsPerformed());
+        }
+
+        [Test]
+        public void AnchorFilter_DampsStationaryNoiseWithoutChangingInputPose_AndResetsOnReacquisition()
+        {
+            var filter = new XRHandTrackingProcessor.AnchorFilter();
+            filter.Filter(Pose.identity, 1f / 90f);
+            Pose raw = new Pose(Vector3.right * 0.0002f, Quaternion.Euler(0f, 0.1f, 0f));
+            Pose filtered = filter.Filter(raw, 1f / 90f);
+            Assert.That(filtered.position.x, Is.InRange(0f, raw.position.x * 0.5f));
+            Assert.AreEqual(0.0002f, raw.position.x, "Filtering must not change the raw telemetry pose.");
+            filter.Reset();
+            Pose reacquired = new Pose(Vector3.one, Quaternion.Euler(0f, 90f, 0f));
+            Assert.AreEqual(reacquired, filter.Filter(reacquired, 1f / 90f));
+            // Legacy scene components must be safe even without a running provider.
+            NewObject("Legacy Processor").AddComponent<XRHandTrackingProcessor>().ProcessJoints(null, 0, UnityEngine.XR.Hands.XRHandSubsystem.UpdateType.Dynamic);
+        }
+
+        private static void Sample(XRHandPinchHysteresis reader, Pose wrist, Vector3 thumb, Vector3 index,
+            Vector3 middle, bool hasMiddle = true) => Invoke(reader, "EvaluatePhysicalSample", wrist, thumb,
+                index, middle, Vector3.zero, Vector3.zero, hasMiddle, false, 1f / 90f);
 
         [Test]
         public void HandMeshVisual_WristAlignsUnderMovedTrackingOriginAndHidesOnTrackingLoss()
@@ -204,7 +278,7 @@ namespace SpatialMAS.Tests.PlayMode
         private static T Field<T>(object target, string name) =>
             (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(target);
 
-        private static void Invoke(object target, string method) =>
-            target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, null);
+        private static void Invoke(object target, string method, params object[] args) =>
+            target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, args);
     }
 }

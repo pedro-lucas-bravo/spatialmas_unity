@@ -1,161 +1,49 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Hands;
 using UnityEngine.XR.Hands.Processing;
 
 namespace SpatialMAS.XR
 {
-    /// <summary>
-    /// Zero-lag adaptive deadband hand tracking smoothing processor (implementing IXRHandProcessor).
-    /// Suppresses sub-millimeter optical tracking jitter when hands are stationary while passing through
-    /// active hand motion with zero added latency across Meta Quest 3, Apple Vision Pro, and OpenXR.
-    /// </summary>
-    [DefaultExecutionOrder(-100)]
+    /// <summary>Compatibility host for old scenes. Provider joints and recorded poses are never modified.</summary>
     public class XRHandTrackingProcessor : MonoBehaviour, IXRHandProcessor
     {
-        [SerializeField] private float _rootPositionDeadband = 0.0012f;
-        [SerializeField] private float _rootPositionMotionThreshold = 0.0035f;
-        [SerializeField] private float _rootMinVelocityForInstantPass = 0.04f;
-        [SerializeField] private float _rootRotationDeadband = 0.6f;
-        [SerializeField] private float _rootRotationMotionThreshold = 2.0f;
-        [SerializeField] private float _rootMinAngularSpeedForInstantPass = 25.0f;
-
         public int callbackOrder => -10;
+        public void ProcessJoints(XRHandSubsystem subsystem, XRHandSubsystem.UpdateSuccessFlags successFlags,
+            XRHandSubsystem.UpdateType updateType) { }
 
-        private XRHandSubsystem _subsystem;
-        private static readonly List<XRHandSubsystem> s_Subsystems = new List<XRHandSubsystem>();
-        private readonly HandFilterState _leftState = new HandFilterState();
-        private readonly HandFilterState _rightState = new HandFilterState();
-
-        private void OnEnable() => TryRegisterSubsystem();
-
-        private void OnDisable()
+        /// <summary>Adaptive 1-Euro filtering exclusively for held-object anchors, from the Laser XR reference.</summary>
+        public sealed class AnchorFilter
         {
-            if (_subsystem != null)
+            private bool _initialized;
+            private Pose _previous;
+            private Vector3 _velocity;
+            private float _angularSpeed;
+            public void Reset() => _initialized = false;
+            public Pose Filter(Pose raw, float dt)
             {
-                _subsystem.UnregisterProcessor(this);
-                _subsystem = null;
-            }
-            _leftState.Reset();
-            _rightState.Reset();
-        }
-
-        private void Update()
-        {
-            if (_subsystem == null || !_subsystem.running)
-            {
-                TryRegisterSubsystem();
-            }
-        }
-
-        private void TryRegisterSubsystem()
-        {
-            SubsystemManager.GetSubsystems(s_Subsystems);
-            for (int i = 0; i < s_Subsystems.Count; i++)
-            {
-                var sub = s_Subsystems[i];
-                if (sub != null && sub.running)
+                if (!_initialized || dt <= 0f || dt > 0.1f)
                 {
-                    if (_subsystem != sub)
-                    {
-                        _subsystem?.UnregisterProcessor(this);
-                        _subsystem = sub;
-                        _subsystem.RegisterProcessor(this);
-                    }
-                    return;
+                    _initialized = true;
+                    _previous = raw;
+                    _velocity = Vector3.zero;
+                    _angularSpeed = 0f;
+                    return raw;
                 }
+                Vector3 delta = raw.position - _previous.position;
+                float distance = delta.magnitude;
+                if (distance < 0.00035f) raw.position = Vector3.Lerp(_previous.position, raw.position,
+                    Mathf.Pow(distance / 0.00035f, 2f));
+                _velocity = Vector3.Lerp(_velocity, delta / dt, Alpha(1f, dt));
+                float angle = Quaternion.Angle(_previous.rotation, raw.rotation);
+                _angularSpeed = Mathf.Lerp(_angularSpeed, angle * Mathf.Deg2Rad / dt, Alpha(1f, dt));
+                if (angle < 0.2f) raw.rotation = Quaternion.Slerp(_previous.rotation, raw.rotation,
+                    Mathf.Pow(angle / 0.2f, 2f));
+                _previous = new Pose(
+                    Vector3.Lerp(_previous.position, raw.position, Alpha(2f + 3f * _velocity.magnitude, dt)),
+                    Quaternion.Slerp(_previous.rotation, raw.rotation, Alpha(0.6f + 6f * _angularSpeed, dt)));
+                return _previous;
             }
-        }
-
-        public void ProcessJoints(XRHandSubsystem subsystem, XRHandSubsystem.UpdateSuccessFlags successFlags, XRHandSubsystem.UpdateType updateType)
-        {
-            if (!Application.isEditor && updateType != XRHandSubsystem.UpdateType.BeforeRender)
-                return;
-
-            FilterHand(subsystem.leftHand, subsystem, _leftState);
-            FilterHand(subsystem.rightHand, subsystem, _rightState);
-        }
-
-        private void FilterHand(XRHand hand, XRHandSubsystem subsystem, HandFilterState state)
-        {
-            if (!hand.isTracked)
-            {
-                state.Reset();
-                return;
-            }
-
-            double now = Time.realtimeSinceStartupAsDouble;
-            if (!state.WasTracked || state.LastTime <= 0)
-            {
-                state.WasTracked = true;
-                state.LastTime = now;
-                state.LastPos = hand.rootPose.position;
-                state.LastRot = hand.rootPose.rotation;
-                return;
-            }
-
-            float dt = (float)(now - state.LastTime);
-            if (dt < 0.002f) return;
-            state.LastTime = now;
-
-            Vector3 rawPos = hand.rootPose.position;
-            Quaternion rawRot = hand.rootPose.rotation;
-
-            Vector3 deltaPos = rawPos - state.LastPos;
-            float dist = deltaPos.magnitude;
-            float speed = dist / dt;
-
-            Vector3 smoothPos;
-            if (dist >= _rootPositionMotionThreshold || speed >= _rootMinVelocityForInstantPass)
-            {
-                smoothPos = rawPos;
-            }
-            else if (dist <= _rootPositionDeadband)
-            {
-                smoothPos = state.LastPos;
-            }
-            else
-            {
-                float t = (dist - _rootPositionDeadband) / (_rootPositionMotionThreshold - _rootPositionDeadband);
-                smoothPos = Vector3.Lerp(state.LastPos, rawPos, t * t * (3f - 2f * t));
-            }
-
-            float angle = Quaternion.Angle(state.LastRot, rawRot);
-            float angSpeed = angle / dt;
-            Quaternion smoothRot;
-            if (angle >= _rootRotationMotionThreshold || angSpeed >= _rootMinAngularSpeedForInstantPass)
-            {
-                smoothRot = rawRot;
-            }
-            else if (angle <= _rootRotationDeadband)
-            {
-                smoothRot = state.LastRot;
-            }
-            else
-            {
-                float t = (angle - _rootRotationDeadband) / (_rootRotationMotionThreshold - _rootRotationDeadband);
-                smoothRot = Quaternion.Slerp(state.LastRot, rawRot, t * t * (3f - 2f * t));
-            }
-
-            state.LastPos = smoothPos;
-            state.LastRot = smoothRot;
-
-            hand.SetRootPose(new Pose(smoothPos, smoothRot));
-            subsystem.SetCorrespondingHand(hand);
-        }
-
-        private class HandFilterState
-        {
-            public bool WasTracked;
-            public double LastTime;
-            public Vector3 LastPos;
-            public Quaternion LastRot = Quaternion.identity;
-
-            public void Reset()
-            {
-                WasTracked = false;
-                LastTime = 0;
-            }
+            private static float Alpha(float cutoff, float dt) => 1f / (1f + 1f / (2f * Mathf.PI * cutoff * dt));
         }
     }
 }

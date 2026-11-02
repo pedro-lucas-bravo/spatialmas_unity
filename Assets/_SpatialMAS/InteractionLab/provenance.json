@@ -1,0 +1,852 @@
+{
+  "source": "helping_sources/laser-xr/Assets",
+  "files": [
+    {
+      "path": "Materials/Mat_MRCube_Cyan.mat",
+      "sha256": "6c788104f315349ea262458fde4d45aea5b72a16704b80a635ae766dd042b2e7",
+      "portedSha256": "6c788104f315349ea262458fde4d45aea5b72a16704b80a635ae766dd042b2e7"
+    },
+    {
+      "path": "Materials/MR_Hand_Passthrough_Translucent.mat",
+      "sha256": "8e6d8dc490db9f180944d60a46d3bdf55771879cdb44262650c1490bcb0c2e3c",
+      "portedSha256": "8e6d8dc490db9f180944d60a46d3bdf55771879cdb44262650c1490bcb0c2e3c"
+    },
+    {
+      "path": "Resources/MR_Hand_Passthrough_Translucent.mat",
+      "sha256": "8e6d8dc490db9f180944d60a46d3bdf55771879cdb44262650c1490bcb0c2e3c",
+      "portedSha256": "8e6d8dc490db9f180944d60a46d3bdf55771879cdb44262650c1490bcb0c2e3c"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Materials/AxisMesh.asset",
+      "sha256": "f129b6a626f4c9c2b37e27f1962663cf0590880480d4fcbbc94a1f46e0cf2635",
+      "portedSha256": "f129b6a626f4c9c2b37e27f1962663cf0590880480d4fcbbc94a1f46e0cf2635"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Materials/HighFidelity.mat",
+      "sha256": "949a76540f00b9b345becf3618b8729d2f86e2a1f3488882267466e52532993d",
+      "portedSha256": "949a76540f00b9b345becf3618b8729d2f86e2a1f3488882267466e52532993d"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Materials/HighFidelity.png",
+      "sha256": "78fe7b03dbd79023e3ebb2353ffb7fc99d0ac282bf6447124d2af8b5a2d147cb",
+      "portedSha256": "78fe7b03dbd79023e3ebb2353ffb7fc99d0ac282bf6447124d2af8b5a2d147cb"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Materials/TransparentRed.mat",
+      "sha256": "b97512740ae51c6d088ec31376ef9f3ea532aa3072ac3e690de5eba3cbbaa8ea",
+      "portedSha256": "b97512740ae51c6d088ec31376ef9f3ea532aa3072ac3e690de5eba3cbbaa8ea"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Materials/TransparentRed.png",
+      "sha256": "66be52b1a9b13864418938383261ac9bdde6b669f5e70460e160c6af24c81dea",
+      "portedSha256": "66be52b1a9b13864418938383261ac9bdde6b669f5e70460e160c6af24c81dea"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Models/LeftHandAndroidXR.fbx",
+      "sha256": "6f8708d009a5c67c7c1b715240bf36a065e3ee2c3f24991fa90dceee19826d53",
+      "portedSha256": "6f8708d009a5c67c7c1b715240bf36a065e3ee2c3f24991fa90dceee19826d53"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Models/RightHandAndroidXR.fbx",
+      "sha256": "6de3d67047347307007b37a20b7d39286cc9893a9c168f5f3a84241592a5c31c",
+      "portedSha256": "6de3d67047347307007b37a20b7d39286cc9893a9c168f5f3a84241592a5c31c"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Prefabs/Joint.prefab",
+      "sha256": "0bb3c5f17e5742ad7c4c95eab00fdac9ca227cd15a140d037d16addcad9b7d1d",
+      "portedSha256": "0bb3c5f17e5742ad7c4c95eab00fdac9ca227cd15a140d037d16addcad9b7d1d"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Prefabs/VelocityPrefab.prefab",
+      "sha256": "66c0ba1b6572dd622806b0d913c45891ed98a331e6c6076f1c210925c86da74a",
+      "portedSha256": "66c0ba1b6572dd622806b0d913c45891ed98a331e6c6076f1c210925c86da74a"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Scripts/HandVisualizer.cs",
+      "sha256": "c0f952722b1b68da6a2697f5f8774259e94160bcfdb38d05987f06779c269170",
+      "portedSha256": "c0f952722b1b68da6a2697f5f8774259e94160bcfdb38d05987f06779c269170"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Scripts/JointVisualizer.cs",
+      "sha256": "86a0e5433e70076ddc3716b3bc7a7583b7b60fd478355dd8e70e3071401fd242",
+      "portedSha256": "86a0e5433e70076ddc3716b3bc7a7583b7b60fd478355dd8e70e3071401fd242"
+    },
+    {
+      "path": "Samples/XR Hands/1.9.0/HandVisualizer/Unity.XR.Hands.Samples.VisualizerSample.asmdef",
+      "sha256": "ddf06cddea139e0ef468ad6c56c1c9dea479c7e1caa8c78ca254329ab37780ed",
+      "portedSha256": "ddf06cddea139e0ef468ad6c56c1c9dea479c7e1caa8c78ca254329ab37780ed"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/AffordanceThemes/FingerColor.asset",
+      "sha256": "9621834aa6e391901d8c0f17bc52ff91245ce35d4b3b3db06334d28f678d588e",
+      "portedSha256": "9621834aa6e391901d8c0f17bc52ff91245ce35d4b3b3db06334d28f678d588e"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/AffordanceThemes/HandEdgeColor.asset",
+      "sha256": "fc4ac6c0ad1fdc498b43ab27c9d6c840a90b54e37aba52c28a366042228ed398",
+      "portedSha256": "fc4ac6c0ad1fdc498b43ab27c9d6c840a90b54e37aba52c28a366042228ed398"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/AffordanceThemes/PinchPointBlendShape.asset",
+      "sha256": "b2fc4181c342248bb005080435a81bb50cfd5ad6dae233d8a2defba558eb1dcc",
+      "portedSha256": "b2fc4181c342248bb005080435a81bb50cfd5ad6dae233d8a2defba558eb1dcc"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/AffordanceThemes/PinchPointLocalTransformOffset.asset",
+      "sha256": "1b2d91f4e9c5d3cf6fc15bb2cf740be522fef5b8a1d089a435557518cda964de",
+      "portedSha256": "1b2d91f4e9c5d3cf6fc15bb2cf740be522fef5b8a1d089a435557518cda964de"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/AffordanceThemes/PinchPointUniformScaleScale.asset",
+      "sha256": "aba8397b9f0906d9bc7dd8333e6541b145c28f36ee9daebe563a512a1b169e8a",
+      "portedSha256": "aba8397b9f0906d9bc7dd8333e6541b145c28f36ee9daebe563a512a1b169e8a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/HandsInteractionDemo.asmdef",
+      "sha256": "0aec414d74db40903bb7638f29d9abd505af3298e7f5c59de8f4de292ef73d2b",
+      "portedSha256": "0aec414d74db40903bb7638f29d9abd505af3298e7f5c59de8f4de292ef73d2b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/HandInteractorAffordances.prefab",
+      "sha256": "958debcdacc2dd16d7de493953b4290a2963413a152566dda23271b63341308b",
+      "portedSha256": "958debcdacc2dd16d7de493953b4290a2963413a152566dda23271b63341308b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/HandPokeInteractorAffordances.prefab",
+      "sha256": "bfc51bd0d1aab2894b01048b4dc8608034e0e79b565a6ec0e31d5bbd20e737da",
+      "portedSha256": "bfc51bd0d1aab2894b01048b4dc8608034e0e79b565a6ec0e31d5bbd20e737da"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/LeftHandAndroidXRVisual.prefab",
+      "sha256": "3f2ebac8e2356f5a7c6619786c650038f217b8c82d19bc6b80064d0e65a11d40",
+      "portedSha256": "3f2ebac8e2356f5a7c6619786c650038f217b8c82d19bc6b80064d0e65a11d40"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/LeftHandQuestVisual.prefab",
+      "sha256": "c98a8a85ae1cec5e55d6434d987c9aad701593027481008b05c157338b0fdcac",
+      "portedSha256": "c98a8a85ae1cec5e55d6434d987c9aad701593027481008b05c157338b0fdcac"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/PinchPointStabilized.prefab",
+      "sha256": "b8403c922457ea0cf1a0570d603fc7c3ac253e35ca448e2cb14963b3ad493eb0",
+      "portedSha256": "b8403c922457ea0cf1a0570d603fc7c3ac253e35ca448e2cb14963b3ad493eb0"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/RightHandAndroidXRVisual.prefab",
+      "sha256": "37b90a68ed4aa85013d33f0d8d4e85b597106021331e65932392b223f8a8ad2b",
+      "portedSha256": "37b90a68ed4aa85013d33f0d8d4e85b597106021331e65932392b223f8a8ad2b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/RightHandQuestVisual.prefab",
+      "sha256": "af5c4a6d4eda1148581b8966f8728de6f02bf3a93bcbbdb658d11fdadbfa2365",
+      "portedSha256": "af5c4a6d4eda1148581b8966f8728de6f02bf3a93bcbbdb658d11fdadbfa2365"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Prefabs/XR Origin Hands (XR Rig).prefab",
+      "sha256": "495c0b3da8142c5273e011d3bca2f63f2bcf23185860a9c579b1bb8b070b9843",
+      "portedSha256": "495c0b3da8142c5273e011d3bca2f63f2bcf23185860a9c579b1bb8b070b9843"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/HandsOneEuroFilterPostProcessor.cs",
+      "sha256": "3f68282d2f49906ca8936e065e2565ddff51888b3d04383eb89818dafdff06f5",
+      "portedSha256": "3f68282d2f49906ca8936e065e2565ddff51888b3d04383eb89818dafdff06f5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/HideObjectWhenInteractorBlocked.cs",
+      "sha256": "0f5680aee5eebb6203be023d5b499b35ead641327c766021a6aa7d6c91a54e59",
+      "portedSha256": "0f5680aee5eebb6203be023d5b499b35ead641327c766021a6aa7d6c91a54e59"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/LocalPositionOffsetAffordanceReceiver.cs",
+      "sha256": "3d9d0772ce6542b01d4791553faa9938a07ae1f64c4f63d66064655cb575d2a5",
+      "portedSha256": "3d9d0772ce6542b01d4791553faa9938a07ae1f64c4f63d66064655cb575d2a5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/MetaSystemGestureDetector.cs",
+      "sha256": "318aa6042b2b1f2d613aa55ade2c7fbd72dd962c28e135ac98b655c7918a9d17",
+      "portedSha256": "318aa6042b2b1f2d613aa55ade2c7fbd72dd962c28e135ac98b655c7918a9d17"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/OneEuroFilterVector3.cs",
+      "sha256": "17d5fcd83c20e15c7313fdff4ae6d4cef7e953c0ea8e99be290fb587b4c9c48e",
+      "portedSha256": "17d5fcd83c20e15c7313fdff4ae6d4cef7e953c0ea8e99be290fb587b4c9c48e"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/PinchPointFollow.cs",
+      "sha256": "7b5e7727954e1118898a823b856e1265683d1cba13059ab25437dc46f603bb48",
+      "portedSha256": "7b5e7727954e1118898a823b856e1265683d1cba13059ab25437dc46f603bb48"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/PokeGestureDetector.cs",
+      "sha256": "6b766bf2b2627271673b63b231cc5c8c8fe744bc87fe1dec8ec0cf0d08a8987b",
+      "portedSha256": "6b766bf2b2627271673b63b231cc5c8c8fe744bc87fe1dec8ec0cf0d08a8987b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Hands Interaction Demo/Scripts/ReleaseThresholdButtonReader.cs",
+      "sha256": "425ae77cb94014280b024b5b872bad38d0d8bcb1b65e165938e146ff5f08b546",
+      "portedSha256": "425ae77cb94014280b024b5b872bad38d0d8bcb1b65e165938e146ff5f08b546"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/AffordanceThemes/PokeSphereColor.asset",
+      "sha256": "e0b4ce78e7e0c362ec7a6a34274bf34cd6c1e4caca5c8f4e2cf59c62d3353635",
+      "portedSha256": "e0b4ce78e7e0c362ec7a6a34274bf34cd6c1e4caca5c8f4e2cf59c62d3353635"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/AffordanceThemes/PokeSphereInteraction.asset",
+      "sha256": "b0261bb611639cbf7b230dedba89ea95279908a2ea2fd19d2f7c260d8d04c368",
+      "portedSha256": "b0261bb611639cbf7b230dedba89ea95279908a2ea2fd19d2f7c260d8d04c368"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Animations/ArrowBounce.anim",
+      "sha256": "ad70f14c463e4dbf01e6197f7de4108bf02cd89c83ada90b6245861845447a16",
+      "portedSha256": "ad70f14c463e4dbf01e6197f7de4108bf02cd89c83ada90b6245861845447a16"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Animations/Climb Teleport Arrow.controller",
+      "sha256": "345744d768ea51fa4d10cc01fed56dc4cbf274dfdce9cc9b1a8b937ee65d37be",
+      "portedSha256": "345744d768ea51fa4d10cc01fed56dc4cbf274dfdce9cc9b1a8b937ee65d37be"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/DemoAssets/Audio/Button Pop.wav",
+      "sha256": "4a1b9aa5525b2c782068ef44fb1722d6b3b1f834d1dd350b173967152fb9f0c0",
+      "portedSha256": "4a1b9aa5525b2c782068ef44fb1722d6b3b1f834d1dd350b173967152fb9f0c0"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/DemoAssets/Sprites/Forward.png",
+      "sha256": "1f92a6985149af65bdf4ec5e829e45d6910e327d5467b716a1348f24f246295c",
+      "portedSha256": "1f92a6985149af65bdf4ec5e829e45d6910e327d5467b716a1348f24f246295c"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/DemoAssets/Sprites/LegibilityMask.png",
+      "sha256": "d1be1bd24e785bca818b911720f7fa943dd3eb8b4d1c09e41dc6b81e889f06b6",
+      "portedSha256": "d1be1bd24e785bca818b911720f7fa943dd3eb8b4d1c09e41dc6b81e889f06b6"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/DemoAssets/Sprites/Round Radius 4 Outline.png",
+      "sha256": "f7c6c490a36aa370cfe5a284a7ac4fba03e5aa6b18141c49ded0e55119222fe5",
+      "portedSha256": "f7c6c490a36aa370cfe5a284a7ac4fba03e5aa6b18141c49ded0e55119222fe5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Filters/AnyGazedAtTeleportAnchorFilter.asset",
+      "sha256": "d64a030b16ad8df2bd1b42cd31889771dc2eea19b29a7e6e5b91e56da4a1fe1c",
+      "portedSha256": "d64a030b16ad8df2bd1b42cd31889771dc2eea19b29a7e6e5b91e56da4a1fe1c"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/Controller_Grey.mat",
+      "sha256": "5b37ac34fd23100efe9d7ccf603729289968d7ddcbc36e245bd87bf331a60838",
+      "portedSha256": "5b37ac34fd23100efe9d7ccf603729289968d7ddcbc36e245bd87bf331a60838"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/Controller_White.mat",
+      "sha256": "094739388e6ff9d63ee4d19dcbe4e10a8defcddf02eb01c501e440b262ff45a6",
+      "portedSha256": "094739388e6ff9d63ee4d19dcbe4e10a8defcddf02eb01c501e440b262ff45a6"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/Flat Blue.mat",
+      "sha256": "68bca0945272b51c739a52e9949f0bb700e2095dd05ef73aa58b29312c69ad6b",
+      "portedSha256": "68bca0945272b51c739a52e9949f0bb700e2095dd05ef73aa58b29312c69ad6b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/FresnelHighlight.mat",
+      "sha256": "e1ed31b7fdc289a52587f6e8bc501fa97c6856e526a13654eddf301fc12c5055",
+      "portedSha256": "e1ed31b7fdc289a52587f6e8bc501fa97c6856e526a13654eddf301fc12c5055"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/Telport Anchor.mat",
+      "sha256": "736cd9c3e28b627cac538a8ba76a65b188b81480a0f141a953903a91b9bf1989",
+      "portedSha256": "736cd9c3e28b627cac538a8ba76a65b188b81480a0f141a953903a91b9bf1989"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Materials/UI-NoZTest.mat",
+      "sha256": "257a711b59c664223c40966f39315a952143978195a521b53ba8b74689ed0934",
+      "portedSha256": "257a711b59c664223c40966f39315a952143978195a521b53ba8b74689ed0934"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Models/BlinkVisual.fbx",
+      "sha256": "6ef0d1bff5ac57e9e07fd06a17f427004f0a0fa637dcd1eb1294e1047fbbfada",
+      "portedSha256": "6ef0d1bff5ac57e9e07fd06a17f427004f0a0fa637dcd1eb1294e1047fbbfada"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Models/Pinch_Pointer_LOD0.fbx",
+      "sha256": "0901b06d0d7c847adcec991922ba1bdcf124656c4d39eb678224d43367cef4c8",
+      "portedSha256": "0901b06d0d7c847adcec991922ba1bdcf124656c4d39eb678224d43367cef4c8"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Models/Reticle_Torus.fbx",
+      "sha256": "48b086a822980ec261f87c76baa42f0b2440747d3f85d62e9486abe6280ee2b5",
+      "portedSha256": "48b086a822980ec261f87c76baa42f0b2440747d3f85d62e9486abe6280ee2b5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Models/UniversalController.fbx",
+      "sha256": "348e210fda42df410db93a66ee4c0602706ba3d3ea01df78e393171bb1567beb",
+      "portedSha256": "348e210fda42df410db93a66ee4c0602706ba3d3ea01df78e393171bb1567beb"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Affordances/PokePointerAffordance.prefab",
+      "sha256": "043759d7f0d353e9edf1477199aa4b6e60f112fdd6dffc8c0ba8bafd69b789c5",
+      "portedSha256": "043759d7f0d353e9edf1477199aa4b6e60f112fdd6dffc8c0ba8bafd69b789c5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Controllers/XR Controller Left.prefab",
+      "sha256": "e8d4cb90d8bb5c33c8c0ec552876262fefe372fbf2f1d8b8a813d1b6c0e4b0e6",
+      "portedSha256": "e8d4cb90d8bb5c33c8c0ec552876262fefe372fbf2f1d8b8a813d1b6c0e4b0e6"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Controllers/XR Controller Right.prefab",
+      "sha256": "bdd8eaab0f8dfdf6c26b7ecb5c731ee599d5c6dc94093c4f7ad42390ca44824f",
+      "portedSha256": "bdd8eaab0f8dfdf6c26b7ecb5c731ee599d5c6dc94093c4f7ad42390ca44824f"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Interactors/Gaze Interactor.prefab",
+      "sha256": "61000c8aab9f0a626343c7e40d149966d09b7e983615b917ac2c80c96a9eec2a",
+      "portedSha256": "61000c8aab9f0a626343c7e40d149966d09b7e983615b917ac2c80c96a9eec2a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Interactors/Left_NearFarInteractor.prefab",
+      "sha256": "52d76bd7a8c1f7c7e44b5aae77c194059127bf2d51aa6b068c023ef022e6c0ce",
+      "portedSha256": "52d76bd7a8c1f7c7e44b5aae77c194059127bf2d51aa6b068c023ef022e6c0ce"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Interactors/Poke Interactor.prefab",
+      "sha256": "53c08633bc7b2a74603c53f0d616b76b63eb7911a4c792682f666afba8be75f0",
+      "portedSha256": "53c08633bc7b2a74603c53f0d616b76b63eb7911a4c792682f666afba8be75f0"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Interactors/Right_NearFarInteractor.prefab",
+      "sha256": "818aad8f1878a12666ebd12f2ffec21f540faae0898221cce4120dcda0374b10",
+      "portedSha256": "818aad8f1878a12666ebd12f2ffec21f540faae0898221cce4120dcda0374b10"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Interactors/Teleport Interactor.prefab",
+      "sha256": "426d09c25911ca88baeb0704833adf2f4be71c91a8a1486bb69273a75fc56a15",
+      "portedSha256": "426d09c25911ca88baeb0704833adf2f4be71c91a8a1486bb69273a75fc56a15"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Teleport/Blocking Teleport Reticle.prefab",
+      "sha256": "07466b856bace6a7d395120c4ebb75d38a335d04a78f720ddd052faf28dac5b9",
+      "portedSha256": "07466b856bace6a7d395120c4ebb75d38a335d04a78f720ddd052faf28dac5b9"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Teleport/Climb Teleport Arrow.prefab",
+      "sha256": "37f7718023fad4118227fb6f2279a11d8f22466da39a1537805f4418ff4e23b4",
+      "portedSha256": "37f7718023fad4118227fb6f2279a11d8f22466da39a1537805f4418ff4e23b4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/Teleport/Directional Teleport Reticle.prefab",
+      "sha256": "c69c4bdcadbea645311842b869713ef0eab0b247e183278bcf3f2a59aacf3617",
+      "portedSha256": "c69c4bdcadbea645311842b869713ef0eab0b247e183278bcf3f2a59aacf3617"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Prefabs/XR Origin (XR Rig).prefab",
+      "sha256": "bd2551670790ff14b6465895ca6a96eb3292645e14b65d6119799cfedfab0e0a",
+      "portedSha256": "bd2551670790ff14b6465895ca6a96eb3292645e14b65d6119799cfedfab0e0a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/ClimbTeleportDestinationIndicator.cs",
+      "sha256": "83a8ce167cea514efa4029d602fbe04034e600143a8d0f15740df194ef97ac22",
+      "portedSha256": "83a8ce167cea514efa4029d602fbe04034e600143a8d0f15740df194ef97ac22"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/ControllerAnimator.cs",
+      "sha256": "0b4832ec62af18944184134a699cf7c85451eb9e370b7d33c1fb4e26035bc329",
+      "portedSha256": "0b4832ec62af18944184134a699cf7c85451eb9e370b7d33c1fb4e26035bc329"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/ControllerInputActionManager.cs",
+      "sha256": "fe30b327307be424c801420e00f626c848f394e5056097de1c2ca490c92a19c5",
+      "portedSha256": "fe30b327307be424c801420e00f626c848f394e5056097de1c2ca490c92a19c5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/DynamicMoveProvider.cs",
+      "sha256": "5b3e0eb5a7fa112dbc8403eca072832fe0fdf84446f9a9053cebc680829fd01b",
+      "portedSha256": "5b3e0eb5a7fa112dbc8403eca072832fe0fdf84446f9a9053cebc680829fd01b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/GazeInputManager.cs",
+      "sha256": "28ccd209fb4fa760046e1d605f67b0a094d5c31f20d6473a0b80e0759af1a772",
+      "portedSha256": "28ccd209fb4fa760046e1d605f67b0a094d5c31f20d6473a0b80e0759af1a772"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Scripts/RotationAxisLockGrabTransformer.cs",
+      "sha256": "658e65d028d8d6b69b4418d75b7ac7ab1bf02c8d42c93ec29813339c1693d3f3",
+      "portedSha256": "658e65d028d8d6b69b4418d75b7ac7ab1bf02c8d42c93ec29813339c1693d3f3"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Shaders/UI-NoZTest.shader",
+      "sha256": "3f490e15785908aac877219e8fac3bcd82bc638f272a55d53d3635dade8b8f8b",
+      "portedSha256": "3f490e15785908aac877219e8fac3bcd82bc638f272a55d53d3635dade8b8f8b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Shaders/Unlit_Fresnel.shadergraph",
+      "sha256": "fbef92b954bd9d7cd0b6c59177adb292774341f99a14f9ae8bc9d52f14abaacd",
+      "portedSha256": "fbef92b954bd9d7cd0b6c59177adb292774341f99a14f9ae8bc9d52f14abaacd"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/StarterAssets.asmdef",
+      "sha256": "7fac66550ef5b48534a9bdb04ff4530e384f0b5ec16125cab81762ab979edc53",
+      "portedSha256": "7fac66550ef5b48534a9bdb04ff4530e384f0b5ec16125cab81762ab979edc53"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/Textures/DefaultMaterial_AO.png",
+      "sha256": "b2339b3e506470ef40d4c3d6a617bc4f1d3be0cc6910a2c9eecbfb8088b94824",
+      "portedSha256": "b2339b3e506470ef40d4c3d6a617bc4f1d3be0cc6910a2c9eecbfb8088b94824"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/Starter Assets/XRI Default Input Actions.inputactions",
+      "sha256": "dceb0e075f3803b0358d658d129a87e0c64b4eea08785e5fce0572c451be85ca",
+      "portedSha256": "dceb0e075f3803b0358d658d129a87e0c64b4eea08785e5fce0572c451be85ca"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Expressions/Grab Expression Capture.asset",
+      "sha256": "d8e9d9df655c2811e70056ccf04881b72d3390515d51095713199d7b973c6352",
+      "portedSha256": "d8e9d9df655c2811e70056ccf04881b72d3390515d51095713199d7b973c6352"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Expressions/Pinch Expression Capture.asset",
+      "sha256": "b70d7a9d3c1afcd148712630252b8b7b0e6d4d0bdf20b74f060ba57d1f0bab11",
+      "portedSha256": "b70d7a9d3c1afcd148712630252b8b7b0e6d4d0bdf20b74f060ba57d1f0bab11"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Expressions/Poke Expression Capture.asset",
+      "sha256": "6645406e810ad0c85338a4f7cd77f0f692e8a0b08b7b46226821a3597e99ca43",
+      "portedSha256": "6645406e810ad0c85338a4f7cd77f0f692e8a0b08b7b46226821a3597e99ca43"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Recordings/grab.asset",
+      "sha256": "cd226ab6ac7cf7ea0857026ef14c675fc8b5ce57b087dfeda025ae59206e16de",
+      "portedSha256": "cd226ab6ac7cf7ea0857026ef14c675fc8b5ce57b087dfeda025ae59206e16de"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Recordings/idle.asset",
+      "sha256": "94464d4b6d53ad6517f2f2574f975079f327e68e57b5e2537b95fa21ed919bf7",
+      "portedSha256": "94464d4b6d53ad6517f2f2574f975079f327e68e57b5e2537b95fa21ed919bf7"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Recordings/pinch.asset",
+      "sha256": "4501b0ed30f9a889e3bae4b460bc863715bfc8415e8b6fa632e71cce0a7fe6e4",
+      "portedSha256": "4501b0ed30f9a889e3bae4b460bc863715bfc8415e8b6fa632e71cce0a7fe6e4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Hand Recordings/poke.asset",
+      "sha256": "97e25e3b7ad56e6704ad10de3fbb06ca9137d82a03e81113cc58f715ac67918a",
+      "portedSha256": "97e25e3b7ad56e6704ad10de3fbb06ca9137d82a03e81113cc58f715ac67918a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/InteractionSimulator.asmdef",
+      "sha256": "e96609ec68e4c26804562b59050e74c37152a20ba7ebb2b4e6ba8fec0e3c3bcb",
+      "portedSha256": "e96609ec68e4c26804562b59050e74c37152a20ba7ebb2b4e6ba8fec0e3c3bcb"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Scripts/XRInteractionSimulatorCursor.cs",
+      "sha256": "4f04229841c0ce3ce15c162725ddef7edba6b5250ab91e123f0ca94dd25e6dae",
+      "portedSha256": "4f04229841c0ce3ce15c162725ddef7edba6b5250ab91e123f0ca94dd25e6dae"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Scripts/XRInteractionSimulatorInputFeedbackUI.cs",
+      "sha256": "68f8e883f392faeb1d081cafb2d8119c59c7e6be378f5d226538dc388a51ebd4",
+      "portedSha256": "68f8e883f392faeb1d081cafb2d8119c59c7e6be378f5d226538dc388a51ebd4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/Scripts/XRInteractionSimulatorPlayModeMenu.cs",
+      "sha256": "29c33f2a8cd847e018746897221d256e1a9931a12f616e83ace8aca7b51a390f",
+      "portedSha256": "29c33f2a8cd847e018746897221d256e1a9931a12f616e83ace8aca7b51a390f"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/BothControllers.png",
+      "sha256": "41c1ba0722bdd066d462b850b6495d00084ff72103a9f23266cc4556d2c0a5d4",
+      "portedSha256": "41c1ba0722bdd066d462b850b6495d00084ff72103a9f23266cc4556d2c0a5d4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/ControllerLeft.png",
+      "sha256": "483173d91b9795856cb7ea13c49cd294f54610bea0a05e4f958d664c39ace07e",
+      "portedSha256": "483173d91b9795856cb7ea13c49cd294f54610bea0a05e4f958d664c39ace07e"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/ControllerRight.png",
+      "sha256": "7433e5f6e8d318c6edda534da5108cbab024307f84637524237f4da87c0b9408",
+      "portedSha256": "7433e5f6e8d318c6edda534da5108cbab024307f84637524237f4da87c0b9408"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/LeftController.png",
+      "sha256": "931e8bc1c5573278c5cf6fdee3fe652d81f0eae4cbb2edcb4084fe54b5a91337",
+      "portedSha256": "931e8bc1c5573278c5cf6fdee3fe652d81f0eae4cbb2edcb4084fe54b5a91337"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/LeftControllerOutline@2x.png",
+      "sha256": "e52951d5cc916b5f626f916c12084af434b8ee200e013335966ad4a6b26c73c5",
+      "portedSha256": "e52951d5cc916b5f626f916c12084af434b8ee200e013335966ad4a6b26c73c5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/RightController.png",
+      "sha256": "764e326107379b9e4358415e668f2686806caf072e550f9fda1cb9d2151ee52d",
+      "portedSha256": "764e326107379b9e4358415e668f2686806caf072e550f9fda1cb9d2151ee52d"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Controller/RightControllerOutline@2x.png",
+      "sha256": "aa947aa28f846c1077914d0ddd609c9b5a0dfcf8e240b47993a37947dbd0d253",
+      "portedSha256": "aa947aa28f846c1077914d0ddd609c9b5a0dfcf8e240b47993a37947dbd0d253"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/BothControllers_mac32.png",
+      "sha256": "4fb4292cb140bba2d25ebe8f147c84135e4f6064d8194887040030e94356764d",
+      "portedSha256": "4fb4292cb140bba2d25ebe8f147c84135e4f6064d8194887040030e94356764d"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/BothControllers_win64.png",
+      "sha256": "720624f6c740a3f19599c24eeb845083b04e3c37a80a77e7dcbd2702158a77fa",
+      "portedSha256": "720624f6c740a3f19599c24eeb845083b04e3c37a80a77e7dcbd2702158a77fa"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/BothHands_mac32.png",
+      "sha256": "496f073b7dcd90cddedcf8dd9bc8bab5909f91e34aea4a1dd6b08ed6d57887ee",
+      "portedSha256": "496f073b7dcd90cddedcf8dd9bc8bab5909f91e34aea4a1dd6b08ed6d57887ee"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/BothHands_win64.png",
+      "sha256": "4e3c292b15e5c7e99bd9844edf96a303430abf5323d35646a47bd187a49166fd",
+      "portedSha256": "4e3c292b15e5c7e99bd9844edf96a303430abf5323d35646a47bd187a49166fd"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/HeadsetCursor_mac_32.png",
+      "sha256": "fc4c0db69bef950a688c3eb31ccf877474930801ca31791c1169e02a6ae006e4",
+      "portedSha256": "fc4c0db69bef950a688c3eb31ccf877474930801ca31791c1169e02a6ae006e4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/HeadsetCursor_win_64.png",
+      "sha256": "4503753c20453be6086bb44bcbd78506a9fe9007c0bfad0b21c2d0ec71ebe53a",
+      "portedSha256": "4503753c20453be6086bb44bcbd78506a9fe9007c0bfad0b21c2d0ec71ebe53a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/LeftController_mac32.png",
+      "sha256": "4412e9e66958de4b162a51b79ef86c2e3dc7bdb3849bd3d8de70af1f6f6222ba",
+      "portedSha256": "4412e9e66958de4b162a51b79ef86c2e3dc7bdb3849bd3d8de70af1f6f6222ba"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/LeftController_win64.png",
+      "sha256": "7299cd80e82d62a7ebf3a2de37cf0302ee5b720f3611c0f9f2d776815dc444dd",
+      "portedSha256": "7299cd80e82d62a7ebf3a2de37cf0302ee5b720f3611c0f9f2d776815dc444dd"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/LeftHand_mac32.png",
+      "sha256": "07e8e1aba9484c14b66c45cec9e7fd6ce42720df4931f7adbea48bdf8e016919",
+      "portedSha256": "07e8e1aba9484c14b66c45cec9e7fd6ce42720df4931f7adbea48bdf8e016919"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/LeftHand_win64.png",
+      "sha256": "984b803963461711ec8fd5139b0a07f3c5e73634267309f443a9c360a4518843",
+      "portedSha256": "984b803963461711ec8fd5139b0a07f3c5e73634267309f443a9c360a4518843"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/RightController_mac32.png",
+      "sha256": "c4dd270628fe46576eb26324097362d0fabc148d18bb16fde2601fd6f4f0ab66",
+      "portedSha256": "c4dd270628fe46576eb26324097362d0fabc148d18bb16fde2601fd6f4f0ab66"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/RightController_win64.png",
+      "sha256": "04c73fbf27272ed85213be79b2e2ce4e246fd5df374ac968bb875c66197885e4",
+      "portedSha256": "04c73fbf27272ed85213be79b2e2ce4e246fd5df374ac968bb875c66197885e4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/RightHand_mac32.png",
+      "sha256": "17b3b382d135c71bc1dc2ffb7962b4e1c5b77d2e160d52470f88ee23ee638635",
+      "portedSha256": "17b3b382d135c71bc1dc2ffb7962b4e1c5b77d2e160d52470f88ee23ee638635"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Cursors/RightHand_win64.png",
+      "sha256": "09a9fe9e4f511d20d32ab4c113e78899e902d89a4e982f7e1b1a1dd10dfc79ec",
+      "portedSha256": "09a9fe9e4f511d20d32ab4c113e78899e902d89a4e982f7e1b1a1dd10dfc79ec"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/General/SwitchIcon.png",
+      "sha256": "95fd6e6b2b95d3b188b92e3d3c442178eeaa582454dc666a92f0c6a7104543dc",
+      "portedSha256": "95fd6e6b2b95d3b188b92e3d3c442178eeaa582454dc666a92f0c6a7104543dc"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/Hand_Left.png",
+      "sha256": "8ef8d5f2b288bd527664170288cb5592f2f9faafc32de54fc4ffd1ee496d49f4",
+      "portedSha256": "8ef8d5f2b288bd527664170288cb5592f2f9faafc32de54fc4ffd1ee496d49f4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/Hand_Right.png",
+      "sha256": "827a76f6dd58698813d9f75b35652dfcdc312654d9767fd02d526f1aca100218",
+      "portedSha256": "827a76f6dd58698813d9f75b35652dfcdc312654d9767fd02d526f1aca100218"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/Hands.png",
+      "sha256": "9d0797e6f569ddd5d371ac91f66212b7edeb48b6de849cbe7198cca0f1b5a8cd",
+      "portedSha256": "9d0797e6f569ddd5d371ac91f66212b7edeb48b6de849cbe7198cca0f1b5a8cd"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/LeftHand.png",
+      "sha256": "e1beb4182d6d0b954622121f2c5419d8e1516b5a63f4ec2046057ba0c7fd1c6e",
+      "portedSha256": "e1beb4182d6d0b954622121f2c5419d8e1516b5a63f4ec2046057ba0c7fd1c6e"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/LeftHandOutline@2x.png",
+      "sha256": "f543c1724effc2e8d9dd9249c7c78dbd70239ca53b288157ffc640609fc66c01",
+      "portedSha256": "f543c1724effc2e8d9dd9249c7c78dbd70239ca53b288157ffc640609fc66c01"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/RightHand.png",
+      "sha256": "8619ea313ed9d6d5374cbaf2df1277e67679d55c9e114ed83dafa34aa086898a",
+      "portedSha256": "8619ea313ed9d6d5374cbaf2df1277e67679d55c9e114ed83dafa34aa086898a"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Hands/RightHandOutline@2x.png",
+      "sha256": "47bdca6f821d9f5e5b287c1a1c9d7a0034a943c1ddb7490b8abe601c6c46e9e2",
+      "portedSha256": "47bdca6f821d9f5e5b287c1a1c9d7a0034a943c1ddb7490b8abe601c6c46e9e2"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Headset/HeadsetOutline.png",
+      "sha256": "92b7acc384aaed8cb3769c6168b8154febff2ba64dc07cd7ac4afbf9aca34082",
+      "portedSha256": "92b7acc384aaed8cb3769c6168b8154febff2ba64dc07cd7ac4afbf9aca34082"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Headset/HeadsetOutline@2x.png",
+      "sha256": "83d0dc292696b2685ea700345a87adcc93307e4320e39d957ff51b6a42e87e8e",
+      "portedSha256": "83d0dc292696b2685ea700345a87adcc93307e4320e39d957ff51b6a42e87e8e"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Highlight/RoundedHighlight.png",
+      "sha256": "c30be29f98ed4c83170596c0346e2d8e6b83f40d3a6f901fa26b60925b912949",
+      "portedSha256": "c30be29f98ed4c83170596c0346e2d8e6b83f40d3a6f901fa26b60925b912949"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Modes/MirrorMode@2x.png",
+      "sha256": "5af06890e129bfdac058e7aa373e1fa8a4ea0697d794f045557f2c3d5ab93be6",
+      "portedSha256": "5af06890e129bfdac058e7aa373e1fa8a4ea0697d794f045557f2c3d5ab93be6"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/BackRotate@2x.png",
+      "sha256": "0c0e17b52318d2a69f9d20b604c145f8fa2081f5cd39badf0270c0627e84e2de",
+      "portedSha256": "0c0e17b52318d2a69f9d20b604c145f8fa2081f5cd39badf0270c0627e84e2de"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/ForwardRotate@2x.png",
+      "sha256": "b1bc02823e6c42319a1b176a63f699005727b5a16cf7d362234ad309237daffa",
+      "portedSha256": "b1bc02823e6c42319a1b176a63f699005727b5a16cf7d362234ad309237daffa"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/LeftRotate@2x.png",
+      "sha256": "1b50f4e738e0ee955783fc127c16562a048c2b3c9a64798f1ecf8ba71cf90f28",
+      "portedSha256": "1b50f4e738e0ee955783fc127c16562a048c2b3c9a64798f1ecf8ba71cf90f28"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/RightRotate@2x.png",
+      "sha256": "9b5d6d8b305fcc4a83e4ef527fd99dbc8d0cc98648b3c68e1e41af487b2d5c2b",
+      "portedSha256": "9b5d6d8b305fcc4a83e4ef527fd99dbc8d0cc98648b3c68e1e41af487b2d5c2b"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/RotateDownArrow.png",
+      "sha256": "a28a1612d2bb00e36446fda4f11c49e55dc1b14c712aa85513ec25cce7988faf",
+      "portedSha256": "a28a1612d2bb00e36446fda4f11c49e55dc1b14c712aa85513ec25cce7988faf"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/RotateLeftArrow.png",
+      "sha256": "ff57b208bb6d80eecf31d2d3b0df4dbf0e6a5de7c21759e9135612ef472aae17",
+      "portedSha256": "ff57b208bb6d80eecf31d2d3b0df4dbf0e6a5de7c21759e9135612ef472aae17"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/RotateRightArrow.png",
+      "sha256": "fdb3e9b6635bec299577eb4bb20db819c05550830c8aa8864585ea2fd1b3e870",
+      "portedSha256": "fdb3e9b6635bec299577eb4bb20db819c05550830c8aa8864585ea2fd1b3e870"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Rotate/RotateUpArrow.png",
+      "sha256": "0b714d571b857b0ebb72f230bd757f68c52b7ba7915da60b3135464fd4517fc7",
+      "portedSha256": "0b714d571b857b0ebb72f230bd757f68c52b7ba7915da60b3135464fd4517fc7"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateBack@2x.png",
+      "sha256": "fe1d2e95e3c3e9e685e4ecf9567b891e1d6117d580b7accf63d02dee2ca38c4c",
+      "portedSha256": "fe1d2e95e3c3e9e685e4ecf9567b891e1d6117d580b7accf63d02dee2ca38c4c"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateDown.png",
+      "sha256": "51fedba7287eb3ed1f351b3be8809f637938465bc89852874151d18480302289",
+      "portedSha256": "51fedba7287eb3ed1f351b3be8809f637938465bc89852874151d18480302289"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateForward@2x.png",
+      "sha256": "8770f62f02c52e58881603faf7614db4d9156f03fbeac4500c5f77e426d21fd5",
+      "portedSha256": "8770f62f02c52e58881603faf7614db4d9156f03fbeac4500c5f77e426d21fd5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateLeft@2x.png",
+      "sha256": "dbdc2f1398899f7b97c95a8841f0f4b674713193fe306b9966eb27d5babbf841",
+      "portedSha256": "dbdc2f1398899f7b97c95a8841f0f4b674713193fe306b9966eb27d5babbf841"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateRight@2x.png",
+      "sha256": "adf1a9b648c5a388610d08f1adc55a22e34f4ea51475ef5d0e79abd2c0a3e0f5",
+      "portedSha256": "adf1a9b648c5a388610d08f1adc55a22e34f4ea51475ef5d0e79abd2c0a3e0f5"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/Translate/TranslateUp.png",
+      "sha256": "db7d3791f16dd328f1c0a075b7680cb1fa0086c5b4d8ba457a449525cd86e9a4",
+      "portedSha256": "db7d3791f16dd328f1c0a075b7680cb1fa0086c5b4d8ba457a449525cd86e9a4"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/UI/XR Interaction Simulator UI.prefab",
+      "sha256": "756f7a99f23a31bac4aea64c72069713e4cc801d6ca6e78e0670e260737c6cb7",
+      "portedSha256": "977dbdf014bd04344626b80821c07d69c3f5ef2e93eb3bab66db3d99597e5115"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/XR Interaction Controller Controls.inputactions",
+      "sha256": "959f17a78a9e5c415d331e969eac8f6b3f21da167f8d3cb5fdcf8ff48019fb15",
+      "portedSha256": "959f17a78a9e5c415d331e969eac8f6b3f21da167f8d3cb5fdcf8ff48019fb15"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/XR Interaction Hand Controls.inputactions",
+      "sha256": "b95d00c6b0f807fc759c128bdb3a8729fa11cb282b1e2f9d61be13048fe8e4d9",
+      "portedSha256": "b95d00c6b0f807fc759c128bdb3a8729fa11cb282b1e2f9d61be13048fe8e4d9"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/XR Interaction Simulator Controls.inputactions",
+      "sha256": "6494358f8c70b1e317850d1085333acaa58b7680d975c01d61f68e592a919205",
+      "portedSha256": "6494358f8c70b1e317850d1085333acaa58b7680d975c01d61f68e592a919205"
+    },
+    {
+      "path": "Samples/XR Interaction Toolkit/3.6.1/XR Interaction Simulator/XR Interaction Simulator.prefab",
+      "sha256": "8abd81e94e5c653d38826a2a24c786f3dd4db3df900cf359a2b93377c4d81675",
+      "portedSha256": "8abd81e94e5c653d38826a2a24c786f3dd4db3df900cf359a2b93377c4d81675"
+    },
+    {
+      "path": "Scenes/MR_HandsInteraction.unity",
+      "sha256": "77de18a272c7fe74e9b9c836e580b4341bdf1c1405b36638ef8407d5655db74d",
+      "portedSha256": "77de18a272c7fe74e9b9c836e580b4341bdf1c1405b36638ef8407d5655db74d"
+    },
+    {
+      "path": "Scripts/MR/MRCubeInteraction.cs",
+      "sha256": "4438f0c542e26e390b420305e23b88196cbe26552a3f1862808d2ff8a20c953d",
+      "portedSha256": "ff52037ded29eb26f007c5d741ceb76308d148f9961d03a024f3f918f395964e"
+    },
+    {
+      "path": "Scripts/MR/MRGrabTransformConstraints.cs",
+      "sha256": "b28e378e6dc20ac8f8ae86b47bcb0ea47a1932c0834784563e0c8a7f16fa8f61",
+      "portedSha256": "b28e378e6dc20ac8f8ae86b47bcb0ea47a1932c0834784563e0c8a7f16fa8f61"
+    },
+    {
+      "path": "Scripts/MR/MRHandPinchHysteresis.cs",
+      "sha256": "fd9a6eded7516d1efeba32c2e3eaedfc060a80ad495caf6d3e80ba567059fc11",
+      "portedSha256": "fd9a6eded7516d1efeba32c2e3eaedfc060a80ad495caf6d3e80ba567059fc11"
+    },
+    {
+      "path": "Scripts/MR/MRHandSmoothingProcessor.cs",
+      "sha256": "24f4668dc828f386c7109883720680c91e2f29cb89ced07d02a2eead503998fc",
+      "portedSha256": "24f4668dc828f386c7109883720680c91e2f29cb89ced07d02a2eead503998fc"
+    },
+    {
+      "path": "Scripts/MR/MRMetaHandMeshController.cs",
+      "sha256": "18632dc8b8ebd34f2d99b6f48d410f8dc6a102bc187f984ec22a3cb196b1267b",
+      "portedSha256": "18632dc8b8ebd34f2d99b6f48d410f8dc6a102bc187f984ec22a3cb196b1267b"
+    },
+    {
+      "path": "Scripts/MR/MRPerformanceOptimizer.cs",
+      "sha256": "0edc4b62ec253b39ed0db0953c43881805fe477f1133559a7ffc99e599c3d9c3",
+      "portedSha256": "247a72e251825d6937fbf2d91e2a8fef1179d2476ac7c7c5f6d00d5b602a62c6"
+    },
+    {
+      "path": "Scripts/MR/MRSimulatorAutoHand.cs",
+      "sha256": "b43c4d66eea79a24a3d9aeb45281ce9cd0eba5b7efbdfabf00da8fe78b9c979c",
+      "portedSha256": "edce0edf59da30f4d63457b6d3d5dd89ced24f24cb8df2fc1d2d90ba9789b631"
+    },
+    {
+      "path": "Shaders/MR_Hand_Passthrough.shader",
+      "sha256": "c870d10bbbe3284516a2fe6a1ce6d1b30ae91c760e8e808c7385269d2726945c",
+      "portedSha256": "c870d10bbbe3284516a2fe6a1ce6d1b30ae91c760e8e808c7385269d2726945c"
+    },
+    {
+      "path": "PackageSamples/com.unity.xr.interaction.toolkit@530ce2e6c59e/Samples/XR Device Simulator/UI/Hands/Hand_Grab.png",
+      "sha256": "4a4ff99779905ca74dc35e4ca9a657bc8aa7747fab850951e6c64f2da64cba5c",
+      "portedSha256": "4a4ff99779905ca74dc35e4ca9a657bc8aa7747fab850951e6c64f2da64cba5c"
+    },
+    {
+      "path": "PackageSamples/com.unity.xr.interaction.toolkit@530ce2e6c59e/Samples/XR Device Simulator/UI/Hands/Hand_Pinch.png",
+      "sha256": "ed59f656355d95a0495176d65b87215ad02b95a7e8c95093b05d8a88beefcddd",
+      "portedSha256": "ed59f656355d95a0495176d65b87215ad02b95a7e8c95093b05d8a88beefcddd"
+    },
+    {
+      "path": "PackageSamples/com.unity.xr.interaction.toolkit@530ce2e6c59e/Samples/XR Device Simulator/UI/Hands/Hand_Poke.png",
+      "sha256": "fa46aea1437fac6b2a2b9f37c84804a46d7dd9e0bd0138128fbefe01b4578303",
+      "portedSha256": "fa46aea1437fac6b2a2b9f37c84804a46d7dd9e0bd0138128fbefe01b4578303"
+    }
+  ],
+  "externalGuids": {
+    "4966719baa26e4b0e8231a24d9bd491a": "Library/PackageCache/com.unity.xr.arfoundation@d57b0b4d336a/Runtime/ARFoundation/Camera/ARCameraManager.cs",
+    "a79441f348de89743a2939f4d699eac1": "Library/PackageCache/com.unity.render-pipelines.universal@9b1eb8be54e0/Runtime/UniversalAdditionalCameraData.cs",
+    "83e4e6cca11330d4088d729ab4fc9d9f": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/XRInteractionManager.cs",
+    "d0a1302d0d134fa8a2a5b3bf4aec3c20": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Transformers/XRGeneralGrabTransformer.cs",
+    "0ad34abafad169848a38072baa96cdb2": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactables/XRGrabInteractable.cs",
+    "fa850fbd5b8aded44846f96e35f1a9f5": "Library/PackageCache/com.unity.xr.arfoundation@d57b0b4d336a/Runtime/ARFoundation/Input/ARInputManager.cs",
+    "3859a92a05d4f5d418cb6ca605290e74": "Library/PackageCache/com.unity.xr.arfoundation@d57b0b4d336a/Runtime/ARFoundation/Session/ARSession.cs",
+    "da1bb8ac6d49b4bbe8d0a43005a26072": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/Simulation/XRInteractionSimulator.cs",
+    "2a798ede3f9ef495cb5b62f2a9896b2e": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/Simulation/SimulatedDeviceLifecycleManager.cs",
+    "017c5e3933235514c9520e1dace2a4b2": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/InputActionManager.cs",
+    "1eb83c2ee0ce243f6823f2f7551cfd7a": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/Simulation/SimulatedHandPlaybackManager.cs",
+    "6e5fec700bf6450db697c8986b2dd413": "Library/PackageCache/com.unity.xr.hands@aec06f9cdb0b/Runtime/Capture/XRHandCaptureSequence.cs",
+    "be402f6368bb7404eb9adbf9f61fa025": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/Simulation/Hands/HandExpressionCapture.cs",
+    "306cc8c2b49d7114eaa3623786fc2126": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Layout/LayoutElement.cs",
+    "fe87c0e1cc204ed48ad3b37840f39efc": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Image.cs",
+    "5f7201a12d95ffc409449d95f23cf332": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Text.cs",
+    "4e29b1a8efbd4b44bb3f3716e73f07ff": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Button.cs",
+    "59f8146938fff824cb5fd77236b75775": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Layout/VerticalLayoutGroup.cs",
+    "30649d3a9faa99c48a7b1166b86bf2a0": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Layout/HorizontalLayoutGroup.cs",
+    "3245ec927659c4140ac4f8d17403cc18": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Layout/ContentSizeFitter.cs",
+    "0cd44c1031e13a943bb63640046fad76": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/Layout/CanvasScaler.cs",
+    "dc42784cf147c0c48a680349fa168899": "Library/PackageCache/com.unity.ugui@0b1771797efc/Runtime/UGUI/UI/Core/GraphicRaycaster.cs",
+    "d0353a89b1f911e48b9e16bdc9f2e058": "Library/PackageCache/com.unity.render-pipelines.universal@9b1eb8be54e0/Editor/AssetVersion.cs",
+    "933532a4fcc9baf4fa0491de14d08ed7": "Library/PackageCache/com.unity.render-pipelines.universal@9b1eb8be54e0/Shaders/Lit.shader",
+    "c2fadf230d1919748a9aa21d40f74619": "Library/PackageCache/com.unity.inputsystem@7a4e1a2a8194/InputSystem/Runtime/Plugins/XR/TrackedPoseDriver.cs",
+    "0924bcaa9eb50df458a783ae0e2b59f5": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/XRPokeInteractor.cs",
+    "a4a50d88b55b45648927679791f472de": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/XRInteractionGroup.cs",
+    "3e1f6ec8e1334364b4bbcae77749ff85": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/XRHandSkeletonPokeDisplacer.cs",
+    "25a07ef133a37d140a87cdf1f1c75fdf": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/NearFarInteractor.cs",
+    "434cd70b6a5740cca11da2a0417cf0ff": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Receiver/Rendering/BlendShapeAffordanceReceiver.cs",
+    "73feefcb6c9340e188b14a48254f4b5e": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Receiver/Transformation/UniformTransformScaleAffordanceReceiver.cs",
+    "c83f12c537584f51b92c01f10d7090c0": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/State/Provider/XRInteractorAffordanceStateProvider.cs",
+    "1410cbaaadf84a7aaa6459d37ad21b3a": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Rendering/MaterialPropertyBlockHelper.cs",
+    "f86d13fca2ec430d870c0f7765ad0dde": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Receiver/Rendering/ColorMaterialPropertyAffordanceReceiver.cs",
+    "629ea686265f47f082ba5732cffad1cf": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Receiver/Rendering/FloatMaterialPropertyAffordanceReceiver.cs",
+    "b53eb82258e249bb97cf3789c6a97dda": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Theme/Primitives/FloatAffordanceThemeDatum.cs",
+    "b5d80f45fb5f4418a5e84a476e517628": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Theme/Primitives/ColorAffordanceThemeDatum.cs",
+    "6f7c05e2d6a94808ac5dcf4531f19721": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/AffordanceSystem/Theme/Primitives/Vector3AffordanceThemeDatum.cs",
+    "639247ca83abc874e893eb93af2b5e44": "Library/PackageCache/com.unity.shadergraph@0de771837e0e/Editor/Generation/Targets/BuiltIn/Editor/AssetVersion.cs",
+    "80e353695beb436ab39a90d9ecefaee6": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/Visuals/CurveVisualController.cs",
+    "792f6c7eaa1a4b82abf8351559ac97eb": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Attachment/InteractionAttachController.cs",
+    "48139a683d3b4ac3a37cd5d24f71acf1": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/Casters/SphereInteractionCaster.cs",
+    "ef20135915079454985abea5a2ec8967": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/Casters/CurveInteractionCaster.cs",
+    "dd0b9921bce4eeb49bd05815b1135ac2": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Feedback/SimpleHapticFeedback.cs",
+    "b5b9cf54c47f40ee9c3eb30ea8eb89b9": "Library/PackageCache/com.unity.xr.hands@aec06f9cdb0b/Runtime/XRHandTrackingEvents.cs",
+    "07aaccfa1bc2417d8fbd0d9e2e102c2c": "Library/PackageCache/com.unity.xr.hands@aec06f9cdb0b/Runtime/XRHandSkeletonDriver.cs",
+    "21096d6d8059a5343a1f2b4d050e4789": "Library/PackageCache/com.unity.xr.hands@aec06f9cdb0b/Runtime/XRHandMeshController.cs",
+    "56186ccf27ad7864681108ed88349071": "Assets/_SpatialMAS/Resources/Hands/Models/RightHand.fbx",
+    "bf7151579c38e2a44be94ba8773876c1": "Assets/_SpatialMAS/Resources/Hands/Models/LeftHand.fbx",
+    "b734f2bd29eeddd4d85afb0c266228c3": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/Haptics/HapticImpulsePlayer.cs",
+    "9b46d3c2f9f9a9849840e47b9ddef1b2": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Gravity/GravityProvider.cs",
+    "e9f365cf844c03449bc8973eead2c3c1": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Turning/SnapTurnProvider.cs",
+    "75b29b6c6428c984a8a73ffc2d58063b": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Turning/ContinuousTurnProvider.cs",
+    "e0cb9aa70a22847b5925ee5f067c10a9": "Library/PackageCache/com.unity.xr.core-utils@a8b900321199/Runtime/XROrigin.cs",
+    "82bc72d2ecc8add47b2fe00d40318500": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/XRInputModalityManager.cs",
+    "c9b3d17eeb2e6bc47ada81d8f7f638d8": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Gaze/XRGazeAssistance.cs",
+    "01f69dc1cb084aa42b2f2f8cd87bc770": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Teleportation/TeleportationProvider.cs",
+    "496880615cd240be960d436c1c8ae570": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Climbing/ClimbProvider.cs",
+    "64d299502104b064388841ec2adf6def": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Inputs/XRTransformStabilizer.cs",
+    "8b94c4c83dec6a94fbaebf543478259e": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Movement/GrabMoveProvider.cs",
+    "760ff70c1c91bdd45907d0ff0cdcaf7f": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Movement/TwoHandedGrabMoveProvider.cs",
+    "e3cd49dc1a38aff4fa00676ddd64cf4e": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Jump/JumpProvider.cs",
+    "6fa7b4195685c3846be746c74f0ab2f8": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/LocomotionMediator.cs",
+    "6a26c941eb8a46f7b6d00416227ab8c0": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/XRBodyTransformer.cs",
+    "e3c5f6c9defa4ae9ad41bcc3f8754f86": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Climbing/ClimbTeleportInteractor.cs",
+    "6803edce0201f574f923fd9d10e5b30a": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/XRRayInteractor.cs",
+    "c416f1a5c494e224fb5564fd1362b50d": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/XRGazeInteractor.cs",
+    "e988983f96fe1dd48800bcdfc82f23e9": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Interaction/Interactors/Visuals/XRInteractorLineVisual.cs",
+    "8d2bb70cbf9db8d4da26e15b26e74248": "Library/PackageCache/com.unity.render-pipelines.universal@9b1eb8be54e0/Shaders/SimpleLit.shader",
+    "0ed265b7dcce480f872660373d393d95": "Library/PackageCache/com.unity.xr.interaction.toolkit@530ce2e6c59e/Runtime/Locomotion/Teleportation/GazeTeleportationAnchorFilter.cs",
+    "650dd9526735d5b46b79224bc6e94025": "Library/PackageCache/com.unity.render-pipelines.universal@9b1eb8be54e0/Shaders/Unlit.shader"
+  },
+  "unresolvedGuids": [
+    "25a7ddcf659944c8d89baff5fcdf9d2e",
+    "ac2724ca4693e43b8b66f8ef01bd8e3c"
+  ]
+}

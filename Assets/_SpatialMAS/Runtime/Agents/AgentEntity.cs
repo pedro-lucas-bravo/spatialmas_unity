@@ -3,6 +3,10 @@ using SpatialMAS.Core;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using UnityEngine.XR.Interaction.Toolkit.Interactors;
+using UnityEngine.XR.Interaction.Toolkit.Attachment;
+using UnityEngine.XR.Interaction.Toolkit.Filtering;
+using SpatialMAS.XR;
 
 namespace SpatialMAS.Agents
 {
@@ -17,7 +21,7 @@ namespace SpatialMAS.Agents
     [RequireComponent(typeof(AgentVisualController))]
     [RequireComponent(typeof(NativeDspSynthesizer))]
     [RequireComponent(typeof(SpatialAudioBankPlayer))]
-    public class AgentEntity : MonoBehaviour
+    public class AgentEntity : MonoBehaviour, IXRSelectFilter, IXRHoverFilter
     {
         public int AgentId { get; private set; } = -1;
         public AgentShapeType ShapeType { get; private set; } = AgentShapeType.Sphere;
@@ -161,16 +165,26 @@ namespace SpatialMAS.Agents
                 if (_grabInteractable == null)
                 {
                     _grabInteractable = gameObject.AddComponent<XRGrabInteractable>();
-                    _grabInteractable.movementType = XRBaseInteractable.MovementType.Instantaneous;
-                    _grabInteractable.throwOnDetach = false;
-                    _grabInteractable.useDynamicAttach = true;
-                    _grabInteractable.smoothPosition = true;
-                    _grabInteractable.smoothPositionAmount = 16.0f;
-                    _grabInteractable.smoothRotation = true;
-                    _grabInteractable.smoothRotationAmount = 16.0f;
                 }
 
             }
+
+            // A single adaptive filter lives on the hand anchor. Extra XRI easing makes precise
+            // placement lag behind the hand, including on prefabs that already had this component.
+            _grabInteractable.movementType = XRBaseInteractable.MovementType.Instantaneous;
+            _grabInteractable.throwOnDetach = false;
+            _grabInteractable.useDynamicAttach = true;
+            _grabInteractable.matchAttachPosition = true;
+            _grabInteractable.matchAttachRotation = true;
+            _grabInteractable.snapToColliderVolume = true;
+            _grabInteractable.smoothPosition = false;
+            _grabInteractable.smoothRotation = false;
+            _grabInteractable.attachEaseInTime = 0f;
+            _grabInteractable.farAttachMode = InteractableFarAttachMode.Near;
+            _grabInteractable.selectFilters.Remove(this);
+            _grabInteractable.selectFilters.Add(this);
+            _grabInteractable.hoverFilters.Remove(this);
+            _grabInteractable.hoverFilters.Add(this);
 
             // XRI's automatic collider discovery skips triggers. Agent colliders intentionally
             // remain triggers so autonomous motion does not cause physical collisions.
@@ -369,6 +383,53 @@ namespace SpatialMAS.Agents
         private void OnXRSelectEntered(SelectEnterEventArgs args)
         {
             BeginUserGrab();
+            if (args.interactorObject is NearFarInteractor interactor && _collider != null)
+            {
+                // The XRI attach transform can still be at the far hit during SelectEntered.
+                // Measure against the physical follow target before resetting that ray offset.
+                var attach = interactor.interactionAttachController as UnityEngine.XR.Interaction.Toolkit.Attachment.InteractionAttachController;
+                Transform hand = attach != null && attach.transformToFollow != null ? attach.transformToFollow : interactor.transform;
+                float surfaceDistance = Vector3.Distance(hand.position, _collider.ClosestPoint(hand.position));
+                if (surfaceDistance >= XRInteractionRigSetup.MinimumDistanceGrabSurfaceDistance)
+                {
+                    attach?.ResetOffset();
+                    // XRI dynamic attach normally preserves the hit point on a distant collider.
+                    // Far summon uses the object's center at the physical hand immediately, with
+                    // no interpolation/pull speed or residual ray offset.
+                    _grabInteractable.GetAttachTransform(interactor).localPosition = Vector3.zero;
+                    transform.position = hand.position;
+                    _targetPosition = transform.position;
+                    // Transformers captured the original far offset during OnSelectEntering.
+                    // Rebase their grab state so the next transform pass retains the summon.
+                    for (int i = 0; i < _grabInteractable.singleGrabTransformersCount; i++)
+                        _grabInteractable.GetSingleGrabTransformerAt(i).OnGrab(_grabInteractable);
+                    for (int i = 0; i < _grabInteractable.multipleGrabTransformersCount; i++)
+                        _grabInteractable.GetMultipleGrabTransformerAt(i).OnGrab(_grabInteractable);
+                }
+            }
+        }
+
+        public bool canProcess => isActiveAndEnabled;
+
+        public bool Process(IXRSelectInteractor interactor, IXRSelectInteractable interactable) =>
+            AllowsHandContact(interactor, true);
+
+        public bool Process(IXRHoverInteractor interactor, IXRHoverInteractable interactable) =>
+            AllowsHandContact(interactor, false);
+
+        private bool AllowsHandContact(IXRInteractor interactor, bool selecting)
+        {
+            if (!(interactor is NearFarInteractor nearFar) || _collider == null) return true;
+            if (_grabInteractable.interactorsSelecting.Contains(nearFar)) return true;
+            var driver = nearFar.GetComponent<XRTrackedHandInteractor>();
+            var pinch = driver != null ? driver.Pinch : null;
+            if (pinch == null || !pinch.HasPhysicalAnchor) return true; // Controller/simulator behavior.
+            pinch.TryGetInteractionPoseWorld(out Pose anchor);
+            float distance = Vector3.Distance(anchor.position, _collider.ClosestPoint(anchor.position));
+            float contactDistance = pinch.IsPalmGrasp ? 0.038f : 0.025f;
+            if (distance <= contactDistance) return true;
+            if (distance < XRInteractionRigSetup.MinimumDistanceGrabSurfaceDistance) return false;
+            return !selecting || !pinch.IsPalmGrasp; // Far retrieval requires a deliberate pinch.
         }
 
         private void OnXRSelectExited(SelectExitEventArgs args)

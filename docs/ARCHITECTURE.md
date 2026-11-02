@@ -42,7 +42,7 @@ flowchart TD
         subgraph XR["Multiplatform XR & Desktop Layer"]
             Plat["XRPlatformAdapter\n(Quest 3 / Apple Vision Pro / OpenXR / Desktop)"]
             Mode["XRModeSwitcher\n(MR Passthrough Alpha=0 <-> VR Immersive Studio)"]
-            Hands["XRHandTrackingProcessor & XRHandPinchHysteresis\n(Zero-Lag Deadband + Schmitt Trigger Pinch)"]
+            Hands["XRHandTrackingProcessor & XRHandPinchHysteresis\n(Raw provider poses + filtered grab anchor)"]
             Embod["XRUserEmbodimentBridge\n(Head/Hand 6DoF + Helbing Human Repeller)"]
             Desktop["DesktopInteractionRig\n(RMB+WASD Fly & LMB Raycast Grab)"]
         end

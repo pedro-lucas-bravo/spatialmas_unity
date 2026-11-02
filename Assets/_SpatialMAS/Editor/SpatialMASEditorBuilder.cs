@@ -105,6 +105,9 @@ namespace SpatialMAS.Editor
         [MenuItem("SpatialMAS/2. Configure OpenXR & Multiplatform XR Settings", priority = 3)]
         public static void ConfigureOpenXRMultiplatformSettings()
         {
+            // Meta Camera passthrough validates against Android 12L or newer.
+            if ((int)PlayerSettings.Android.minSdkVersion < 32)
+                PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel32;
             try
             {
                 // Ensure Windows Standalone uses Direct3D11 primary to prevent Unity 6 D3D12Fence::Wait TDR freezes in Editor

@@ -1,0 +1,7 @@
+{
+  "name": "SpatialMAS.InteractionLab.Editor",
+  "rootNamespace": "SpatialMAS.InteractionLab.Editor",
+  "references": ["Unity.XR.Management.Editor", "Unity.XR.OpenXR"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

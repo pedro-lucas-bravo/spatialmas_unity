@@ -14,6 +14,8 @@ namespace SpatialMAS.XR
     /// <summary>Shared scene-builder and runtime setup, including repair of older generated fallback rigs.</summary>
     public static class XRInteractionRigSetup
     {
+        public const float MinimumDistanceGrabSurfaceDistance = 0.22f;
+
         public static Transform GetTrackingOrigin(Camera camera)
         {
             var origin = camera != null ? camera.GetComponentInParent<XROrigin>(true) : null;
@@ -84,17 +86,21 @@ namespace SpatialMAS.XR
             handObject.SetActive(false);
             handObject.transform.SetParent(trackingOrigin, false);
             var near = handObject.AddComponent<SphereInteractionCaster>();
-            near.castRadius = 0.045f;
+            near.castRadius = 0.04f;
             near.physicsTriggerInteraction = QueryTriggerInteraction.Collide;
             var far = handObject.AddComponent<CurveInteractionCaster>();
             far.castDistance = 5f;
             far.raycastTriggerInteraction = QueryTriggerInteraction.Collide;
             var attach = handObject.AddComponent<InteractionAttachController>();
             attach.useMomentum = false;
+            attach.motionStabilizationMode = MotionStabilizationMode.Never;
+            attach.useDistanceBasedVelocityScaling = false;
+            attach.smoothOffset = false;
             var interactor = handObject.AddComponent<NearFarInteractor>();
             interactor.nearInteractionCaster = near;
             interactor.farInteractionCaster = far;
             interactor.interactionAttachController = attach;
+            interactor.farAttachMode = InteractorFarAttachMode.Near;
             interactor.enableUIInteraction = true;
             interactor.selectInput = ObjectReader("Pinch Select", pinch);
             interactor.uiPressInput = ObjectReader("Pinch UI Press", pinch);
@@ -116,6 +122,18 @@ namespace SpatialMAS.XR
             var reader = new XRInputButtonReader(name, inputSourceMode: XRInputButtonReader.InputSourceMode.ObjectReference);
             reader.SetObjectReference(source);
             return reader;
+        }
+
+        /// <summary>Use a URP stereo ray material while retaining XRI's vertex-color feedback.</summary>
+        public static void ConfigureRayVisualMaterial(CurveVisualController visual)
+        {
+            if (visual == null || visual.lineRenderer == null) return;
+            var material = Resources.Load<Material>("Mat_SpatialMAS_XRRay");
+            if (material == null) return;
+            visual.swapMaterials = false;
+            visual.baseLineMaterial = material;
+            visual.emptyHitMaterial = material;
+            visual.lineRenderer.sharedMaterial = material;
         }
     }
 }

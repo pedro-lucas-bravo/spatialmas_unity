@@ -112,11 +112,59 @@ namespace SpatialMAS.Tests.PlayMode
             {
                 Assert.AreEqual(XRInputButtonReader.InputSourceMode.ObjectReference, interactor.selectInput.inputSourceMode);
                 Assert.IsInstanceOf<XRHandPinchHysteresis>(interactor.selectInput.GetObjectReference());
-                Assert.AreSame(interactor.selectInput.GetObjectReference(), interactor.uiPressInput.GetObjectReference());
+                Assert.IsInstanceOf<XRHandUISelectReader>(interactor.uiPressInput.GetObjectReference());
+                Assert.AreEqual(UnityEngine.XR.Interaction.Toolkit.Attachment.InteractorFarAttachMode.Near, interactor.farAttachMode);
                 Assert.IsTrue(interactor.enableUIInteraction);
+                var visual = interactor.GetComponentInChildren<UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals.CurveVisualController>(true);
+                Assert.NotNull(visual.lineRenderer.sharedMaterial);
+                Assert.AreEqual("Universal Render Pipeline/Particles/Unlit", visual.lineRenderer.sharedMaterial.shader.name);
+                Assert.AreSame(visual.baseLineMaterial, visual.lineRenderer.sharedMaterial);
+                Assert.IsFalse(visual.swapMaterials, "State changes must not restore a legacy ray shader.");
                 Assert.AreEqual(QueryTriggerInteraction.Collide, ((SphereInteractionCaster)interactor.nearInteractionCaster).physicsTriggerInteraction);
                 Assert.AreEqual(QueryTriggerInteraction.Collide, ((CurveInteractionCaster)interactor.farInteractionCaster).raycastTriggerInteraction);
             }
+        }
+
+        [Test]
+        public void DistanceRayFeedback_HidesEmptySpaceNearMissContactAndHeldObjects()
+        {
+            var manager = NewObject("Ray feedback manager").AddComponent<XRInteractionManager>();
+            var hand = NewObject("Ray feedback hand");
+            hand.SetActive(false);
+            hand.AddComponent<SphereInteractionCaster>();
+            hand.AddComponent<CurveInteractionCaster>();
+            hand.AddComponent<UnityEngine.XR.Interaction.Toolkit.Attachment.InteractionAttachController>();
+            var interactor = hand.AddComponent<NearFarInteractor>();
+            interactor.interactionManager = manager;
+            interactor.enableUIInteraction = false;
+            hand.SetActive(true);
+            var cube = NewObject("Ray feedback cube");
+            cube.AddComponent<BoxCollider>().size = Vector3.one * 0.1f;
+            cube.AddComponent<Rigidbody>().isKinematic = true;
+            var grab = cube.AddComponent<XRGrabInteractable>();
+            grab.interactionManager = manager;
+            Assert.IsFalse(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero));
+            cube.transform.position = Vector3.forward * 0.5f;
+            Physics.SyncTransforms();
+            manager.HoverEnter((IXRHoverInteractor)interactor, grab);
+            Assert.IsTrue(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero));
+            foreach (float distance in new[] { 0.26f, 0.1f, 0.02f })
+            {
+                cube.transform.position = Vector3.forward * distance;
+                Physics.SyncTransforms();
+                Assert.IsFalse(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero),
+                    "Surface distance, not object-center distance, determines far-pick eligibility.");
+            }
+            cube.transform.position = Vector3.forward * 0.5f;
+            Physics.SyncTransforms();
+            interactor.enableFarCasting = false;
+            Assert.IsFalse(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero));
+            interactor.enableFarCasting = true;
+            manager.SelectEnter((IXRSelectInteractor)interactor, grab);
+            Assert.IsFalse(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero));
+            manager.SelectExit((IXRSelectInteractor)interactor, grab);
+            manager.HoverExit((IXRHoverInteractor)interactor, grab);
+            Assert.IsFalse(XRTrackedHandInteractor.ShouldShowRayFeedback(interactor, Vector3.zero));
         }
 
         [Test]
@@ -173,6 +221,32 @@ namespace SpatialMAS.Tests.PlayMode
         [UnityTest]
         public IEnumerator FarPinch_GrabsMovesAndReleasesTriggerCube() => GrabTriggerCube(true);
 
+        [Test]
+        public void PhysicalHandSurfaceFilter_RejectsNearMissHaloAndAllowsContactOrFarPinch()
+        {
+            var origin = NewObject("Tracking Origin").transform;
+            var reader = NewObject("Physical Pinch").AddComponent<XRHandPinchHysteresis>();
+            reader.ConfigureTrackingOrigin(origin);
+            Invoke(reader, "EvaluatePhysicalSample", Pose.identity, Vector3.zero, Vector3.right * 0.02f,
+                Vector3.one, Vector3.zero, Vector3.zero, false, false, 1f / 90f);
+            var hand = NewObject("Inactive Hand");
+            hand.SetActive(false);
+            var interactor = hand.AddComponent<NearFarInteractor>();
+            hand.AddComponent<XRTrackedHandInteractor>().Configure(reader, origin, interactor, null, null);
+            var agent = NewObject("Cube").AddComponent<AgentEntity>();
+            agent.Configure(7, AgentShapeType.Cube, AgentMovementMode.Teleport, 0.07f, new SimulationCommandBus());
+            var grab = agent.GetComponent<XRGrabInteractable>();
+            agent.PlaceImmediately(new Vector3(0.15f, 0f, 0f));
+            Physics.SyncTransforms();
+            Assert.IsFalse(agent.Process((IXRSelectInteractor)interactor, grab), "A pinch 10 cm from the surface cannot grab through the ray.");
+            agent.PlaceImmediately(new Vector3(0.065f, 0f, 0f));
+            Physics.SyncTransforms();
+            Assert.IsTrue(agent.Process((IXRSelectInteractor)interactor, grab));
+            agent.PlaceImmediately(new Vector3(0.9f, 0f, 0f));
+            Physics.SyncTransforms();
+            Assert.IsTrue(agent.Process((IXRSelectInteractor)interactor, grab));
+        }
+
         private IEnumerator GrabTriggerCube(bool far)
         {
             var manager = NewObject("Interaction Manager").AddComponent<XRInteractionManager>();
@@ -211,6 +285,9 @@ namespace SpatialMAS.Tests.PlayMode
             agent.Configure(7, AgentShapeType.Cube, AgentMovementMode.Teleport, 0.07f, bus);
             var grab = agent.GetComponent<XRGrabInteractable>();
             grab.interactionManager = manager;
+            float firstSelectionDistance = float.PositiveInfinity;
+            grab.selectEntered.AddListener(_ => firstSelectionDistance = Vector3.Distance(
+                agent.transform.position, interactor.GetAttachTransform(grab).position));
             agent.PlaceImmediately(new Vector3(0f, 1.2f, far ? 0.9f : 0.05f));
             Physics.SyncTransforms();
             yield return null;
@@ -219,10 +296,20 @@ namespace SpatialMAS.Tests.PlayMode
 
             pinch.QueueManualState(true, 1f);
             yield return null;
-            yield return null;
             Assert.IsTrue(agent.IsGrabbedByUser);
             Assert.IsTrue(interactor.interactablesSelected.Contains(grab));
-            Assert.AreEqual(far ? NearFarInteractor.Region.Far : NearFarInteractor.Region.Near, interactor.selectionRegion.Value);
+            if (far)
+            {
+                Assert.That(firstSelectionDistance, Is.LessThan(0.0001f), "Far selection must summon in the selection event itself.");
+                Assert.That(Vector3.Distance(agent.transform.position, interactor.GetAttachTransform(grab).position), Is.LessThan(0.0001f));
+            }
+            // Region is published on the following manager update. Placement above must already
+            // be correct in the first selected frame, independently of that delayed notification.
+            yield return null;
+            Assert.AreEqual(NearFarInteractor.Region.Near, interactor.selectionRegion.Value);
+            Assert.IsFalse(grab.smoothPosition);
+            Assert.IsFalse(grab.smoothRotation);
+            Assert.AreEqual(0f, grab.attachEaseInTime);
             Vector3 start = agent.transform.position;
             interactor.transform.position += Vector3.right * 0.2f;
             for (int frame = 0; frame < 8; frame++) yield return null;
