@@ -22,10 +22,15 @@ jobs:
       - name: Validate Packages/manifest.json and .asmdef JSON Syntax
         run: |
           python3 -m json.tool Packages/manifest.json > /dev/null
-          for asmdef in $(find Assets/_SpatialMAS -name "*.asmdef"); do
+          # Read paths NUL-delimited: the imported XR Interaction Toolkit samples
+          # contain spaces in directory names (for example, "XR Hands"), so a
+          # command-substitution loop would split one file path into fragments
+          # and accidentally pass directories such as `.../Samples/XR` to
+          # json.tool.
+          while IFS= read -r -d '' asmdef; do
             echo "Validating $asmdef..."
             python3 -m json.tool "$asmdef" > /dev/null
-          done
+          done < <(find Assets/_SpatialMAS -type f -name "*.asmdef" -print0)
 
       - name: Verify Unity .meta File Pairing in Assets/_SpatialMAS
         run: |
