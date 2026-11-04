@@ -43,6 +43,24 @@ namespace SpatialMAS.Core
     [CreateAssetMenu(fileName = "SpatialMASConfig", menuName = "SpatialMAS/Configuration", order = 1)]
     public class SpatialMASConfig : ScriptableObject
     {
+        [Header("Researcher Panel")]
+        [Min(0.35f), Tooltip("Fixed horizontal panel radius around the tracked head, in meters. Drag changes azimuth and height, not this distance.")]
+        public float researcherPanelRadius = 1.25f;
+        [Range(0f, 180f), Tooltip("Yaw error tolerated before panel follow responds, in degrees.")]
+        public float researcherPanelAngularDeadZone = 8f;
+        [Min(.01f), InspectorName("Angular Catch Up Seconds"), Tooltip("Angular exponential time constant. Existing serialized field retained for compatibility.")]
+        public float researcherPanelCatchUpSeconds = .25f;
+        [Min(0f), Tooltip("Horizontal head displacement that starts position follow, in meters, in any horizontal direction.")]
+        public float researcherPanelHorizontalDeadZone = .10f;
+        [Min(0f), Tooltip("Smaller horizontal residual at which active catch-up settles. Must not exceed the outer dead zone.")]
+        public float researcherPanelHorizontalStopDistance = .05f;
+        [Min(.01f)] public float researcherPanelHorizontalCatchUpSeconds = .25f;
+        [Min(0f), Tooltip("Head height displacement that starts vertical follow, in meters. Head pitch is ignored.")]
+        public float researcherPanelVerticalDeadZone = .08f;
+        [Min(0f), Tooltip("Smaller vertical residual at which catch-up settles. Must not exceed the outer dead zone.")]
+        public float researcherPanelVerticalStopDistance = .04f;
+        [Min(.01f)] public float researcherPanelVerticalCatchUpSeconds = .25f;
+
         [Header("Network & OSC Configuration")]
         [Tooltip("Local UDP port where SpatialMAS listens for incoming OSC v1 & v2 messages.")]
         public int oscListenPort = 6011;

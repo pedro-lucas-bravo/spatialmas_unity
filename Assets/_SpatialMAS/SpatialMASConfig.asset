@@ -12,6 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b3a4785d09ec284ebd2a46367e89af2, type: 3}
   m_Name: SpatialMASConfig
   m_EditorClassIdentifier: SpatialMAS.Runtime::SpatialMAS.Core.SpatialMASConfig
+  researcherPanelRadius: 1.25
+  researcherPanelAngularDeadZone: 8
+  researcherPanelCatchUpSeconds: 0.25
+  researcherPanelHorizontalDeadZone: 0.1
+  researcherPanelHorizontalStopDistance: 0.05
+  researcherPanelHorizontalCatchUpSeconds: 0.25
+  researcherPanelVerticalDeadZone: 0.08
+  researcherPanelVerticalStopDistance: 0.04
+  researcherPanelVerticalCatchUpSeconds: 0.25
   oscListenPort: 6011
   defaultRemoteIp: 127.0.0.1
   defaultRemotePort: 6012

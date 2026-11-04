@@ -186,6 +186,7 @@ namespace SpatialMAS.Core
 
             // 8. Spatial Researcher HUD
             ResearcherHud = GetOrAddChildComponent<SpatialResearcherHUD>("SpatialResearcherHUD");
+            ResearcherHud.ApplyPanelSettings(_config);
             ResearcherHud.Initialize(
                 CommandBus,
                 CoordinateMapper,
@@ -203,6 +204,10 @@ namespace SpatialMAS.Core
 
         private void Update()
         {
+#if UNITY_EDITOR
+            // Authoring asset remains the source of truth. No player polling or asset writes.
+            if (ResearcherHud != null && _config != null) ResearcherHud.ApplyPanelSettings(_config);
+#endif
             OscRouter?.ProcessIncomingMessages();
         }
 

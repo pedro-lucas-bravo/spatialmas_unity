@@ -13,6 +13,15 @@ MonoBehaviour:
   m_Name: DefaultSpatialMASConfig
   m_EditorClassIdentifier: SpatialMAS.Runtime::SpatialMAS.Core.SpatialMASConfig
   oscListenPort: 6011
+  researcherPanelRadius: 1.25
+  researcherPanelAngularDeadZone: 8
+  researcherPanelCatchUpSeconds: 0.25
+  researcherPanelHorizontalDeadZone: 0.1
+  researcherPanelHorizontalStopDistance: 0.05
+  researcherPanelHorizontalCatchUpSeconds: 0.25
+  researcherPanelVerticalDeadZone: 0.08
+  researcherPanelVerticalStopDistance: 0.04
+  researcherPanelVerticalCatchUpSeconds: 0.25
   defaultRemoteIp: 127.0.0.1
   defaultRemotePort: 6012
   udpReceiveBufferSize: 1048576

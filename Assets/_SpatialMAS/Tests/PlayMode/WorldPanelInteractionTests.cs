@@ -122,6 +122,113 @@ namespace SpatialMAS.Tests.PlayMode
             finally { module.UnregisterInteractor(pointer); }
         }
 
+        [Test]
+        public void LivePanelSettings_ApplyChangedValuesWithoutResettingPoseOrMode_AndDeferDuringCapture()
+        {
+            var config = ScriptableObject.CreateInstance<SpatialMASConfig>();
+            try
+            {
+                var follow = _hud.GetComponent<XRPanelFollow>();
+                var handle = Panel.GetComponentInChildren<XRPanelMoveHandle>(true);
+                follow.SetPinned(true, new Pose(Vector3.zero, Quaternion.identity));
+                Vector3 position = Panel.position;
+                Quaternion rotation = Panel.rotation;
+                config.researcherPanelRadius = 1.8f;
+                config.researcherPanelAngularDeadZone = 12f;
+                config.researcherPanelCatchUpSeconds = .4f;
+                Assert.IsTrue(_hud.ApplyPanelSettings(config));
+                Assert.AreEqual(1.8f, follow.Radius);
+                Assert.AreEqual(12f, follow.AngularDeadZone);
+                Assert.AreEqual(.4f, follow.CatchUpSeconds);
+                Assert.IsTrue(follow.Pinned);
+                Assert.AreEqual(position, Panel.position);
+                Assert.AreEqual(rotation, Panel.rotation);
+                Assert.IsFalse(_hud.ApplyPanelSettings(config), "Unchanged asset values must not reconfigure the panel.");
+                var dragging = typeof(XRPanelMoveHandle).GetField("_dragging", BindingFlags.NonPublic | BindingFlags.Instance);
+                dragging.SetValue(handle, true);
+                config.researcherPanelRadius = 2.1f;
+                _hud.ApplyPanelSettings(config);
+                Assert.IsTrue(_hud.HasPendingPanelSettings);
+                Assert.AreEqual(1.8f, follow.Radius, "Live radius must not change a captured arc.");
+                dragging.SetValue(handle, false);
+                Invoke(_hud, "TryApplyPanelSettings");
+                Assert.AreEqual(2.1f, follow.Radius);
+                Assert.IsFalse(_hud.HasPendingPanelSettings);
+                Assert.IsTrue(follow.Pinned);
+                Assert.AreEqual(position, Panel.position);
+            }
+            finally { Object.DestroyImmediate(config); }
+        }
+
+        [Test]
+        public void LauncherToggle_ClosesVisiblePanelThenRecallsHiddenPanel()
+        {
+            var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
+            lifecycle.ToggleFromLauncher();
+            Assert.IsFalse(lifecycle.Visible);
+            Assert.IsFalse(Panel.gameObject.activeSelf);
+            lifecycle.ToggleFromLauncher();
+            Assert.IsTrue(lifecycle.Visible);
+            Assert.IsTrue(Panel.gameObject.activeSelf);
+            Assert.IsFalse(Panel.GetComponent<CanvasGroup>().blocksRaycasts);
+            lifecycle.ResearcherMode = false;
+            lifecycle.ToggleFromLauncher();
+            Assert.IsFalse(lifecycle.Visible);
+        }
+
+        [Test]
+        public void BraceletHold_CancelsLostEligibilityAndRequiresReleaseBeforeRearming()
+        {
+            var hold = new BraceletHoldState();
+            Assert.IsFalse(hold.Step(true, true, 0.6f));
+            Assert.IsFalse(hold.Step(false, true, 0.6f));
+            Assert.AreEqual(0f, hold.Elapsed);
+            Assert.IsFalse(hold.Step(true, true, 2f));
+            Assert.IsFalse(hold.Step(true, false, 0f));
+            Assert.IsTrue(hold.Step(true, true, 1f));
+            Assert.IsFalse(hold.Step(true, true, 2f));
+            hold.Step(true, false, 0f);
+            Assert.IsFalse(hold.Step(true, true, 0.5f));
+            hold.Step(true, false, 0f);
+            Assert.IsFalse(hold.Step(true, true, 0.5f), "Contact exit must reset elapsed time.");
+        }
+
+        [Test]
+        public void ParticipantMode_HidesPanelCancelsQueuedCommandAndRecoveryOnlyRecalls()
+        {
+            var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
+            int loads = 0;
+            _bus.OnLoadScenario += _ => loads++;
+            Panel.Find("2 · Swarmalators").GetComponent<Button>().onClick.Invoke();
+            lifecycle.ResearcherMode = false;
+            Assert.IsFalse(Panel.gameObject.activeSelf);
+            Assert.IsFalse(Panel.GetComponent<CanvasGroup>().blocksRaycasts);
+            Invoke(_hud, "ProcessDeferredUiActions");
+            Assert.AreEqual(0, loads, "Hiding must discard unfinished queued panel commands.");
+            _hud.TrackingAvailable = true;
+            _hud.TrackedPose = new Pose(new Vector3(2f, 1.7f, -4f), Quaternion.identity);
+            lifecycle.RecoverResearcherAccess();
+            Assert.IsTrue(lifecycle.ResearcherMode);
+            Assert.IsTrue(lifecycle.Visible);
+            Assert.IsFalse(Panel.GetComponent<CanvasGroup>().blocksRaycasts, "Recall must wait for release before controls become live.");
+            Assert.AreEqual(0, loads);
+        }
+
+        [Test]
+        public void CloseAndRecall_PreservePanelStateAndRejectParticipantRecall()
+        {
+            var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
+            lifecycle.SetHeadsetActive(true);
+            Vector3 position = Panel.position;
+            lifecycle.Hide();
+            Assert.IsFalse(Panel.gameObject.activeSelf);
+            Assert.AreEqual(position, Panel.position);
+            lifecycle.ResearcherMode = false;
+            lifecycle.Recall();
+            Assert.IsFalse(lifecycle.Visible);
+            Assert.AreEqual(position, Panel.position);
+        }
+
         private Transform Panel => _hud.transform.Find("SpatialResearcherWorldCanvas");
 
         private GameObject NewObject(string name)

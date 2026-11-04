@@ -23,6 +23,66 @@ namespace SpatialMAS.UI
     public class SpatialResearcherHUD : MonoBehaviour
     {
         [SerializeField] private bool _showScreenOverlayOnDesktop = true;
+        [SerializeField, Min(0.35f), Tooltip("Fixed horizontal distance of the researcher panel from the tracked head, in meters.")]
+        private float _panelHorizontalRadius = 1.25f;
+        public float PanelHorizontalRadius { get => _panelHorizontalRadius; set => _panelHorizontalRadius = Mathf.Max(0.35f, value); }
+        public float PanelAngularDeadZone { get; set; } = 8f;
+        public float PanelCatchUpSeconds { get; set; } = .25f;
+        private PanelSettings _requestedPanelSettings, _appliedPanelSettings;
+        private bool _hasPanelSettings, _hasAppliedPanelSettings;
+        public bool HasPendingPanelSettings => _hasPanelSettings && (!_hasAppliedPanelSettings || !_requestedPanelSettings.Same(_appliedPanelSettings));
+
+        private struct PanelSettings
+        {
+            public float Radius, Angular, AngularTime, Horizontal, HorizontalStop, HorizontalTime, Vertical, VerticalStop, VerticalTime;
+            private static float Safe(float value, float fallback, float min, float max = 1000f) =>
+                float.IsNaN(value) || float.IsInfinity(value) ? fallback : Mathf.Clamp(value, min, max);
+            public static PanelSettings Read(SpatialMASConfig c)
+            {
+                var s = new PanelSettings {
+                    Radius = Safe(c.researcherPanelRadius, 1.25f, .35f), Angular = Safe(c.researcherPanelAngularDeadZone, 8f, 0f, 180f),
+                    AngularTime = Safe(c.researcherPanelCatchUpSeconds, .25f, .01f),
+                    Horizontal = Safe(c.researcherPanelHorizontalDeadZone, .1f, 0f), HorizontalTime = Safe(c.researcherPanelHorizontalCatchUpSeconds, .25f, .01f),
+                    Vertical = Safe(c.researcherPanelVerticalDeadZone, .08f, 0f), VerticalTime = Safe(c.researcherPanelVerticalCatchUpSeconds, .25f, .01f) };
+                s.HorizontalStop = Safe(c.researcherPanelHorizontalStopDistance, .05f, 0f, s.Horizontal);
+                s.VerticalStop = Safe(c.researcherPanelVerticalStopDistance, .04f, 0f, s.Vertical);
+                return s;
+            }
+            public bool Same(PanelSettings s) => Radius == s.Radius && Angular == s.Angular && AngularTime == s.AngularTime &&
+                Horizontal == s.Horizontal && HorizontalStop == s.HorizontalStop && HorizontalTime == s.HorizontalTime &&
+                Vertical == s.Vertical && VerticalStop == s.VerticalStop && VerticalTime == s.VerticalTime;
+        }
+
+        public bool ApplyPanelSettings(SpatialMASConfig config)
+        {
+            if (config == null) return false;
+            PanelSettings settings = PanelSettings.Read(config);
+            if (_hasPanelSettings && settings.Same(_requestedPanelSettings)) return false;
+            _requestedPanelSettings = settings;
+            _hasPanelSettings = true;
+            TryApplyPanelSettings();
+            return true;
+        }
+
+        private void TryApplyPanelSettings()
+        {
+            if (!HasPendingPanelSettings) return;
+            if ((_moveHandle != null && _moveHandle.IsDragging) || PanelHasPointerIntent()) return;
+            var s = _requestedPanelSettings;
+            PanelHorizontalRadius = s.Radius;
+            PanelAngularDeadZone = s.Angular;
+            PanelCatchUpSeconds = s.AngularTime;
+            if (_panelFollow == null) return; // Retain pending data until construction completes.
+            if (!_hasAppliedPanelSettings || s.Radius != _appliedPanelSettings.Radius) _panelFollow.ConfigureRadius(s.Radius);
+            if (!_hasAppliedPanelSettings || s.Angular != _appliedPanelSettings.Angular || s.AngularTime != _appliedPanelSettings.AngularTime)
+                _panelFollow.ConfigureTuning(s.Angular, s.AngularTime);
+            if (!_hasAppliedPanelSettings || s.Horizontal != _appliedPanelSettings.Horizontal || s.HorizontalStop != _appliedPanelSettings.HorizontalStop ||
+                s.HorizontalTime != _appliedPanelSettings.HorizontalTime || s.Vertical != _appliedPanelSettings.Vertical ||
+                s.VerticalStop != _appliedPanelSettings.VerticalStop || s.VerticalTime != _appliedPanelSettings.VerticalTime)
+                _panelFollow.ConfigurePositionTuning(s.Horizontal, s.HorizontalStop, s.HorizontalTime, s.Vertical, s.VerticalStop, s.VerticalTime);
+            _appliedPanelSettings = s;
+            _hasAppliedPanelSettings = true;
+        }
 
         private SimulationCommandBus _bus;
         private SpatialCalibrationReference _calibration;
@@ -40,8 +100,17 @@ namespace SpatialMAS.UI
         private GameObject _worldCanvasObject;
         private Canvas _worldCanvas;
         private XRUIInputModule _worldInputModule;
+        private XRResearcherPanelLifecycle _panelLifecycle;
+        private XRPanelFollow _panelFollow;
+        private XRPanelMoveHandle _moveHandle;
+        private Button _followButton;
+        private bool _wasPanelDragging;
+        private UnityEngine.XR.Interaction.Toolkit.Interactors.NearFarInteractor[] _panelPointers;
+        private float _nextPointerRefresh;
+        private readonly System.Collections.Generic.HashSet<int> _panelPresses = new System.Collections.Generic.HashSet<int>();
         private bool _worldPanelWasInXr;
         private bool _worldPanelNeedsTrackedPlacement = true;
+        private bool _hasTrackedPanelPlacement;
         private readonly Button[] _worldPresetButtons = new Button[5];
         private float _smoothedFps = 90f;
 
@@ -111,6 +180,7 @@ namespace SpatialMAS.UI
                 _worldHudStatusText = existing.GetComponentInChildren<Text>();
                 _worldCanvasObject = existing.gameObject;
                 ConfigureWorldCanvas();
+                ConfigurePanelLifecycle();
                 return;
             }
 
@@ -125,7 +195,7 @@ namespace SpatialMAS.UI
             scaler.dynamicPixelsPerUnit = 10f;
 
             RectTransform rt = canvasGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(620f, 865f);
+            rt.sizeDelta = new Vector2(620f, 965f);
 
             var bgGo = new GameObject("PanelBackground");
             bgGo.transform.SetParent(canvasGo.transform, false);
@@ -176,9 +246,46 @@ namespace SpatialMAS.UI
             CreateWorldButton(rt, "Rotate Reference 90°", new Rect(314, 704, 288, 42), () => _pendingRotateReference = true);
             CreateWorldButton(rt, "Reset Reference Pose", new Rect(18, 754, 288, 42), () => _pendingResetReference = true);
             CreateWorldButton(rt, "Clear All", new Rect(314, 754, 288, 42), () => _pendingRemoveAllAgents = true);
-            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 804, 584, 42), PositionWorldPanel);
+            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 804, 288, 42), PositionWorldPanel);
+            _followButton = CreateWorldButton(rt, "Pin in room", new Rect(314, 804, 288, 42), TogglePanelFollow);
+            CreateWorldButton(rt, "Close Panel", new Rect(18, 854, 288, 42), () => _panelLifecycle.Hide());
+            CreateWorldButton(rt, "Participant Mode", new Rect(314, 854, 288, 42), () => _panelLifecycle.ResearcherMode = false);
             ConfigureWorldCanvas();
+            ConfigurePanelLifecycle();
             PositionWorldPanel();
+        }
+
+        private void ConfigurePanelLifecycle()
+        {
+            _panelLifecycle = GetComponent<XRResearcherPanelLifecycle>();
+            if (_panelLifecycle == null) _panelLifecycle = gameObject.AddComponent<XRResearcherPanelLifecycle>();
+            _panelLifecycle.Initialize(_worldCanvasObject.transform, PositionWorldPanel);
+            _panelFollow = GetComponent<XRPanelFollow>();
+            if (_panelFollow == null) _panelFollow = gameObject.AddComponent<XRPanelFollow>();
+            _panelFollow.Initialize(_worldCanvasObject.transform);
+            _panelFollow.ConfigureRadius(_panelHorizontalRadius);
+            _panelFollow.ConfigureTuning(PanelAngularDeadZone, PanelCatchUpSeconds);
+            _moveHandle = _worldCanvasObject.GetComponentInChildren<XRPanelMoveHandle>(true);
+            if (_moveHandle != null) _moveHandle.ConfigureRadial(_panelFollow,
+                () => TryGetWorldHeadPose(out Pose h) ? (Pose?)h : null);
+            TryApplyPanelSettings();
+            _panelLifecycle.Hidden -= CancelPendingPanelActions;
+            _panelLifecycle.Hidden += CancelPendingPanelActions;
+            var launcher = GetComponent<XRBraceletLauncher>();
+            if (launcher == null) launcher = gameObject.AddComponent<XRBraceletLauncher>();
+            launcher.Initialize(_panelLifecycle);
+        }
+
+        private void CancelPendingPanelActions()
+        {
+            _panelPresses.Clear();
+            _pendingScenarioToLoad = _pendingPresetToApply = _pendingLayout = -1;
+            _pendingToggleDisplayMode = _pendingTogglePause = _pendingResetScenario = false;
+            _pendingRemoveAllAgents = _pendingCenterCamera = _pendingToggleFpsLook = false;
+            _pendingToggleAgentIds = _pendingToggleRecording = false;
+            _pendingToggleReferenceVisible = _pendingToggleReferenceLocked = false;
+            _pendingPlaceReference = _pendingResetReference = _pendingRotateReference = false;
+            _pendingSetScenarioCenter = false;
         }
 
         private void ConfigureWorldCanvas()
@@ -267,6 +374,7 @@ namespace SpatialMAS.UI
             if (TryGetWorldHeadPose(out Pose trackedPose))
             {
                 PlaceWorldPanel(trackedPose);
+                _hasTrackedPanelPlacement = true;
                 return;
             }
             // A stereo camera can still contain its authored desktop pose while the XR provider starts.
@@ -297,6 +405,12 @@ namespace SpatialMAS.UI
 
         private void PlaceWorldPanel(Pose head)
         {
+            if (_panelFollow != null)
+            {
+                _panelFollow.Recall(head);
+                _worldPanelNeedsTrackedPlacement = false;
+                return;
+            }
             Vector3 forward = Vector3.ProjectOnPlane(head.rotation * Vector3.forward, Vector3.up).normalized;
             if (forward.sqrMagnitude < 0.1f) forward = Vector3.forward;
             Vector3 position = head.position + forward * 1.25f - Vector3.up * 0.1f;
@@ -306,7 +420,55 @@ namespace SpatialMAS.UI
 
         private void LateUpdate()
         {
+            TryApplyPanelSettings();
             UpdateWorldPanelTracking(IsHeadsetActive);
+            if (_panelFollow == null) return;
+            bool tracked = TryGetWorldHeadPose(out Pose head);
+            bool dragging = _moveHandle != null && _moveHandle.IsDragging;
+            if (_wasPanelDragging && !dragging && tracked) _panelFollow.CommitPlacement(head);
+            _wasPanelDragging = dragging;
+            bool frozen = dragging || PanelHasPointerIntent() || _panelLifecycle == null || !_panelLifecycle.Visible || !_panelLifecycle.HeadsetActive;
+            bool followTracking = tracked && _panelLifecycle != null && _panelLifecycle.Visible && _panelLifecycle.HeadsetActive;
+            _panelFollow.Step(head, followTracking, frozen, Time.unscaledDeltaTime, dragging);
+        }
+
+        private void TogglePanelFollow()
+        {
+            if (_panelFollow == null || !TryGetWorldHeadPose(out Pose head)) return;
+            _panelFollow.SetPinned(!_panelFollow.Pinned, head);
+            if (_followButton != null) _followButton.GetComponentInChildren<Text>().text = _panelFollow.Pinned ? "Follow user" : "Pin in room";
+        }
+
+        private bool PanelHasPointerIntent()
+        {
+            if (_worldCanvasObject == null || !_worldCanvasObject.activeInHierarchy) return false;
+            if (_panelPointers == null || Time.unscaledTime >= _nextPointerRefresh)
+            {
+                _panelPointers = FindObjectsByType<UnityEngine.XR.Interaction.Toolkit.Interactors.NearFarInteractor>(FindObjectsSortMode.None);
+                _nextPointerRefresh = Time.unscaledTime + 1f;
+            }
+            var rect = (RectTransform)_worldCanvasObject.transform;
+            foreach (var pointer in _panelPointers)
+            {
+                if (pointer == null || !pointer.isActiveAndEnabled || !pointer.TryGetUIModel(out var model)) continue;
+                if (!model.select) { _panelPresses.Remove(model.pointerId); continue; }
+                else if (_panelPresses.Contains(model.pointerId)) return true;
+                var target = model.currentRaycast.gameObject;
+                if (target == null || !target.transform.IsChildOf(rect)) continue;
+                var points = model.raycastPoints;
+                if (points == null || points.Count < 2) continue;
+                Vector3 direction = points[1] - points[0];
+                if (direction.sqrMagnitude < .000001f) continue;
+                var ray = new Ray(points[0], direction.normalized);
+                if (!new Plane(rect.forward, rect.position).Raycast(ray, out float distance)) continue;
+                Vector3 local = rect.InverseTransformPoint(ray.GetPoint(distance));
+                if (rect.rect.Contains(local))
+                {
+                    if (model.select) _panelPresses.Add(model.pointerId);
+                    return true;
+                }
+            }
+            return false;
         }
 
         private void UpdateWorldPanelTracking(bool headsetActive)
@@ -315,16 +477,19 @@ namespace SpatialMAS.UI
             if (!headsetActive)
             {
                 _worldPanelWasInXr = false;
-                _worldPanelNeedsTrackedPlacement = true;
                 return;
             }
             if (!_worldPanelWasInXr || (_worldCanvas != null && _worldCanvas.worldCamera != Camera.main))
             {
                 ConfigureWorldCanvas();
-                _worldPanelNeedsTrackedPlacement = true;
+                _worldPanelNeedsTrackedPlacement = !_hasTrackedPanelPlacement;
             }
             _worldPanelWasInXr = true;
-            if (_worldPanelNeedsTrackedPlacement && TryGetWorldHeadPose(out Pose trackedPose)) PlaceWorldPanel(trackedPose);
+            if (_worldPanelNeedsTrackedPlacement && TryGetWorldHeadPose(out Pose trackedPose))
+            {
+                PlaceWorldPanel(trackedPose);
+                _hasTrackedPanelPlacement = true;
+            }
         }
 
         private Vector3 PositionAhead()
@@ -344,7 +509,7 @@ namespace SpatialMAS.UI
             {
                 _desktopRig.IgnoredScreenGuiRect = _showScreenOverlayOnDesktop && !IsHeadsetActive ? _hudRect : Rect.zero;
             }
-            if (_worldCanvasObject != null) _worldCanvasObject.SetActive(IsHeadsetActive);
+            if (_panelLifecycle != null) _panelLifecycle.SetHeadsetActive(IsHeadsetActive);
             for (int i = 0; i < _worldPresetButtons.Length; i++)
                 if (_worldPresetButtons[i] != null) _worldPresetButtons[i].gameObject.SetActive(i < 3 || (_scenarioManager != null && _scenarioManager.ActiveScenarioId == 2));
 
@@ -440,6 +605,7 @@ namespace SpatialMAS.UI
 
         private void HandleKeyboardShortcuts()
         {
+            if (_panelLifecycle != null && !_panelLifecycle.ResearcherMode) return;
             var kb = Keyboard.current;
             if (kb == null) return;
 
@@ -515,6 +681,7 @@ namespace SpatialMAS.UI
         private void OnGUI()
         {
             if (!Application.isPlaying) return;
+            if (_panelLifecycle != null && !_panelLifecycle.ResearcherMode) return;
             if (IsHeadsetActive) return;
 
             // Draw center reticle crosshair when in First-Person Game Look Mode ([F])
