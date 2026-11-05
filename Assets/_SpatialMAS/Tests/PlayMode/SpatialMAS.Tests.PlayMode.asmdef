@@ -9,6 +9,7 @@
         "Unity.XR.ARFoundation",
         "Unity.InputSystem",
         "UnityEngine.UI",
+        "Unity.TextMeshPro",
         "Unity.XR.CoreUtils",
         "Unity.XR.Hands",
         "Unity.XR.Interaction.Toolkit"

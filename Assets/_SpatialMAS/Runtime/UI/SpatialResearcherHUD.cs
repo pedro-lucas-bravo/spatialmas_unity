@@ -1,3 +1,4 @@
+using TMPro;
 using SpatialMAS.Agents;
 using SpatialMAS.Core;
 using SpatialMAS.Logging;
@@ -34,13 +35,17 @@ namespace SpatialMAS.UI
 
         private struct PanelSettings
         {
-            public float Radius, Angular, AngularTime, Horizontal, HorizontalStop, HorizontalTime, Vertical, VerticalStop, VerticalTime;
+            public float Radius, MinimumDistance, MaximumDistance, DepthDeadZone;
+            public float Angular, AngularTime, Horizontal, HorizontalStop, HorizontalTime, Vertical, VerticalStop, VerticalTime;
             private static float Safe(float value, float fallback, float min, float max = 1000f) =>
                 float.IsNaN(value) || float.IsInfinity(value) ? fallback : Mathf.Clamp(value, min, max);
             public static PanelSettings Read(SpatialMASConfig c)
             {
                 var s = new PanelSettings {
                     Radius = Safe(c.researcherPanelRadius, 1.25f, .35f), Angular = Safe(c.researcherPanelAngularDeadZone, 8f, 0f, 180f),
+                    MinimumDistance = Safe(c.researcherPanelMinDistance, .65f, .35f),
+                    MaximumDistance = Safe(c.researcherPanelMaxDistance, 2.25f, .35f),
+                    DepthDeadZone = Safe(c.researcherPanelDepthDragDeadZone, .03f, 0f),
                     AngularTime = Safe(c.researcherPanelCatchUpSeconds, .25f, .01f),
                     Horizontal = Safe(c.researcherPanelHorizontalDeadZone, .1f, 0f), HorizontalTime = Safe(c.researcherPanelHorizontalCatchUpSeconds, .25f, .01f),
                     Vertical = Safe(c.researcherPanelVerticalDeadZone, .08f, 0f), VerticalTime = Safe(c.researcherPanelVerticalCatchUpSeconds, .25f, .01f) };
@@ -48,16 +53,19 @@ namespace SpatialMAS.UI
                 s.VerticalStop = Safe(c.researcherPanelVerticalStopDistance, .04f, 0f, s.Vertical);
                 return s;
             }
-            public bool Same(PanelSettings s) => Radius == s.Radius && Angular == s.Angular && AngularTime == s.AngularTime &&
+            public bool Same(PanelSettings s) => SameDistance(s) && Angular == s.Angular && AngularTime == s.AngularTime &&
                 Horizontal == s.Horizontal && HorizontalStop == s.HorizontalStop && HorizontalTime == s.HorizontalTime &&
                 Vertical == s.Vertical && VerticalStop == s.VerticalStop && VerticalTime == s.VerticalTime;
+            public bool SameDistance(PanelSettings s) => Radius == s.Radius && MinimumDistance == s.MinimumDistance &&
+                MaximumDistance == s.MaximumDistance && DepthDeadZone == s.DepthDeadZone;
         }
 
         public bool ApplyPanelSettings(SpatialMASConfig config)
         {
             if (config == null) return false;
+            bool paletteChanged = ApplyPanelPalette(config.researcherPanelPalette);
             PanelSettings settings = PanelSettings.Read(config);
-            if (_hasPanelSettings && settings.Same(_requestedPanelSettings)) return false;
+            if (_hasPanelSettings && settings.Same(_requestedPanelSettings)) return paletteChanged;
             _requestedPanelSettings = settings;
             _hasPanelSettings = true;
             TryApplyPanelSettings();
@@ -73,7 +81,8 @@ namespace SpatialMAS.UI
             PanelAngularDeadZone = s.Angular;
             PanelCatchUpSeconds = s.AngularTime;
             if (_panelFollow == null) return; // Retain pending data until construction completes.
-            if (!_hasAppliedPanelSettings || s.Radius != _appliedPanelSettings.Radius) _panelFollow.ConfigureRadius(s.Radius);
+            if (!_hasAppliedPanelSettings || !s.SameDistance(_appliedPanelSettings))
+                _panelFollow.ConfigureDistance(s.MinimumDistance, s.Radius, s.MaximumDistance, s.DepthDeadZone);
             if (!_hasAppliedPanelSettings || s.Angular != _appliedPanelSettings.Angular || s.AngularTime != _appliedPanelSettings.AngularTime)
                 _panelFollow.ConfigureTuning(s.Angular, s.AngularTime);
             if (!_hasAppliedPanelSettings || s.Horizontal != _appliedPanelSettings.Horizontal || s.HorizontalStop != _appliedPanelSettings.HorizontalStop ||
@@ -96,7 +105,47 @@ namespace SpatialMAS.UI
         private WifiLogExportServer _wifiServer;
         private DesktopInteractionRig _desktopRig;
 
-        private Text _worldHudStatusText;
+        private TextMeshProUGUI _worldHudStatusText;
+        private TextMeshProUGUI _runStatus, _recordStatus, _pauseLabel, _recordLabel, _layoutStatus;
+        private TextMeshProUGUI _calibrationStatus, _displayStatus, _sessionStatus, _diagnosticsStatus;
+        private TextMeshProUGUI _recordDot;
+        private TextMeshProUGUI _moveHint;
+        private float _moveHintUntil;
+        private bool _moveHintShown;
+        private readonly GameObject[] _tabPages = new GameObject[3];
+        private readonly GameObject[] _tabIndicators = new GameObject[3];
+        private readonly GameObject[] _scenarioIndicators = new GameObject[6];
+        private readonly TextMeshProUGUI[] _presetLabels = new TextMeshProUGUI[5];
+        private static readonly string[] DefaultPresetNames = { "Default", "Fast / High", "Calm" };
+        private static readonly string[] SwarmPresetNames = { "Static Sync", "Static Async", "Phase Wave", "Splinter", "Active Wave" };
+        private GameObject _clearConfirmation, _diagnostics;
+        private Button _diagnosticsButton;
+        private float _nextPanelStatusRefresh;
+        private static readonly ResearcherPanelPalette DefaultPanelPalette = new ResearcherPanelPalette();
+        private ResearcherPanelPalette _panelPalette = DefaultPanelPalette;
+        private readonly System.Collections.Generic.List<System.Action<ResearcherPanelPalette>> _paletteBindings =
+            new System.Collections.Generic.List<System.Action<ResearcherPanelPalette>>();
+        private readonly Button[] _tabButtons = new Button[3];
+        private int _selectedTab;
+
+        private bool ApplyPanelPalette(ResearcherPanelPalette palette)
+        {
+            palette = palette ?? DefaultPanelPalette;
+            if (_panelPalette.Matches(palette)) return false;
+            _panelPalette = palette.Copy();
+            foreach (var binding in _paletteBindings) binding(_panelPalette);
+            UpdateTabSurfaceColors();
+            if (_moveHandle != null) _moveHandle.SetOutlineColor(_panelPalette.dragOutline);
+            _nextPanelStatusRefresh = 0f;
+            UpdateWorldCanvasText();
+            return true;
+        }
+
+        private void BindPanelColor(Graphic graphic, System.Func<ResearcherPanelPalette, Color> color)
+        {
+            graphic.color = color(_panelPalette);
+            _paletteBindings.Add(palette => graphic.color = color(palette));
+        }
         private GameObject _worldCanvasObject;
         private Canvas _worldCanvas;
         private XRUIInputModule _worldInputModule;
@@ -177,7 +226,6 @@ namespace SpatialMAS.UI
             Transform existing = transform.Find("SpatialResearcherWorldCanvas");
             if (existing != null)
             {
-                _worldHudStatusText = existing.GetComponentInChildren<Text>();
                 _worldCanvasObject = existing.gameObject;
                 ConfigureWorldCanvas();
                 ConfigurePanelLifecycle();
@@ -200,59 +248,151 @@ namespace SpatialMAS.UI
             var bgGo = new GameObject("PanelBackground");
             bgGo.transform.SetParent(canvasGo.transform, false);
             var bgImg = bgGo.AddComponent<Image>();
-            bgImg.color = new Color(0.06f, 0.09f, 0.14f, 0.88f);
+            BindPanelColor(bgImg, palette => palette.shell);
+            bgImg.raycastTarget = false;
             var bgRt = bgGo.GetComponent<RectTransform>();
             bgRt.anchorMin = Vector2.zero;
             bgRt.anchorMax = Vector2.one;
             bgRt.offsetMin = Vector2.zero;
             bgRt.offsetMax = Vector2.zero;
 
-            var textGo = new GameObject("StatusText");
-            textGo.transform.SetParent(canvasGo.transform, false);
-            _worldHudStatusText = textGo.AddComponent<Text>();
-            _worldHudStatusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            _worldHudStatusText.fontSize = 18;
-            _worldHudStatusText.color = new Color(0.9f, 0.96f, 1.0f, 1.0f);
-            _worldHudStatusText.alignment = TextAnchor.UpperLeft;
-            _worldHudStatusText.raycastTarget = false;
-            var textRt = textGo.GetComponent<RectTransform>();
-            SetTopLeftRect(textRt, new Rect(18f, 18f, 584f, 195f));
+            CreatePanelLabel(rt, "Researcher Panel", new Rect(18, 14, 424, 46), 26, palette => palette.primaryText);
+            CreateWorldButton(rt, "Close", new Rect(454, 14, 148, 46), () => _panelLifecycle.Hide());
+            _worldHudStatusText = CreatePanelLabel(rt, "", new Rect(18, 67, 584, 28), 22, palette => palette.primaryText);
+            _runStatus = CreatePanelLabel(rt, "", new Rect(18, 99, 235, 26), 19, palette => _scenarioManager?.IsPaused == true ? palette.paused : palette.running);
+            _recordDot = CreatePanelLabel(rt, "●", new Rect(254, 99, 20, 26), 17, palette => palette.recording);
+            _recordStatus = CreatePanelLabel(rt, "", new Rect(276, 99, 326, 26), 19,
+                palette => _recorder?.IsRecording == true ? palette.recording : palette.notRecording);
 
-            string[] scenarioNames = { "0 · External OSC", "1 · Crowd Avoidance", "2 · Swarmalators", "3 · Attractors", "4 · Musical Encounters", "5 · Self-Assembly" };
-            for (int i = 0; i < scenarioNames.Length; i++)
+            CreatePanelImage(rt, "Content Inset", new Rect(18, 183, 584, 612), palette => palette.inset);
+            string[] tabNames = { "Run", "Setup", "Session" };
+            for (int i = 0; i < tabNames.Length; i++)
             {
-                int scenario = i;
-                CreateWorldButton(rt, scenarioNames[i], new Rect(18 + (i % 2) * 296, 220 + (i / 2) * 54, 288, 46),
-                    () => _pendingScenarioToLoad = scenario);
+                int tab = i;
+                var button = CreateWorldButton(rt, tabNames[i], new Rect(18 + i * 198, 135, 188, 48), () => SelectPanelTab(tab), tab: true);
+                _tabButtons[i] = button;
+                _tabIndicators[i] = CreatePanelImage(button.transform, "Active tab marker",
+                    new Rect(12, 0, 164, 3), palette => palette.tabMarker).gameObject;
+                _tabPages[i] = CreatePanelGroup(rt, tabNames[i] + " Content");
             }
-            CreateWorldButton(rt, "Pause / Resume", new Rect(18, 390, 288, 46), () => _pendingTogglePause = true);
-            CreateWorldButton(rt, "Reset Scenario", new Rect(314, 390, 288, 46), () => _pendingResetScenario = true);
-            CreateWorldButton(rt, "MR / VR", new Rect(18, 444, 186, 46), () => _pendingToggleDisplayMode = true);
-            CreateWorldButton(rt, "Start / Stop CSV", new Rect(214, 444, 192, 46), () => _pendingToggleRecording = true);
-            CreateWorldButton(rt, "Agent IDs", new Rect(416, 444, 186, 46), () => _pendingToggleAgentIds = true);
-            for (int i = 0; i < _worldPresetButtons.Length; i++)
-            {
-                int preset = i;
-                _worldPresetButtons[i] = CreateWorldButton(rt, "Preset " + (i + 1), new Rect(18 + i * 118, 500, 110, 46),
-                    () => _pendingPresetToApply = preset);
-            }
+            BuildRunTab(_tabPages[0].transform);
+            BuildSetupTab(_tabPages[1].transform);
+            BuildSessionTab(_tabPages[2].transform);
+            SelectPanelTab(0);
 
-            CreateWorldButton(rt, "Next: Compact", new Rect(18, 554, 288, 42), () => _pendingLayout = 0);
-            CreateWorldButton(rt, "Next: Room Layout", new Rect(314, 554, 288, 42), () => _pendingLayout = 1);
-            CreateWorldButton(rt, "Spawn Next Scenario Here", new Rect(18, 604, 584, 42), () => _pendingSetScenarioCenter = true);
-            CreateWorldButton(rt, "Reference Show / Hide", new Rect(18, 654, 288, 42), () => _pendingToggleReferenceVisible = true);
-            CreateWorldButton(rt, "Reference Lock / Unlock", new Rect(314, 654, 288, 42), () => _pendingToggleReferenceLocked = true);
-            CreateWorldButton(rt, "Place Reference Ahead", new Rect(18, 704, 288, 42), () => _pendingPlaceReference = true);
-            CreateWorldButton(rt, "Rotate Reference 90°", new Rect(314, 704, 288, 42), () => _pendingRotateReference = true);
-            CreateWorldButton(rt, "Reset Reference Pose", new Rect(18, 754, 288, 42), () => _pendingResetReference = true);
-            CreateWorldButton(rt, "Clear All", new Rect(314, 754, 288, 42), () => _pendingRemoveAllAgents = true);
-            CreateWorldButton(rt, "Move Panel Here", new Rect(18, 804, 288, 42), PositionWorldPanel);
-            _followButton = CreateWorldButton(rt, "Pin in room", new Rect(314, 804, 288, 42), TogglePanelFollow);
-            CreateWorldButton(rt, "Close Panel", new Rect(18, 854, 288, 42), () => _panelLifecycle.Hide());
-            CreateWorldButton(rt, "Participant Mode", new Rect(314, 854, 288, 42), () => _panelLifecycle.ResearcherMode = false);
+            CreateWorldButton(rt, "Recenter", new Rect(18, 804, 288, 46), PositionWorldPanel);
+            _followButton = CreateWorldButton(rt, "Pin in room", new Rect(314, 804, 288, 46), TogglePanelFollow);
+            CreateWorldButton(rt, "Participant Mode", new Rect(18, 854, 584, 46), () => _panelLifecycle.ResearcherMode = false);
+            _moveHint = CreatePanelLabel(rt, "Pinch and drag blank space to move", new Rect(18, 908, 584, 35), 19, palette => palette.accent);
+            _moveHint.gameObject.SetActive(false);
             ConfigureWorldCanvas();
             ConfigurePanelLifecycle();
             PositionWorldPanel();
+            UpdateWorldCanvasText();
+        }
+
+        private void BuildRunTab(Transform page)
+        {
+            _pauseLabel = CreateWorldButton(page, "Pause", new Rect(18, 200, 584, 60),
+                () => _pendingTogglePause = true, palette => palette.accent).GetComponentInChildren<TextMeshProUGUI>();
+            _pauseLabel.fontSize = 24;
+            CreatePanelLabel(page, "Load scenario", new Rect(18, 277, 584, 26), 20, palette => palette.secondaryText);
+            string[] names = { "0 · External OSC", "1 · Crowd Avoidance", "2 · Swarmalators", "3 · Attractors", "4 · Musical Encounters", "5 · Self-Assembly" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                int scenario = i;
+                var button = CreateWorldButton(page, names[i], new Rect(18 + i % 2 * 296, 311 + i / 2 * 57, 288, 51),
+                    () => _pendingScenarioToLoad = scenario);
+                _scenarioIndicators[i] = CreateSelectionMark(button).gameObject;
+            }
+            CreatePanelLabel(page, "Scenario presets", new Rect(18, 495, 584, 26), 20, palette => palette.secondaryText);
+            for (int i = 0; i < _worldPresetButtons.Length; i++)
+            {
+                int preset = i;
+                _worldPresetButtons[i] = CreateWorldButton(page, "Preset " + (i + 1),
+                    new Rect(18 + i % 3 * 198, 528 + i / 3 * 57, 188, 51), () => _pendingPresetToApply = preset);
+                _presetLabels[i] = _worldPresetButtons[i].GetComponentInChildren<TextMeshProUGUI>();
+            }
+            CreatePanelLabel(page, "Restart the active scenario", new Rect(18, 651, 584, 26), 19, palette => palette.secondaryText);
+            CreateWorldButton(page, "Reset Scenario", new Rect(18, 686, 288, 50), () => _pendingResetScenario = true);
+        }
+
+        private void BuildSetupTab(Transform page)
+        {
+            _layoutStatus = CreatePanelLabel(page, "", new Rect(18, 199, 584, 52), 20, palette => palette.pending);
+            CreateWorldButton(page, "Next: Compact", new Rect(18, 257, 288, 48), () => _pendingLayout = 0);
+            CreateWorldButton(page, "Next: Room Layout", new Rect(314, 257, 288, 48), () => _pendingLayout = 1);
+            CreateWorldButton(page, "Spawn Next Scenario Here", new Rect(18, 313, 584, 48), () => _pendingSetScenarioCenter = true);
+            _calibrationStatus = CreatePanelLabel(page, "", new Rect(18, 380, 584, 31), 20, palette => palette.secondaryText);
+            CreateWorldButton(page, "Reference Show / Hide", new Rect(18, 419, 288, 48), () => _pendingToggleReferenceVisible = true);
+            CreateWorldButton(page, "Reference Lock / Unlock", new Rect(314, 419, 288, 48), () => _pendingToggleReferenceLocked = true);
+            CreateWorldButton(page, "Place Reference Ahead", new Rect(18, 475, 288, 48), () => _pendingPlaceReference = true);
+            CreateWorldButton(page, "Rotate Reference 90°", new Rect(314, 475, 288, 48), () => _pendingRotateReference = true);
+            CreateWorldButton(page, "Reset Reference Pose", new Rect(18, 531, 288, 48), () => _pendingResetReference = true);
+            _displayStatus = CreatePanelLabel(page, "", new Rect(18, 605, 584, 31), 20, palette => palette.secondaryText);
+            CreateWorldButton(page, "MR / VR", new Rect(18, 645, 288, 48), () => _pendingToggleDisplayMode = true);
+            CreateWorldButton(page, "Agent IDs", new Rect(314, 645, 288, 48), () => _pendingToggleAgentIds = true);
+            BuildSecondaryActions(page);
+        }
+
+        private void BuildSessionTab(Transform page)
+        {
+            _recordLabel = CreateWorldButton(page, "Start recording", new Rect(18, 200, 584, 51),
+                () => _pendingToggleRecording = true).GetComponentInChildren<TextMeshProUGUI>();
+            _sessionStatus = CreatePanelLabel(page, "", new Rect(18, 264, 584, 120), 19, palette => palette.primaryText);
+            _diagnosticsButton = CreateWorldButton(page, "Show Diagnostics", new Rect(18, 389, 584, 48),
+                () => SetDiagnosticsVisible(!_diagnostics.activeSelf));
+            _diagnostics = CreatePanelGroup(page, "Diagnostics");
+            _diagnosticsStatus = CreatePanelLabel(_diagnostics.transform, "", new Rect(18, 449, 584, 71), 18, palette => palette.secondaryText);
+            SetDiagnosticsVisible(false);
+        }
+
+        private void BuildSecondaryActions(Transform page)
+        {
+            CreatePanelLabel(page, "Secondary actions", new Rect(18, 695, 584, 26), 18, palette => palette.secondaryText);
+            CreateWorldButton(page, "Clear All", new Rect(18, 733, 288, 48), () => SetClearConfirmation(true));
+            _clearConfirmation = CreatePanelGroup(page, "Clear Confirmation");
+            var confirmation = CreatePanelImage(_clearConfirmation.transform, "Confirmation backdrop",
+                new Rect(18, 727, 584, 66), palette => palette.inset, true);
+            CreateWorldButton(confirmation.transform, "Confirm clear all agents", new Rect(0, 6, 352, 48), () =>
+            {
+                SetClearConfirmation(false);
+                _pendingRemoveAllAgents = true;
+            }, palette => palette.confirmation);
+            CreateWorldButton(confirmation.transform, "Cancel", new Rect(364, 6, 220, 48), () => SetClearConfirmation(false));
+            SetClearConfirmation(false);
+        }
+
+        private void SetDiagnosticsVisible(bool visible)
+        {
+            _diagnostics.SetActive(visible);
+            _diagnosticsButton.GetComponentInChildren<TextMeshProUGUI>().text = visible ? "Hide Diagnostics" : "Show Diagnostics";
+            _nextPanelStatusRefresh = 0f;
+        }
+
+        private void SetClearConfirmation(bool visible)
+        {
+            if (_clearConfirmation != null) _clearConfirmation.SetActive(visible);
+        }
+
+        private void SelectPanelTab(int selected)
+        {
+            SetClearConfirmation(false);
+            _selectedTab = selected;
+            for (int i = 0; i < _tabPages.Length; i++)
+            {
+                _tabPages[i].SetActive(i == selected);
+                _tabIndicators[i].SetActive(i == selected);
+            }
+            UpdateTabSurfaceColors();
+            _nextPanelStatusRefresh = 0f;
+        }
+
+        private void UpdateTabSurfaceColors()
+        {
+            for (int i = 0; i < _tabButtons.Length; i++)
+                if (_tabButtons[i] != null)
+                    _tabButtons[i].image.color = i == _selectedTab ? _panelPalette.inset : _panelPalette.inactiveTab;
         }
 
         private void ConfigurePanelLifecycle()
@@ -266,8 +406,11 @@ namespace SpatialMAS.UI
             _panelFollow.ConfigureRadius(_panelHorizontalRadius);
             _panelFollow.ConfigureTuning(PanelAngularDeadZone, PanelCatchUpSeconds);
             _moveHandle = _worldCanvasObject.GetComponentInChildren<XRPanelMoveHandle>(true);
-            if (_moveHandle != null) _moveHandle.ConfigureRadial(_panelFollow,
-                () => TryGetWorldHeadPose(out Pose h) ? (Pose?)h : null);
+            if (_moveHandle != null)
+            {
+                _moveHandle.ConfigureRadial(_panelFollow, () => TryGetWorldHeadPose(out Pose h) ? (Pose?)h : null);
+                _moveHandle.SetOutlineColor(_panelPalette.dragOutline);
+            }
             TryApplyPanelSettings();
             _panelLifecycle.Hidden -= CancelPendingPanelActions;
             _panelLifecycle.Hidden += CancelPendingPanelActions;
@@ -279,6 +422,7 @@ namespace SpatialMAS.UI
         private void CancelPendingPanelActions()
         {
             _panelPresses.Clear();
+            SetClearConfirmation(false);
             _pendingScenarioToLoad = _pendingPresetToApply = _pendingLayout = -1;
             _pendingToggleDisplayMode = _pendingTogglePause = _pendingResetScenario = false;
             _pendingRemoveAllAgents = _pendingCenterCamera = _pendingToggleFpsLook = false;
@@ -303,11 +447,11 @@ namespace SpatialMAS.UI
             _worldInputModule.uiCamera = _worldCanvas.worldCamera;
             _worldInputModule.RegisterWaitlistInteractors();
 
-            // Keep explicit SPI variants in Resources, including in headset builds. Text still supplies its font atlas.
+            // Images use the existing world UI shader. TMP labels have their own SDF material.
             Material material = Resources.Load<Material>("Mat_SpatialMAS_WorldUI");
             if (material != null)
                 foreach (var graphic in _worldCanvasObject.GetComponentsInChildren<Graphic>(true))
-                    graphic.material = material;
+                    if (graphic is Image) graphic.material = material;
         }
 
         private static XRUIInputModule EnsureXRUIEventSystem(Transform parent)
@@ -337,34 +481,116 @@ namespace SpatialMAS.UI
             rect.sizeDelta = bounds.size;
         }
 
-        private static Text CreateWorldText(Transform parent, string label, int fontSize)
+        private static TextMeshProUGUI CreateWorldText(Transform parent, string label, int fontSize)
         {
-            var go = new GameObject(label, typeof(RectTransform), typeof(Text));
+            var go = new GameObject(label, typeof(RectTransform), typeof(TextMeshProUGUI));
             go.transform.SetParent(parent, false);
-            var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var text = go.GetComponent<TextMeshProUGUI>();
+            text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            text.fontSharedMaterial = Resources.Load<Material>("Mat_SpatialMAS_WorldUISdf");
+            text.overflowMode = TextOverflowModes.Ellipsis;
             text.fontSize = fontSize;
-            text.color = Color.white;
             text.text = label;
-            text.alignment = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignmentOptions.Center;
             text.raycastTarget = false;
             return text;
         }
 
-        private static Button CreateWorldButton(Transform parent, string label, Rect bounds, UnityAction action)
+        private static GameObject CreatePanelGroup(Transform parent, string name)
+        {
+            var group = new GameObject(name, typeof(RectTransform));
+            group.transform.SetParent(parent, false);
+            var rect = (RectTransform)group.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            return group;
+        }
+
+        private TextMeshProUGUI CreatePanelLabel(Transform parent, string label, Rect bounds, int size,
+            System.Func<ResearcherPanelPalette, Color> color)
+        {
+            var text = CreateWorldText(parent, label, size);
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            BindPanelColor(text, color);
+            SetTopLeftRect(text.rectTransform, bounds);
+            return text;
+        }
+
+        private Image CreatePanelImage(Transform parent, string name, Rect bounds,
+            System.Func<ResearcherPanelPalette, Color> color, bool hitTarget = false)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            SetTopLeftRect((RectTransform)go.transform, bounds);
+            var image = go.GetComponent<Image>();
+            BindPanelColor(image, color);
+            image.raycastTarget = hitTarget;
+            return image;
+        }
+
+        private Image CreateSelectionMark(Button button)
+        {
+            var rect = (RectTransform)button.transform;
+            return CreatePanelImage(rect, "Selected underline",
+                new Rect(12, rect.sizeDelta.y - 5, rect.sizeDelta.x - 24, 3), palette => palette.selectionMarker);
+        }
+
+        private Button CreateWorldButton(Transform parent, string label, Rect bounds, UnityAction action,
+            System.Func<ResearcherPanelPalette, Color> textColor = null, bool tab = false)
         {
             var go = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
             SetTopLeftRect(go.GetComponent<RectTransform>(), bounds);
             var image = go.GetComponent<Image>();
-            image.color = new Color(0.12f, 0.28f, 0.38f);
             var button = go.GetComponent<Button>();
             button.targetGraphic = image;
             button.onClick.AddListener(action);
             var text = CreateWorldText(go.transform, label, 19);
+            BindPanelColor(text, textColor ?? (palette => palette.primaryText));
             text.rectTransform.anchorMin = Vector2.zero;
             text.rectTransform.anchorMax = Vector2.one;
             text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
+            System.Action<bool> setHover;
+            if (tab)
+            {
+                // Leave the shared bottom edge open, including on hover.
+                button.transition = Selectable.Transition.None;
+                var outline = CreatePanelGroup(go.transform, "Tab hover outline");
+                CreatePanelImage(outline.transform, "Top", new Rect(0, 0, bounds.width, 2), palette => palette.hoverOutline);
+                CreatePanelImage(outline.transform, "Left", new Rect(0, 2, 2, bounds.height - 2), palette => palette.hoverOutline);
+                CreatePanelImage(outline.transform, "Right", new Rect(bounds.width - 2, 2, 2, bounds.height - 2), palette => palette.hoverOutline);
+                outline.SetActive(false);
+                setHover = outline.SetActive;
+            }
+            else
+            {
+                BindPanelColor(image, palette => palette.button);
+                void ApplyButtonTints(ResearcherPanelPalette palette)
+                {
+                    var colors = button.colors;
+                    colors.highlightedColor = palette.buttonHoverTint;
+                    colors.pressedColor = palette.buttonPressedTint;
+                    colors.selectedColor = palette.buttonSelectedTint;
+                    colors.disabledColor = palette.buttonDisabledTint;
+                    button.colors = colors;
+                }
+                ApplyButtonTints(_panelPalette);
+                _paletteBindings.Add(ApplyButtonTints);
+                var outline = go.AddComponent<Outline>();
+                outline.effectColor = _panelPalette.hoverOutline;
+                _paletteBindings.Add(palette => outline.effectColor = palette.hoverOutline);
+                outline.effectDistance = new Vector2(1.5f, 1.5f);
+                outline.enabled = false;
+                setHover = value => outline.enabled = value;
+            }
+            var events = go.AddComponent<EventTrigger>();
+            var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            enter.callback.AddListener(_ => setHover(button.IsInteractable()));
+            events.triggers.Add(enter);
+            var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exit.callback.AddListener(_ => setHover(false));
+            events.triggers.Add(exit);
             return button;
         }
 
@@ -436,7 +662,7 @@ namespace SpatialMAS.UI
         {
             if (_panelFollow == null || !TryGetWorldHeadPose(out Pose head)) return;
             _panelFollow.SetPinned(!_panelFollow.Pinned, head);
-            if (_followButton != null) _followButton.GetComponentInChildren<Text>().text = _panelFollow.Pinned ? "Follow user" : "Pin in room";
+            if (_followButton != null) _followButton.GetComponentInChildren<TextMeshProUGUI>().text = _panelFollow.Pinned ? "Follow user" : "Pin in room";
         }
 
         private bool PanelHasPointerIntent()
@@ -510,12 +736,22 @@ namespace SpatialMAS.UI
                 _desktopRig.IgnoredScreenGuiRect = _showScreenOverlayOnDesktop && !IsHeadsetActive ? _hudRect : Rect.zero;
             }
             if (_panelLifecycle != null) _panelLifecycle.SetHeadsetActive(IsHeadsetActive);
-            for (int i = 0; i < _worldPresetButtons.Length; i++)
-                if (_worldPresetButtons[i] != null) _worldPresetButtons[i].gameObject.SetActive(i < 3 || (_scenarioManager != null && _scenarioManager.ActiveScenarioId == 2));
-
+            UpdateMoveHint();
             ProcessDeferredUiActions();
             HandleKeyboardShortcuts();
             UpdateWorldCanvasText();
+        }
+
+        private void UpdateMoveHint()
+        {
+            if (_moveHint == null || _panelLifecycle == null) return;
+            bool visible = _panelLifecycle.HeadsetActive && _panelLifecycle.Visible;
+            if (visible && !_moveHintShown)
+            {
+                _moveHintShown = true;
+                _moveHintUntil = Time.unscaledTime + 5f;
+            }
+            _moveHint.gameObject.SetActive(visible && Time.unscaledTime < _moveHintUntil);
         }
 
         private void ProcessDeferredUiActions()
@@ -655,27 +891,42 @@ namespace SpatialMAS.UI
 
         private void UpdateWorldCanvasText()
         {
-            if (_worldHudStatusText == null) return;
+            if (_worldHudStatusText == null || Time.unscaledTime < _nextPanelStatusRefresh) return;
+            _nextPanelStatusRefresh = Time.unscaledTime + .2f;
+            int active = _scenarioManager?.ActiveScenarioId ?? 0;
+            bool paused = _scenarioManager?.IsPaused ?? false;
+            bool recording = _recorder?.IsRecording ?? false;
+            _worldHudStatusText.text = _scenarioManager?.ActiveScenarioName ?? "External OSC";
+            _runStatus.text = paused ? "Paused" : "Running";
+            _runStatus.color = paused ? _panelPalette.paused : _panelPalette.running;
+            _recordStatus.text = recording ? "Recording" : "Not recording";
+            _recordStatus.color = recording ? _panelPalette.recording : _panelPalette.notRecording;
+            _recordDot.gameObject.SetActive(recording);
+            _pauseLabel.text = paused ? "Resume" : "Pause";
+            _recordLabel.text = recording ? "Stop recording" : "Start recording";
+            for (int i = 0; i < _scenarioIndicators.Length; i++)
+                _scenarioIndicators[i].SetActive(i == active);
+            string[] presets = active == 2 ? SwarmPresetNames : DefaultPresetNames;
+            for (int i = 0; i < _worldPresetButtons.Length; i++)
+            {
+                _worldPresetButtons[i].gameObject.SetActive(i < presets.Length);
+                if (i < presets.Length) _presetLabels[i].text = presets[i];
+            }
 
-            string platform = _platformAdapter != null ? _platformAdapter.ActiveDeviceName : "XR/Desktop";
-            string mode = _modeSwitcher != null ? _modeSwitcher.DisplayStatus : "MR preview (no headset)";
-            string scenario = _scenarioManager != null ? _scenarioManager.ActiveScenarioName : "0. External OSC";
-            string runState = (_scenarioManager != null && _scenarioManager.IsPaused) ? " [PAUSED]" : "";
-            int agents = _agentManager != null ? _agentManager.ActiveCount : 0;
-            int oscPort = _oscServer != null ? _oscServer.ListenPort : 6011;
-            long rxCount = _oscServer != null ? _oscServer.TotalMessagesReceived : 0;
-            string wifiUrl = _wifiServer != null ? _wifiServer.DashboardUrl : "http://127.0.0.1:8080/";
-            string recState = (_recorder != null && _recorder.IsRecording) ? "RECORDING CSV" : "PAUSED";
-
-            _worldHudStatusText.text =
-                $"<b>SPATIALMAS — MULTIPLATFORM XR LAB</b>\n" +
-                $"Platform: {platform} | FPS: {_smoothedFps:F0}\n" +
-                $"Display: <b>{mode}</b> | Units: Unity world meters\n" +
-                $"Scenario: <b>{scenario}{runState}</b>\n" +
-                $"Active Agents: <b>{agents}</b>  |  OSC In (:{oscPort}): <b>{rxCount} msgs</b>\n" +
-                $"Telemetry: <b>{recState}</b> | Next layout: {_scenarioManager?.NextLayout}\n" +
-                $"Reference: {(_calibration == null ? "unavailable" : (_calibration.Locked ? "LOCKED" : "UNLOCKED"))} | Visible: {_calibration?.Visible}\n" +
-                $"Wi-Fi Log Download: <b>{wifiUrl}</b>";
+            _layoutStatus.text = _scenarioManager == null ? "Next load layout · unavailable" :
+                $"Active layout · {_scenarioManager.ActiveLayout}\nNext load layout · {_scenarioManager.NextLayout}";
+            _calibrationStatus.text = _calibration == null ? "Calibration reference · unavailable" :
+                $"Calibration reference · {(_calibration.Visible ? "Visible" : "Hidden")} / {(_calibration.Locked ? "Locked" : "Unlocked")}";
+            _displayStatus.text = $"{_modeSwitcher?.DisplayStatus ?? "MR preview"}  ·  Agent IDs {(_agentManager?.ShowAgentIds == true ? "on" : "off")}";
+            string session = _recorder?.SessionId;
+            string sessionLabel = string.IsNullOrEmpty(session) ? "No recording session" :
+                $"{(recording ? "Current" : "Last")} session · {session}";
+            _sessionStatus.text = $"{sessionLabel}\nLog download address\n{_wifiServer?.DashboardUrl ?? "Unavailable"}";
+            if (_diagnostics.activeInHierarchy)
+            {
+                string osc = _oscServer == null ? "OSC unavailable" : $"OSC UDP {_oscServer.ListenPort} · {_oscServer.TotalMessagesReceived} received";
+                _diagnosticsStatus.text = $"{_platformAdapter?.ActiveDeviceName ?? "XR/Desktop"} · {_smoothedFps:F0} FPS\n{osc}\nAgents · {_agentManager?.ActiveCount ?? 0}";
+            }
         }
 
         private void OnGUI()

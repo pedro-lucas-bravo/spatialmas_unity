@@ -44,8 +44,18 @@ namespace SpatialMAS.Core
     public class SpatialMASConfig : ScriptableObject
     {
         [Header("Researcher Panel")]
-        [Min(0.35f), Tooltip("Fixed horizontal panel radius around the tracked head, in meters. Drag changes azimuth and height, not this distance.")]
+        [Min(0.35f), Tooltip("Default horizontal panel distance in meters. Recenter restores this distance.")]
         public float researcherPanelRadius = 1.25f;
+        [Min(0.35f), Tooltip("Closest horizontal distance in meters when dragging the researcher panel.")]
+        public float researcherPanelMinDistance = .65f;
+        [Min(0.35f), Tooltip("Farthest horizontal distance in meters when dragging the researcher panel.")]
+        public float researcherPanelMaxDistance = 2.25f;
+        [Min(0f), Tooltip("Toward or away hand travel in meters before the captured panel changes distance.")]
+        public float researcherPanelDepthDragDeadZone = .03f;
+        [Min(.005f), Tooltip("Tip-to-tip size of the four-arrow marker in world meters.")]
+        public float researcherPanelMoveMarkerSize = .032f;
+        [Min(.0005f), Tooltip("Stroke width of the four-arrow marker in world meters.")]
+        public float researcherPanelMoveMarkerStroke = .0026f;
         [Range(0f, 180f), Tooltip("Yaw error tolerated before panel follow responds, in degrees.")]
         public float researcherPanelAngularDeadZone = 8f;
         [Min(.01f), InspectorName("Angular Catch Up Seconds"), Tooltip("Angular exponential time constant. Existing serialized field retained for compatibility.")]
@@ -60,6 +70,8 @@ namespace SpatialMAS.Core
         [Min(0f), Tooltip("Smaller vertical residual at which catch-up settles. Must not exceed the outer dead zone.")]
         public float researcherPanelVerticalStopDistance = .04f;
         [Min(.01f)] public float researcherPanelVerticalCatchUpSeconds = .25f;
+
+        public ResearcherPanelPalette researcherPanelPalette = new ResearcherPanelPalette();
 
         [Header("Network & OSC Configuration")]
         [Tooltip("Local UDP port where SpatialMAS listens for incoming OSC v1 & v2 messages.")]

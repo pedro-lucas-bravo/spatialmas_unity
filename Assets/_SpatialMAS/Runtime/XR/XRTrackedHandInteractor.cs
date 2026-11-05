@@ -1,3 +1,5 @@
+using SpatialMAS.UI;
+using SpatialMAS.Core;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals;
@@ -20,6 +22,31 @@ namespace SpatialMAS.XR
         [SerializeField] private XRHandSkeletonVisual _handVisual;
         public XRHandPinchHysteresis Pinch => _pinch;
         private bool _tracked;
+        private LineRenderer _panelEndpoint;
+        private bool _endpointShowsMove;
+        private SpatialMASConfig _panelMarkerConfig;
+        private Gradient _defaultUiRayGradient;
+        private Gradient _panelRayGradient;
+        private Color _appliedPanelRayTint = Color.white;
+
+        // Sizes are in world meters. The two symbols share a single per-hand renderer.
+        private static readonly Vector3[] PanelPoint =
+        {
+            new(-.0025f, 0f, 0f), new(0f, .0025f, 0f),
+            new(.0025f, 0f, 0f), new(0f, -.0025f, 0f), new(-.0025f, 0f, 0f)
+        };
+
+        private static readonly Vector3[] PanelMove =
+        {
+            Vector3.zero, new(0f, .008f, 0f), new(-.003f, .005f, 0f), new(0f, .008f, 0f),
+            new(.003f, .005f, 0f), new(0f, .008f, 0f), Vector3.zero,
+            new(.008f, 0f, 0f), new(.005f, .003f, 0f), new(.008f, 0f, 0f),
+            new(.005f, -.003f, 0f), new(.008f, 0f, 0f), Vector3.zero,
+            new(0f, -.008f, 0f), new(.003f, -.005f, 0f), new(0f, -.008f, 0f),
+            new(-.003f, -.005f, 0f), new(0f, -.008f, 0f), Vector3.zero,
+            new(-.008f, 0f, 0f), new(-.005f, -.003f, 0f), new(-.008f, 0f, 0f),
+            new(-.005f, .003f, 0f), new(-.008f, 0f, 0f)
+        };
 
         public void Configure(XRHandPinchHysteresis pinch, Transform trackingOrigin, NearFarInteractor interactor,
             LineRenderer line, CurveVisualController visual)
@@ -101,7 +128,9 @@ namespace SpatialMAS.XR
         private void LateUpdate()
         {
             // Hover/selection is resolved after this driver's early pose update.
-            SetRayVisible(_tracked && ShouldShowRayFeedback(_interactor, transform.position));
+            bool visible = _tracked && ShouldShowRayFeedback(_interactor, transform.position);
+            SetRayVisible(visible);
+            if (visible) UpdatePanelEndpoint();
         }
 
         private void OnDisable() => SetRayVisible(false);
@@ -110,13 +139,100 @@ namespace SpatialMAS.XR
         {
             if (_visual != null) _visual.enabled = visible;
             if (_line != null) _line.enabled = visible;
+            if (!visible && _panelEndpoint != null) _panelEndpoint.enabled = false;
+            if (!visible) ApplyPanelRayTint(Color.white);
+        }
+
+        private void ApplyPanelRayTint(Color tint)
+        {
+            if (_visual == null || _defaultUiRayGradient == null || tint == _appliedPanelRayTint) return;
+            _appliedPanelRayTint = tint;
+            Gradient gradient = _defaultUiRayGradient;
+            if (tint != Color.white)
+            {
+                _panelRayGradient ??= new Gradient();
+                var colors = _defaultUiRayGradient.colorKeys;
+                var alphas = _defaultUiRayGradient.alphaKeys;
+                for (int i = 0; i < colors.Length; i++) colors[i].color *= tint;
+                for (int i = 0; i < alphas.Length; i++) alphas[i].alpha *= tint.a;
+                _panelRayGradient.SetKeys(colors, alphas);
+                gradient = _panelRayGradient;
+            }
+            _visual.uiHitProperties.gradient = gradient;
+            _visual.uiPressHitProperties.gradient = gradient;
+        }
+
+        private void UpdatePanelEndpoint()
+        {
+            if (!_interactor.TryGetCurrentUIRaycastResult(out var hit) ||
+                hit.gameObject == null || !hit.gameObject.activeInHierarchy)
+            {
+                if (_panelEndpoint != null) _panelEndpoint.enabled = false;
+                ApplyPanelRayTint(Color.white);
+                return;
+            }
+
+            var canvas = hit.gameObject.GetComponentInParent<Canvas>();
+            if (canvas == null || !canvas.isActiveAndEnabled || canvas.name != "SpatialResearcherWorldCanvas")
+            {
+                if (_panelEndpoint != null) _panelEndpoint.enabled = false;
+                ApplyPanelRayTint(Color.white);
+                return;
+            }
+
+            bool move = hit.gameObject.TryGetComponent<XRPanelMoveHandle>(out _);
+            if (_panelEndpoint == null)
+            {
+                var material = Resources.Load<Material>("Mat_SpatialMAS_PanelEndpoint");
+                if (material == null) return;
+                var endpoint = new GameObject("Researcher Panel Ray Endpoint");
+                endpoint.transform.SetParent(transform, false);
+                _panelEndpoint = endpoint.AddComponent<LineRenderer>();
+                var bootstrapper = FindFirstObjectByType<SpatialMASBootstrapper>();
+                _panelMarkerConfig = bootstrapper != null ? bootstrapper.Config : null;
+                _panelEndpoint.sharedMaterial = material;
+                _panelEndpoint.useWorldSpace = false;
+                _panelEndpoint.positionCount = 0;
+                _panelEndpoint.startWidth = _panelEndpoint.endWidth = .0012f;
+                _panelEndpoint.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _panelEndpoint.receiveShadows = false;
+            }
+
+            if (_panelEndpoint.positionCount == 0 || _endpointShowsMove != move)
+            {
+                var points = move ? PanelMove : PanelPoint;
+                _panelEndpoint.positionCount = points.Length;
+                _panelEndpoint.SetPositions(points);
+                _endpointShowsMove = move;
+            }
+
+            float markerSize = _panelMarkerConfig != null ? _panelMarkerConfig.researcherPanelMoveMarkerSize : .032f;
+            float stroke = _panelMarkerConfig != null ? _panelMarkerConfig.researcherPanelMoveMarkerStroke : .0026f;
+
+            Vector3 markerScale = Vector3.one * (move ? Mathf.Max(.005f, markerSize) / .016f : 1f);
+            float markerStroke = move ? Mathf.Max(.0005f, stroke) : .0012f;
+            var palette = _panelMarkerConfig?.researcherPanelPalette;
+            ApplyPanelRayTint(palette?.panelRay ?? Color.white);
+            var control = hit.gameObject.GetComponentInParent<UnityEngine.UI.Selectable>();
+
+            Color markerColor = move ? palette?.moveMarker ?? new Color32(104, 240, 255, 255)
+                : control != null && !control.IsInteractable()
+                    ? palette?.disabledEndpoint ?? new Color32(184, 196, 208, 255)
+                    : palette?.enabledEndpoint ?? new Color32(244, 246, 248, 255);
+            if (_panelEndpoint.transform.localScale != markerScale) _panelEndpoint.transform.localScale = markerScale;
+            if (_panelEndpoint.startWidth != markerStroke) _panelEndpoint.startWidth = _panelEndpoint.endWidth = markerStroke;
+            if (_panelEndpoint.startColor != markerColor) _panelEndpoint.startColor = _panelEndpoint.endColor = markerColor;
+
+            _panelEndpoint.transform.SetPositionAndRotation(hit.worldPosition, canvas.transform.rotation);
+            _panelEndpoint.enabled = true;
         }
 
         public static bool ShouldShowRayFeedback(NearFarInteractor interactor, Vector3 anchor)
         {
             if (interactor == null || !interactor.isActiveAndEnabled || interactor.hasSelection) return false;
             // Menu pointing remains visible; it does not imply an object can be picked up.
-            if (interactor.TryGetCurrentUIRaycastResult(out _)) return true;
+            if (interactor.TryGetCurrentUIRaycastResult(out var uiHit) &&
+                uiHit.gameObject != null && uiHit.gameObject.activeInHierarchy) return true;
             if (!interactor.enableFarCasting || interactor.interactionManager == null) return false;
             foreach (var hovered in interactor.interactablesHovered)
             {
@@ -142,6 +258,8 @@ namespace SpatialMAS.XR
                 new GradientColorKey(Color.white, 1f) },
                 new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.49019608f, 0.21177f),
                     new GradientAlphaKey(1f, 0.5f), new GradientAlphaKey(0f, 1f) });
+            _defaultUiRayGradient = gradient;
+            _appliedPanelRayTint = Color.white;
             _visual.customizeLinePropertiesForState = true;
             foreach (var properties in new[] { _visual.hoverHitProperties, _visual.uiHitProperties,
                 _visual.uiPressHitProperties })

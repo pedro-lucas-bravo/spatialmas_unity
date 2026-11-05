@@ -14,6 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: SpatialMAS.Runtime::SpatialMAS.Core.SpatialMASConfig
   oscListenPort: 6011
   researcherPanelRadius: 1.25
+  researcherPanelMinDistance: 0.65
+  researcherPanelMaxDistance: 2.25
+  researcherPanelDepthDragDeadZone: 0.03
   researcherPanelAngularDeadZone: 8
   researcherPanelCatchUpSeconds: 0.25
   researcherPanelHorizontalDeadZone: 0.1

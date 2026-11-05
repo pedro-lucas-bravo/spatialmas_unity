@@ -38,7 +38,7 @@ namespace SpatialMAS.Tests.PlayMode
             _panel.position = new Vector3(0, 0, 2);
             _lifecycle = _root.AddComponent<XRResearcherPanelLifecycle>();
             _lifecycle.Initialize(_panel, () => { });
-            _handle = _panel.Find("Move Handle").GetComponent<XRPanelMoveHandle>();
+            _handle = _panel.Find("PanelBackground").GetComponent<XRPanelMoveHandle>();
             _pointer = new MutablePointer();
             _module.RegisterInteractor(_pointer);
         }
@@ -72,6 +72,7 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.That(_panel.position.y, Is.GreaterThan(initial.y));
             Assert.That(Vector3.Dot(_panel.up, Vector3.up), Is.GreaterThan(.999f));
             _head = new Pose(new Vector3(2f, 1f, 3f), Quaternion.identity);
+            _pointer.MoveOrigin(_head.Value.position);
             Tick();
             Assert.That(Vector3.ProjectOnPlane(_panel.position - _head.Value.position, Vector3.up).magnitude, Is.EqualTo(1.25f).Within(.00001f));
             _pointer.Pressed = false;
@@ -83,6 +84,45 @@ namespace SpatialMAS.Tests.PlayMode
             _pointer.PointAt(Vector3.left);
             Tick();
             Assert.That(Vector3.Distance(released, _panel.position), Is.LessThan(.00001f));
+        }
+
+        [UnityTest]
+        public IEnumerator RadialCapture_DepthUsesRelativeHandTranslationAndKeepsReleasedDistance()
+        {
+            yield return null;
+            var follow = _root.AddComponent<XRPanelFollow>();
+            follow.Initialize(_panel);
+            follow.ConfigureDistance(.65f, 1.25f, 2.25f, .03f);
+            follow.Recall(_head.Value);
+            _handle.ConfigureRadial(follow, () => _head);
+            ProcessModule();
+            Assert.IsTrue(_module.GetTrackedDeviceModel(_pointer, out var model));
+            var initial = _panel.position;
+            _handle.OnPointerDown(new TrackedDeviceEventData(_system) { pointerId = model.pointerId, rayPoints = _pointer.Points });
+            Assert.AreEqual(initial, _panel.position);
+
+            _pointer.MoveOrigin(new Vector3(.3f, .2f, .02f));
+            Tick();
+            Assert.That(_panel.position.z, Is.EqualTo(1.25f).Within(.00001f), "Side and vertical travel plus subthreshold depth must leave distance unchanged.");
+            _pointer.MoveOrigin(new Vector3(.3f, .2f, .23f));
+            Tick();
+            Assert.That(_panel.position.z, Is.EqualTo(1.45f).Within(.00001f));
+            Assert.That(_panel.position.y, Is.EqualTo(initial.y).Within(.00001f));
+
+            _pointer.MoveOrigin(Vector3.forward * 5f);
+            Tick();
+            Assert.That(_panel.position.z, Is.EqualTo(2.25f).Within(.00001f));
+            _pointer.MoveOrigin(Vector3.back * 5f);
+            Tick();
+            Assert.That(_panel.position.z, Is.EqualTo(.65f).Within(.00001f));
+
+            _pointer.Pressed = false;
+            Tick();
+            follow.CommitPlacement(_head.Value);
+            follow.Step(_head.Value, true, false, 2f);
+            Assert.That(_panel.position.z, Is.EqualTo(.65f).Within(.00001f));
+            follow.Recall(_head.Value);
+            Assert.That(_panel.position.z, Is.EqualTo(1.25f).Within(.00001f));
         }
 
         [UnityTest]
@@ -141,6 +181,7 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.That(Vector3.Distance(_panel.position, new Vector3(-3, 1, 2)), Is.LessThan(.0001f));
         }
 
+
         [UnityTest]
         public IEnumerator HiddenPanel_CancelsCaptureAndDoesNotResumeAfterShow()
         {
@@ -179,11 +220,16 @@ namespace SpatialMAS.Tests.PlayMode
         {
             public bool Pressed = true;
             public readonly List<Vector3> Points = new List<Vector3> { Vector3.zero, Vector3.forward * .1f };
-            public void PointAt(Vector3 point) => Points[1] = point.normalized * .1f;
+            public void PointAt(Vector3 point) => Points[1] = Points[0] + point.normalized * .1f;
+            public void MoveOrigin(Vector3 origin)
+            {
+                Points[1] += origin - Points[0];
+                Points[0] = origin;
+            }
             public void UpdateUIModel(ref TrackedDeviceModel model)
             {
-                model.position = Vector3.zero;
-                model.orientation = Quaternion.LookRotation(Points[1]);
+                model.position = Points[0];
+                model.orientation = Quaternion.LookRotation(Points[1] - Points[0]);
                 model.raycastPoints = Points;
                 model.raycastLayerMask = ~0;
                 model.select = Pressed;

@@ -176,29 +176,27 @@ namespace SpatialMAS.UI
 
         private void BuildMoveHandle()
         {
-            if (_panel.Find("Move Handle") != null) return;
-            var go = new GameObject("Move Handle", typeof(RectTransform), typeof(Image), typeof(XRPanelMoveHandle));
-            go.transform.SetParent(_panel, false);
-            var rect = (RectTransform)go.transform;
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(18f, -904f);
-            rect.sizeDelta = new Vector2(584f, 42f);
-            go.GetComponent<Image>().color = new Color(0.18f, 0.4f, 0.44f, 0.95f);
-            go.GetComponent<XRPanelMoveHandle>().Initialize(this);
-            var textGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
-            textGo.transform.SetParent(go.transform, false);
-            var label = textGo.GetComponent<Text>();
-            label.text = "Hold and drag to move panel";
-            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            label.fontSize = 19;
-            label.alignment = TextAnchor.MiddleCenter;
-            label.raycastTarget = false;
-            label.rectTransform.anchorMin = Vector2.zero;
-            label.rectTransform.anchorMax = Vector2.one;
-            label.rectTransform.offsetMin = label.rectTransform.offsetMax = Vector2.zero;
-            var material = Resources.Load<Material>("Mat_SpatialMAS_WorldUI");
-            if (material != null) { go.GetComponent<Image>().material = material; label.material = material; }
+            var background = _panel.Find("PanelBackground");
+            if (background == null)
+            {
+                background = new GameObject("PanelBackground", typeof(RectTransform), typeof(Image)).transform;
+                background.SetParent(_panel, false);
+                background.SetAsFirstSibling();
+                var rect = (RectTransform)background;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+                var fallback = background.GetComponent<Image>();
+                fallback.color = Color.clear;
+                fallback.canvasRenderer.cullTransparentMesh = false;
+            }
+
+            var image = background.GetComponent<Image>();
+            if (image == null) return;
+            image.raycastTarget = true;
+            var capture = background.GetComponent<XRPanelMoveHandle>();
+            if (capture == null) capture = background.gameObject.AddComponent<XRPanelMoveHandle>();
+            capture.Initialize(this);
         }
     }
 }

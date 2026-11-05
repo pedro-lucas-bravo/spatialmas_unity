@@ -8,6 +8,39 @@ Panel visibility and placement do not issue simulation, pause, recording, calibr
 
 ## Prototype controls
 
+### Joined tabs, drag distance and palette
+
+Run, Setup and Session join the top edge of one inset surface. The active tab shares the inset color and keeps its cyan marker. Inactive tabs are darker. A separate outline marks hover. Status, Close, Follow/Pin and Recenter sit outside the inset.
+
+Pinch and hold the title or blank space. Sweep sideways to orbit, tilt the pointing ray up or down to adjust height, and push your hand away from your head or draw it back to adjust distance. The depth axis is the horizontal direction from your head to the panel at pinch start. Shared head and hand translation cancels out. The first 3 cm of depth travel is a dead zone, and further travel changes distance meter for meter. The bounds default to 0.65–2.25 m. Follow retains the released distance, Pin holds the released pose, and Recenter restores the configured default of 1.25 m.
+
+Edit **Researcher Panel** on the bootstrapper's referenced `SpatialMASConfig`. The distance fields are `researcherPanelMinDistance`, `researcherPanelRadius` (default), `researcherPanelMaxDistance`, and `researcherPanelDepthDragDeadZone`, all in meters. The original radius field keeps its serialized name and authored value. Invalid ordering is clamped, and distance edits during a press or drag apply after release.
+
+Expand **Researcher Panel Palette** for these color roles. Colors are RGBA and the button state colors multiply the base button color.
+
+| Roles | Default colors |
+| --- | --- |
+| `shell`, `inset` and joined tab, `inactiveTab`, `button` | `#141C26FA`, `#1E2A38FF`, `#19232FFF`, `#243242FF` |
+| `buttonHoverTint`, `buttonPressedTint`, `buttonSelectedTint`, `buttonDisabledTint` | `#F5F5F5FF`, `#C8C8C8FF`, `#F5F5F5FF`, `#C8C8C880` |
+| `primaryText`, `secondaryText` | `#F4F6F8FF`, `#B8C4D0FF` |
+| `accent`, `tabMarker`, `selectionMarker`, `hoverOutline` | `#68D9E6FF` each |
+| `running`, `paused`, `pending`, `recording`, `notRecording`, `confirmation` | `#F4F6F8FF`, `#FFC66DFF`, `#FFC66DFF`, `#FB6E76FF`, `#B8C4D0FF`, `#FFC66DFF` |
+| `dragOutline`, `panelRay` tint, `enabledEndpoint`, `disabledEndpoint` | `#68D9E69B`, `#FFFFFFFF`, `#F4F6F8FF`, `#B8C4D0FF` |
+
+The move endpoint color is **Move Marker** in the palette and defaults to `#68F0FFFF`. Its size and stroke have separate fields under **Researcher Panel**. The panel ray tint multiplies the existing gradient and its alpha only on panel hits. Object ghost rays and the dorsal launcher are separate visuals. Edit the palette during Editor Play to compare colors in Link, then save the config asset to retain the changes for builds.
+
+The user tested and accepted the joined tabs, near/far movement and live palette in Meta Link on 2026-11-05. Native validation remains deferred.
+
+### Three-tab researcher layout
+
+Run opens by default with scenario selection, named presets, Pause or Resume, and a separate Reset. Setup groups next-load layout and spawn placement separately from current calibration and display controls. Clear All is a secondary action with a confirmation step. Session contains recording controls, available session details, the log download address, and expandable Diagnostics.
+
+The header shows active scenario, run state, recording state, and Close. Recenter, Follow/Pin and Participant Mode are shared across tabs. Aim anywhere on the visible panel to see the hand ray. Blank space and the plain title show a cyan four-direction move marker. Pinch there to capture the existing arc drag, with a subtle outline while held. Controls retain separate targets. Enabled controls highlight, and disabled controls show a neutral marker without starting a drag. A first-open hint explains the gesture.
+
+The user accepted the corrected TMP comparison in Link and chose TMP for the full panel. World-space labels use Liberation Sans SDF and a shared material with the SpatialMAS URP stereo UI pass. Diagnostics retains live device, FPS, OSC and agent information. Check label fit and both-eye readability across Run, Setup and Session in Link.
+
+Tune the four-arrow endpoint in the referenced `SpatialMASConfig` asset under **Researcher Panel**. **Move Marker** in the palette defaults to bright cyan, **Researcher Panel Move Marker Size** is 0.032 m tip to tip, and **Stroke** is 0.0026 m. Changes show on the next visible marker update during Editor Play. Save the asset to keep your values.
+
 ### Independent follow channels and live Editor tuning (current iteration)
 
 Recentering correction: released sideways placement is a world azimuth, not a permanent angle added to future head yaw. The panel stays at that azimuth after release until the head turns beyond the configured angular dead zone relative to its release heading. It then resumes ordinary front-follow without the old drag bias. Looking toward a 90° side placement therefore does not move its target another 90° away. The normal angular dead zone still allows its configured small residual; pin mode remains world-fixed.

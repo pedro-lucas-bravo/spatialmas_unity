@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using UnityEngine.XR.Interaction.Toolkit.Filtering;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
 using UnityEngine.XR.Interaction.Toolkit.UI;
 
 namespace SpatialMAS.UI
 {
-    /// <summary>Deliberate UI handle translates a world panel along its initial plane; no grab/telemetry changes.</summary>
+
+    /// <summary>Captures UI drag input for panel placement.</summary>
     public sealed class XRPanelMoveHandle : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
         IBeginDragHandler, IDragHandler, IEndDragHandler, IInitializePotentialDragHandler
     {
@@ -17,17 +19,34 @@ namespace SpatialMAS.UI
         private Vector3 _offset;
         private int _pointer;
         private bool _dragging;
+        private Outline _captureOutline;
         private XRPanelFollow _follow;
         private Func<Pose?> _headPose;
         private float _lastPointerYaw, _dragAngle, _initialHeight, _initialSlope, _dragRadius;
+        private Vector3 _depthAxis;
+        private float _initialHandDepth, _initialRadius;
+        private float _minimumDistance, _maximumDistance, _depthDeadZone;
         public bool IsDragging => _dragging;
         private IUIInteractor _source;
         private XRUIInputModule _module;
         private XRBaseInteractor _xrSource;
         private readonly XRSelectFilterDelegate _captureFilter = new XRSelectFilterDelegate((_, __) => false);
 
-        public void Initialize(XRResearcherPanelLifecycle owner) => _owner = owner;
+        public void Initialize(XRResearcherPanelLifecycle owner)
+        {
+            _owner = owner;
+            if (_captureOutline != null || !TryGetComponent<Image>(out _)) return;
+            _captureOutline = gameObject.AddComponent<Outline>();
+            _captureOutline.effectColor = new Color32(104, 217, 230, 155);
+            _captureOutline.effectDistance = new Vector2(2f, -2f);
+            _captureOutline.enabled = false;
+        }
         public void ConfigureRadial(XRPanelFollow follow, Func<Pose?> headPose) { _follow = follow; _headPose = headPose; }
+        public void SetOutlineColor(Color color)
+        {
+            if (_captureOutline != null && _captureOutline.effectColor != color)
+                _captureOutline.effectColor = color;
+        }
         public void OnInitializePotentialDrag(PointerEventData data) => data.useDragThreshold = false;
         public void OnPointerDown(PointerEventData data) => Capture(data);
         public void OnBeginDrag(PointerEventData data) => Capture(data);
@@ -45,8 +64,14 @@ namespace SpatialMAS.UI
                 Pose? head = _headPose?.Invoke();
                 if (!head.HasValue || !TryDataRay(data, out Ray ray) || !TryAngles(ray, out _lastPointerYaw, out _initialSlope)) return;
                 Vector3 relative = Vector3.ProjectOnPlane(_owner.Panel.position - head.Value.position, Vector3.up);
-                _dragAngle = Mathf.Atan2(relative.x, relative.z) * Mathf.Rad2Deg;
+                _depthAxis = relative.sqrMagnitude > .000001f ? relative.normalized : new Vector3(ray.direction.x, 0f, ray.direction.z).normalized;
+                _dragAngle = Mathf.Atan2(_depthAxis.x, _depthAxis.z) * Mathf.Rad2Deg;
                 _dragRadius = relative.magnitude;
+                _minimumDistance = _follow.MinimumDistance;
+                _maximumDistance = _follow.MaximumDistance;
+                _depthDeadZone = _follow.DepthDragDeadZone;
+                _initialRadius = Mathf.Clamp(_dragRadius, _minimumDistance, _maximumDistance);
+                _initialHandDepth = Vector3.Dot(ray.origin - head.Value.position, _depthAxis);
                 _initialHeight = _owner.Panel.position.y;
             }
             else
@@ -61,6 +86,7 @@ namespace SpatialMAS.UI
             // A held UI press must not turn into an object grab after hover exits.
             if (_xrSource != null) _xrSource.selectFilters.Add(_captureFilter);
             _dragging = true;
+            if (_captureOutline != null) _captureOutline.enabled = true;
         }
 
         private void LateUpdate()
@@ -104,6 +130,7 @@ namespace SpatialMAS.UI
         {
             if (_xrSource != null) _xrSource.selectFilters.Remove(_captureFilter);
             _dragging = false;
+            if (_captureOutline != null) _captureOutline.enabled = false;
             _source = null;
             _module = null;
             _xrSource = null;
@@ -127,12 +154,21 @@ namespace SpatialMAS.UI
             if (!TryAngles(ray, out float yaw, out float slope)) return;
             _dragAngle += Mathf.DeltaAngle(_lastPointerYaw, yaw);
             _lastPointerYaw = yaw;
-            // An old pinned pose can be off-radius after walking. Ease onto the
-            // configured arc rather than teleporting it on the initial press.
-            _dragRadius = Mathf.Lerp(_dragRadius, _follow.Radius, 1f - Mathf.Exp(-Time.unscaledDeltaTime / .25f));
+            // Measure translation from the initial pinch along a fixed horizontal
+            // axis. Aim changes and shared head/hand translation do not change depth.
+            float depthTravel = Vector3.Dot(ray.origin - head.Value.position, _depthAxis) - _initialHandDepth;
+            float depthOffset = Mathf.Sign(depthTravel) * Mathf.Max(0f, Mathf.Abs(depthTravel) - _depthDeadZone);
+            float targetRadius = Mathf.Clamp(_initialRadius + depthOffset, _minimumDistance, _maximumDistance);
+            if (_dragRadius < _minimumDistance - .001f || _dragRadius > _maximumDistance + .001f)
+            {
+                // A pinned panel can be outside the range after the user walks away.
+                _dragRadius = Mathf.Lerp(_dragRadius, targetRadius, 1f - Mathf.Exp(-Time.unscaledDeltaTime / .25f));
+            }
+            else
+                _dragRadius = targetRadius;
             Vector3 radial = Quaternion.Euler(0f, _dragAngle, 0f) * Vector3.forward;
             Vector3 position = head.Value.position + radial * _dragRadius;
-            position.y = _initialHeight + (slope - _initialSlope) * _follow.Radius;
+            position.y = _initialHeight + (slope - _initialSlope) * _initialRadius;
             _owner.Panel.SetPositionAndRotation(position, Quaternion.LookRotation(radial, Vector3.up));
         }
 

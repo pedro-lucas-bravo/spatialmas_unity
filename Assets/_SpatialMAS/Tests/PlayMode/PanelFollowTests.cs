@@ -159,6 +159,23 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [Test]
+        public void ConfiguredDistance_ClampsInvalidOrderingAndKeepsPinnedPose()
+        {
+            _follow.ConfigureDistance(1.1f, .5f, .8f, -.1f);
+            Assert.AreEqual(1.1f, _follow.MinimumDistance);
+            Assert.AreEqual(1.1f, _follow.Radius);
+            Assert.AreEqual(1.1f, _follow.MaximumDistance);
+            Assert.AreEqual(0f, _follow.DepthDragDeadZone);
+            _follow.SetPinned(true, Home);
+            var pinned = _panel.transform.position;
+            _follow.Step(Head(Home.position + Vector3.forward), true, false, 2f);
+            Assert.AreEqual(pinned, _panel.transform.position);
+            _follow.Recall(Home);
+            Assert.That(Vector3.ProjectOnPlane(_panel.transform.position - Home.position, Vector3.up).magnitude,
+                Is.EqualTo(1.1f).Within(.00001f));
+        }
+
+        [Test]
         public void LiveConfiguration_ChangesTargetsWithoutResettingPosePlacementOrMode()
         {
             _panel.transform.position = new Vector3(.6f, 1.2f, 1.1f);

@@ -8,6 +8,8 @@ namespace SpatialMAS.UI
         [SerializeField, Min(0f)] private float _angularDeadZone = 8f;
         [SerializeField, Min(0.01f)] private float _catchUpSeconds = 0.25f;
         [SerializeField, Min(.35f)] private float _radius = 1.25f;
+        private float _minimumDistance = .65f, _maximumDistance = 2.25f, _depthDragDeadZone = .03f;
+        private float? _preferredDistance;
         private Transform _panel;
         private bool _initialized;
         private float _lastValidYaw, _followYaw, _worldHeight;
@@ -21,12 +23,25 @@ namespace SpatialMAS.UI
 
         public bool Pinned { get; private set; }
         public float Radius => _radius;
+        public float MinimumDistance => _minimumDistance;
+        public float MaximumDistance => _maximumDistance;
+        public float DepthDragDeadZone => _depthDragDeadZone;
         public float AngularDeadZone => _angularDeadZone;
         public float CatchUpSeconds => _catchUpSeconds;
 
         public void Initialize(Transform panel) => _panel = panel;
         private static float Valid(float value, float fallback) => float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
-        public void ConfigureRadius(float radius) => _radius = Mathf.Max(.35f, Valid(radius, 1.25f));
+        public void ConfigureRadius(float radius) => ConfigureDistance(_minimumDistance, radius, _maximumDistance, _depthDragDeadZone);
+
+        public void ConfigureDistance(float minimum, float defaultDistance, float maximum, float dragDeadZone)
+        {
+            _minimumDistance = Mathf.Max(.35f, Valid(minimum, .65f));
+            _maximumDistance = Mathf.Max(_minimumDistance, Valid(maximum, 2.25f));
+            _radius = Mathf.Clamp(Valid(defaultDistance, 1.25f), _minimumDistance, _maximumDistance);
+            _depthDragDeadZone = Mathf.Max(0f, Valid(dragDeadZone, .03f));
+        }
+
+        private float DesiredDistance => Mathf.Clamp(_preferredDistance ?? _radius, _minimumDistance, _maximumDistance);
         public void ConfigureTuning(float angularDeadZone, float catchUpSeconds)
         {
             _angularDeadZone = Mathf.Clamp(Valid(angularDeadZone, 8f), 0f, 180f);
@@ -59,6 +74,7 @@ namespace SpatialMAS.UI
             if (_panel == null) return;
             _angle = _followYaw = Heading(head);
             _manualYawHeld = false;
+            _preferredDistance = null;
             _currentRadius = Radius;
             _worldHeight = head.position.y - 0.1f;
             _heightOffset = -.1f;
@@ -72,6 +88,13 @@ namespace SpatialMAS.UI
         public void CommitPlacement(Pose head)
         {
             if (_panel == null) return;
+            RebasePlacement(head);
+            if (Mathf.Abs(_currentRadius - DesiredDistance) > .0001f)
+                _preferredDistance = Mathf.Clamp(_currentRadius, _minimumDistance, _maximumDistance);
+        }
+
+        private void RebasePlacement(Pose head)
+        {
             _followYaw = Heading(head);
             Vector3 relative = _panel.position - head.position;
             relative.y = 0f;
@@ -93,7 +116,7 @@ namespace SpatialMAS.UI
         {
             if (Pinned == pinned) return;
             Pinned = pinned;
-            if (!pinned) CommitPlacement(head);
+            if (!pinned && _panel != null) RebasePlacement(head);
         }
 
         public void Step(Pose head, bool tracked, bool frozen, float dt, bool dragging = false)
@@ -102,7 +125,7 @@ namespace SpatialMAS.UI
             if (!tracked) return;
             float yaw = Heading(head);
             if (Pinned || dragging || frozen) return;
-            if (!_initialized) CommitPlacement(head);
+            if (!_initialized) RebasePlacement(head);
             Vector3 horizontalDelta = Vector3.ProjectOnPlane(head.position, Vector3.up) - _center;
             float horizontalError = horizontalDelta.magnitude;
             if (horizontalError > _horizontalOuter) _horizontalFollowing = true;
@@ -132,7 +155,7 @@ namespace SpatialMAS.UI
                 _followYaw += Mathf.Sign(error) * beyond * alpha;
                 _angle = Mathf.LerpAngle(_angle, _followYaw, alpha);
             }
-            _currentRadius = Mathf.Lerp(_currentRadius, Radius, alpha);
+            _currentRadius = Mathf.Lerp(_currentRadius, DesiredDistance, alpha);
             Apply();
         }
 

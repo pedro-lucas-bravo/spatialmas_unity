@@ -3,6 +3,7 @@
     "rootNamespace": "SpatialMAS",
     "references": [
         "UnityEngine.UI",
+        "Unity.TextMeshPro",
         "Unity.Collections",
         "Unity.InputSystem",
         "Unity.RenderPipelines.Universal.Runtime",

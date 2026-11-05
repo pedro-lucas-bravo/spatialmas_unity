@@ -55,7 +55,8 @@ namespace SpatialMAS.Tests.PlayMode
             Canvas canvas = panel.GetComponent<Canvas>();
             canvas.worldCamera = null;
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            foreach (var graphic in panel.GetComponentsInChildren<Graphic>(true)) graphic.material = null;
+            foreach (var graphic in panel.GetComponentsInChildren<Graphic>(true))
+                if (graphic is Text || graphic is Image) graphic.material = null;
             InitializeHud();
 
             Assert.AreEqual(RenderMode.WorldSpace, canvas.renderMode);
@@ -68,7 +69,78 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.AreEqual("SpatialMAS/World UI Stereo", material.shader.name);
             Assert.IsTrue(material.shader.isSupported);
             Assert.IsTrue(material.HasProperty("_StencilComp"));
-            foreach (var graphic in panel.GetComponentsInChildren<Graphic>(true)) Assert.AreSame(material, graphic.material);
+            foreach (var graphic in panel.GetComponentsInChildren<Graphic>(true))
+                if (graphic is Text || graphic is Image) Assert.AreSame(material, graphic.material);
+        }
+
+        [Test]
+        public void BrowserTabs_JoinInsetAndRetainSelectionWhenPaletteChanges()
+        {
+            var inset = Panel.Find("Content Inset").GetComponent<Image>();
+            var run = Panel.Find("Run").GetComponent<Button>();
+            var setup = Panel.Find("Setup").GetComponent<Button>();
+            Assert.AreEqual(inset.color, run.image.color);
+            Assert.AreNotEqual(inset.color, setup.image.color);
+            Assert.IsFalse(inset.raycastTarget);
+            Assert.AreEqual(Selectable.Transition.None, run.transition);
+            Assert.That(run.image.rectTransform.anchoredPosition.y - run.image.rectTransform.rect.height,
+                Is.EqualTo(inset.rectTransform.anchoredPosition.y).Within(.001f));
+
+            setup.onClick.Invoke();
+            Assert.IsTrue(setup.transform.Find("Active tab marker").gameObject.activeSelf);
+            Assert.IsFalse(run.transform.Find("Active tab marker").gameObject.activeSelf);
+            Assert.AreEqual(inset.color, setup.image.color);
+            var config = ScriptableObject.CreateInstance<SpatialMASConfig>();
+            try
+            {
+                config.researcherPanelPalette.inset = new Color(.1f, .4f, .3f, .8f);
+                config.researcherPanelPalette.inactiveTab = new Color(.2f, .2f, .25f, .9f);
+                config.researcherPanelPalette.tabMarker = Color.yellow;
+                config.researcherPanelPalette.buttonPressedTint = Color.red;
+                Assert.IsTrue(_hud.ApplyPanelSettings(config));
+                Assert.IsFalse(_hud.ApplyPanelSettings(config));
+                Assert.AreEqual(config.researcherPanelPalette.inset, inset.color);
+                Assert.AreEqual(inset.color, setup.image.color);
+                Assert.AreEqual(config.researcherPanelPalette.inactiveTab, run.image.color);
+                Assert.IsTrue(Panel.Find("Setup Content").gameObject.activeSelf);
+                Assert.AreEqual(Color.yellow, setup.transform.Find("Active tab marker").GetComponent<Image>().color);
+                Assert.AreEqual(Color.red, Panel.Find("Close").GetComponent<Button>().colors.pressedColor);
+            }
+            finally { Object.DestroyImmediate(config); }
+        }
+
+        [Test]
+        public void PanelTabs_ShowOnePageAndKeepClearAllBehindConfirmation()
+        {
+            var run = Panel.Find("Run Content").gameObject;
+            var setup = Panel.Find("Setup Content").gameObject;
+            var session = Panel.Find("Session Content").gameObject;
+            Assert.IsTrue(run.activeSelf);
+            Assert.IsFalse(setup.activeSelf);
+            Assert.IsFalse(session.activeSelf);
+
+            Panel.Find("Setup").GetComponent<Button>().onClick.Invoke();
+            Assert.IsFalse(run.activeSelf);
+            Assert.IsTrue(setup.activeSelf);
+            var clear = setup.transform.Find("Clear All").GetComponent<Button>();
+            var confirmation = setup.transform.Find("Clear Confirmation");
+            var pendingClear = typeof(SpatialResearcherHUD).GetField("_pendingRemoveAllAgents",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            clear.onClick.Invoke();
+            Assert.IsTrue(confirmation.gameObject.activeSelf);
+            Assert.IsFalse((bool)pendingClear.GetValue(_hud));
+            confirmation.Find("Confirmation backdrop/Cancel").GetComponent<Button>().onClick.Invoke();
+            Assert.IsFalse(confirmation.gameObject.activeSelf);
+            clear.onClick.Invoke();
+            confirmation.Find("Confirmation backdrop/Confirm clear all agents").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue((bool)pendingClear.GetValue(_hud));
+
+            Panel.Find("Session").GetComponent<Button>().onClick.Invoke();
+            Assert.IsFalse(setup.activeSelf);
+            Assert.IsTrue(session.activeSelf);
+            Assert.IsFalse(session.transform.Find("Diagnostics").gameObject.activeSelf);
+            session.transform.Find("Show Diagnostics").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(session.transform.Find("Diagnostics").gameObject.activeSelf);
         }
 
         [Test]
@@ -87,7 +159,7 @@ namespace SpatialMAS.Tests.PlayMode
             _hud.TrackedPose = new Pose(new Vector3(-2f, 1.2f, 3f), Quaternion.identity);
             Invoke(_hud, "UpdateWorldPanelTracking", true);
             Assert.That(Vector3.Distance(expected, Panel.position), Is.LessThan(0.0001f));
-            Panel.Find("Move Panel Here").GetComponent<Button>().onClick.Invoke();
+            Panel.Find("Recenter").GetComponent<Button>().onClick.Invoke();
             Assert.That(Vector3.Distance(new Vector3(-2f, 1.1f, 4.25f), Panel.position), Is.LessThan(0.0001f));
         }
 
@@ -100,7 +172,7 @@ namespace SpatialMAS.Tests.PlayMode
             yield return null;
             Canvas.ForceUpdateCanvases();
 
-            var button = Panel.Find("2 · Swarmalators").GetComponent<Button>();
+            var button = Panel.Find("Run Content/2 · Swarmalators").GetComponent<Button>();
             var rect = button.GetComponent<RectTransform>();
             Vector3 target = rect.TransformPoint(rect.rect.center);
             var pointer = new TestTrackedPointer(_camera.transform.position, target);
@@ -120,6 +192,57 @@ namespace SpatialMAS.Tests.PlayMode
                 Assert.AreEqual(2, requestedScenario, "A real XR pointer press/release must invoke the scenario action.");
             }
             finally { module.UnregisterInteractor(pointer); }
+        }
+
+        [UnityTest]
+        public IEnumerator PanelBlankAndDisabledButton_KeepSeparateTrackedPressTargets()
+        {
+            Panel.SetPositionAndRotation(new Vector3(0f, 0f, 2f), Quaternion.identity);
+            _hud.TrackingAvailable = true;
+            _hud.TrackedPose = new Pose(Vector3.zero, Quaternion.identity);
+            var background = Panel.Find("PanelBackground");
+            var capture = background.GetComponent<XRPanelMoveHandle>();
+            var disabled = Panel.Find("Close").GetComponent<Button>();
+            disabled.interactable = false;
+            var module = _eventSystem.GetComponent<XRUIInputModule>();
+            module.enableMouseInput = false;
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            Vector3 Center(Transform area)
+            {
+                var rect = (RectTransform)area;
+                return rect.TransformPoint(rect.rect.center);
+            }
+
+            void PressAt(Vector3 point, GameObject expected, bool shouldDrag)
+            {
+                var pointer = new TestTrackedPointer(Vector3.zero, point);
+                module.RegisterInteractor(pointer);
+                try
+                {
+                    Invoke(module, "DoProcess");
+                    Assert.IsTrue(module.GetTrackedDeviceModel(pointer, out TrackedDeviceModel model));
+                    Assert.AreSame(expected, model.currentRaycast.gameObject);
+                    pointer.Pressed = true;
+                    Invoke(module, "DoProcess");
+                    Assert.AreEqual(shouldDrag, capture.IsDragging);
+                    Assert.AreEqual(shouldDrag, background.GetComponent<Outline>().enabled);
+                    pointer.Pressed = false;
+                    Invoke(module, "DoProcess");
+                    Assert.IsFalse(capture.IsDragging);
+                }
+                finally { module.UnregisterInteractor(pointer); }
+            }
+
+            PressAt(Center(disabled.transform), disabled.gameObject, false);
+            var titlePoint = Center(Panel.Find("Researcher Panel"));
+            PressAt(titlePoint, background.gameObject, true);
+            var panelRect = (RectTransform)Panel;
+            PressAt(panelRect.TransformPoint(new Vector3(panelRect.rect.xMax - 5f, 0f)), background.gameObject, true);
+            Assert.IsNull(Panel.Find("Move Handle"));
+            _hud.GetComponent<XRResearcherPanelLifecycle>().Hide();
+            PressAt(titlePoint, null, false);
         }
 
         [Test]
@@ -199,7 +322,7 @@ namespace SpatialMAS.Tests.PlayMode
             var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
             int loads = 0;
             _bus.OnLoadScenario += _ => loads++;
-            Panel.Find("2 · Swarmalators").GetComponent<Button>().onClick.Invoke();
+            Panel.Find("Run Content/2 · Swarmalators").GetComponent<Button>().onClick.Invoke();
             lifecycle.ResearcherMode = false;
             Assert.IsFalse(Panel.gameObject.activeSelf);
             Assert.IsFalse(Panel.GetComponent<CanvasGroup>().blocksRaycasts);
@@ -227,6 +350,24 @@ namespace SpatialMAS.Tests.PlayMode
             lifecycle.Recall();
             Assert.IsFalse(lifecycle.Visible);
             Assert.AreEqual(position, Panel.position);
+        }
+
+        [Test]
+        public void PanelLabels_UseSharedStereoSdfMaterialAndDoNotInterceptPointers()
+        {
+            Assert.IsEmpty(Panel.GetComponentsInChildren<Text>(true));
+            var labels = Panel.GetComponentsInChildren<TMPro.TextMeshProUGUI>(true);
+            Assert.That(labels.Length, Is.GreaterThan(20));
+            var material = Resources.Load<Material>("Mat_SpatialMAS_WorldUISdf");
+            Assert.NotNull(material);
+            Assert.IsTrue(material.shader.isSupported);
+            Assert.IsTrue(material.enableInstancing);
+            foreach (var label in labels)
+            {
+                Assert.AreSame(material, label.fontSharedMaterial);
+                Assert.AreSame(label.font.atlasTexture, material.mainTexture);
+                Assert.IsFalse(label.raycastTarget);
+            }
         }
 
         private Transform Panel => _hud.transform.Find("SpatialResearcherWorldCanvas");
