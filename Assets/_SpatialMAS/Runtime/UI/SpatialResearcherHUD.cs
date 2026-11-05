@@ -126,6 +126,8 @@ namespace SpatialMAS.UI
         private readonly System.Collections.Generic.List<System.Action<ResearcherPanelPalette>> _paletteBindings =
             new System.Collections.Generic.List<System.Action<ResearcherPanelPalette>>();
         private readonly Button[] _tabButtons = new Button[3];
+        private readonly System.Collections.Generic.List<System.Action> _clearButtonHover =
+            new System.Collections.Generic.List<System.Action>();
         private int _selectedTab;
 
         private bool ApplyPanelPalette(ResearcherPanelPalette palette)
@@ -421,6 +423,7 @@ namespace SpatialMAS.UI
 
         private void CancelPendingPanelActions()
         {
+            foreach (var clear in _clearButtonHover) clear();
             _panelPresses.Clear();
             SetClearConfirmation(false);
             _pendingScenarioToLoad = _pendingPresetToApply = _pendingLayout = -1;
@@ -590,6 +593,7 @@ namespace SpatialMAS.UI
             events.triggers.Add(enter);
             var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
             exit.callback.AddListener(_ => setHover(false));
+            _clearButtonHover.Add(() => setHover(false));
             events.triggers.Add(exit);
             return button;
         }

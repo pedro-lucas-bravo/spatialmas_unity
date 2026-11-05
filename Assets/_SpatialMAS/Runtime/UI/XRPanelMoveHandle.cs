@@ -23,7 +23,6 @@ namespace SpatialMAS.UI
         private XRPanelFollow _follow;
         private Func<Pose?> _headPose;
         private float _lastPointerYaw, _dragAngle, _initialHeight, _initialSlope, _dragRadius;
-        private Vector3 _depthAxis;
         private float _initialHandDepth, _initialRadius;
         private float _minimumDistance, _maximumDistance, _depthDeadZone;
         public bool IsDragging => _dragging;
@@ -64,14 +63,15 @@ namespace SpatialMAS.UI
                 Pose? head = _headPose?.Invoke();
                 if (!head.HasValue || !TryDataRay(data, out Ray ray) || !TryAngles(ray, out _lastPointerYaw, out _initialSlope)) return;
                 Vector3 relative = Vector3.ProjectOnPlane(_owner.Panel.position - head.Value.position, Vector3.up);
-                _depthAxis = relative.sqrMagnitude > .000001f ? relative.normalized : new Vector3(ray.direction.x, 0f, ray.direction.z).normalized;
-                _dragAngle = Mathf.Atan2(_depthAxis.x, _depthAxis.z) * Mathf.Rad2Deg;
+                _dragAngle = relative.sqrMagnitude > .000001f
+                    ? Mathf.Atan2(relative.x, relative.z) * Mathf.Rad2Deg
+                    : _lastPointerYaw;
                 _dragRadius = relative.magnitude;
                 _minimumDistance = _follow.MinimumDistance;
                 _maximumDistance = _follow.MaximumDistance;
                 _depthDeadZone = _follow.DepthDragDeadZone;
                 _initialRadius = Mathf.Clamp(_dragRadius, _minimumDistance, _maximumDistance);
-                _initialHandDepth = Vector3.Dot(ray.origin - head.Value.position, _depthAxis);
+                _initialHandDepth = HorizontalHandRadius(ray.origin, head.Value.position);
                 _initialHeight = _owner.Panel.position.y;
             }
             else
@@ -154,9 +154,8 @@ namespace SpatialMAS.UI
             if (!TryAngles(ray, out float yaw, out float slope)) return;
             _dragAngle += Mathf.DeltaAngle(_lastPointerYaw, yaw);
             _lastPointerYaw = yaw;
-            // Measure translation from the initial pinch along a fixed horizontal
-            // axis. Aim changes and shared head/hand translation do not change depth.
-            float depthTravel = Vector3.Dot(ray.origin - head.Value.position, _depthAxis) - _initialHandDepth;
+            // A sweep around the head changes angle while keeping hand radius constant.
+            float depthTravel = HorizontalHandRadius(ray.origin, head.Value.position) - _initialHandDepth;
             float depthOffset = Mathf.Sign(depthTravel) * Mathf.Max(0f, Mathf.Abs(depthTravel) - _depthDeadZone);
             float targetRadius = Mathf.Clamp(_initialRadius + depthOffset, _minimumDistance, _maximumDistance);
             if (_dragRadius < _minimumDistance - .001f || _dragRadius > _maximumDistance + .001f)
@@ -170,6 +169,12 @@ namespace SpatialMAS.UI
             Vector3 position = head.Value.position + radial * _dragRadius;
             position.y = _initialHeight + (slope - _initialSlope) * _initialRadius;
             _owner.Panel.SetPositionAndRotation(position, Quaternion.LookRotation(radial, Vector3.up));
+        }
+
+        private static float HorizontalHandRadius(Vector3 hand, Vector3 head)
+        {
+            Vector3 offset = hand - head;
+            return new Vector2(offset.x, offset.z).magnitude;
         }
 
         private static bool TryPointsRay(IReadOnlyList<Vector3> points, out Ray ray)

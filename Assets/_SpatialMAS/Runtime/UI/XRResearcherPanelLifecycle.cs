@@ -69,6 +69,7 @@ namespace SpatialMAS.UI
         public void Show()
         {
             if (!_researcherMode) return;
+            ClearPanelSelection();
             _visible = true;
             _waitingForRelease = true;
             _openedFrame = Time.frameCount;
@@ -98,15 +99,21 @@ namespace SpatialMAS.UI
             _waitingForRelease = true;
             _neutralFrame = -1;
             _launcherContact = false;
-            if (EventSystem.current != null && _panel != null && EventSystem.current.currentSelectedGameObject != null &&
-                EventSystem.current.currentSelectedGameObject.transform.IsChildOf(_panel))
-                EventSystem.current.SetSelectedGameObject(null);
+            ClearPanelSelection();
             ApplyVisibility();
             VisibilityChanged?.Invoke(false);
             Hidden?.Invoke();
         }
 
         public void SetLauncherContact(bool touching) => _launcherContact = touching;
+
+        private void ClearPanelSelection()
+        {
+            var system = EventSystem.current;
+            var selected = system != null ? system.currentSelectedGameObject : null;
+            if (_panel != null && selected != null && selected.transform.IsChildOf(_panel))
+                system.SetSelectedGameObject(null);
+        }
 
         /// <summary>Explicit local recovery, available even when participant mode hides every launcher.</summary>
         public void RecoverResearcherAccess()
@@ -120,14 +127,8 @@ namespace SpatialMAS.UI
             if (Time.unscaledTime >= _refreshTime) RefreshInputs();
             // F8 is a local researcher recovery key, not a remote identity/authentication mechanism.
             if (Keyboard.current != null && Keyboard.current.f8Key.wasPressedThisFrame) RecoverResearcherAccess();
-            var left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
-            bool menu = left.isValid && left.TryGetFeatureValue(UnityEngine.XR.CommonUsages.menuButton, out bool down) && down;
-            if (!menu) { _controllerRecoveryTime = 0f; _controllerRecoveryLatched = false; }
-            else if (!_controllerRecoveryLatched)
-            {
-                _controllerRecoveryTime += Time.unscaledDeltaTime;
-                if (_controllerRecoveryTime >= 2f) { _controllerRecoveryLatched = true; RecoverResearcherAccess(); }
-            }
+            bool available = TryReadRecoveryButtons(out bool primary, out bool secondary);
+            UpdateControllerRecovery(available, primary, secondary, Time.unscaledDeltaTime);
             if (_waitingForRelease)
             {
                 if (_launcherContact || AnyInputPressed()) _neutralFrame = -1;
@@ -140,6 +141,41 @@ namespace SpatialMAS.UI
                     ApplyVisibility();
                 }
             }
+        }
+
+        private static bool TryReadRecoveryButtons(out bool primary, out bool secondary)
+        {
+            var left = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            bool hasPrimary = left.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out primary);
+            bool hasSecondary = left.TryGetFeatureValue(UnityEngine.XR.CommonUsages.secondaryButton, out secondary);
+            if (left.isValid && hasPrimary && hasSecondary) return true;
+
+            var controller = UnityEngine.InputSystem.XR.XRController.leftHand;
+            var x = controller?.TryGetChildControl<UnityEngine.InputSystem.Controls.ButtonControl>("primaryButton");
+            var y = controller?.TryGetChildControl<UnityEngine.InputSystem.Controls.ButtonControl>("secondaryButton");
+            primary = x != null && x.isPressed;
+            secondary = y != null && y.isPressed;
+            return x != null && y != null;
+        }
+
+        private void UpdateControllerRecovery(bool available, bool primary, bool secondary, float deltaTime)
+        {
+            if (!available || !_headsetActive || _researcherMode)
+            {
+                _controllerRecoveryTime = 0f;
+                _controllerRecoveryLatched = false;
+                return;
+            }
+            if (_controllerRecoveryLatched)
+            {
+                if (primary || secondary) return;
+                _controllerRecoveryLatched = false;
+                _controllerRecoveryTime = 0f;
+                RecoverResearcherAccess();
+                return;
+            }
+            _controllerRecoveryTime = primary && secondary ? _controllerRecoveryTime + deltaTime : 0f;
+            _controllerRecoveryLatched = _controllerRecoveryTime >= 2f;
         }
 
         private void OnDisable()
@@ -169,9 +205,9 @@ namespace SpatialMAS.UI
         {
             if (_panel == null) return;
             bool active = Visible && _headsetActive;
-            _panel.gameObject.SetActive(active);
             _group.interactable = active && !_waitingForRelease;
             _group.blocksRaycasts = active && !_waitingForRelease;
+            _panel.gameObject.SetActive(active);
         }
 
         private void BuildMoveHandle()

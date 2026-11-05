@@ -95,16 +95,21 @@ namespace SpatialMAS.Tests.PlayMode
             follow.ConfigureDistance(.65f, 1.25f, 2.25f, .03f);
             follow.Recall(_head.Value);
             _handle.ConfigureRadial(follow, () => _head);
+            _pointer.MoveOrigin(Vector3.forward * .7f);
             ProcessModule();
             Assert.IsTrue(_module.GetTrackedDeviceModel(_pointer, out var model));
             var initial = _panel.position;
             _handle.OnPointerDown(new TrackedDeviceEventData(_system) { pointerId = model.pointerId, rayPoints = _pointer.Points });
             Assert.AreEqual(initial, _panel.position);
 
-            _pointer.MoveOrigin(new Vector3(.3f, .2f, .02f));
+            var sideways = Quaternion.Euler(0f, 60f, 0f) * Vector3.forward;
+            _pointer.MoveOrigin(sideways * .72f + Vector3.up * .2f);
+            _pointer.PointAt(sideways);
             Tick();
-            Assert.That(_panel.position.z, Is.EqualTo(1.25f).Within(.00001f), "Side and vertical travel plus subthreshold depth must leave distance unchanged.");
-            _pointer.MoveOrigin(new Vector3(.3f, .2f, .23f));
+            Assert.That(Vector3.ProjectOnPlane(_panel.position, Vector3.up).magnitude, Is.EqualTo(1.25f).Within(.00001f),
+                "Sweeping sideways at the same radius must preserve panel distance.");
+            _pointer.PointAt(Vector3.forward);
+            _pointer.MoveOrigin(Vector3.forward * .93f + Vector3.up * .2f);
             Tick();
             Assert.That(_panel.position.z, Is.EqualTo(1.45f).Within(.00001f));
             Assert.That(_panel.position.y, Is.EqualTo(initial.y).Within(.00001f));
@@ -112,7 +117,7 @@ namespace SpatialMAS.Tests.PlayMode
             _pointer.MoveOrigin(Vector3.forward * 5f);
             Tick();
             Assert.That(_panel.position.z, Is.EqualTo(2.25f).Within(.00001f));
-            _pointer.MoveOrigin(Vector3.back * 5f);
+            _pointer.MoveOrigin(Vector3.zero);
             Tick();
             Assert.That(_panel.position.z, Is.EqualTo(.65f).Within(.00001f));
 

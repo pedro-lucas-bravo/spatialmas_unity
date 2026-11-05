@@ -246,6 +246,45 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [Test]
+        public void ParticipantRecoveryChord_ClearsHoverAndRecallsPinnedPanelOnRelease()
+        {
+            _hud.TrackingAvailable = true;
+            _hud.TrackedPose = new Pose(new Vector3(1f, 1.7f, 3f), Quaternion.identity);
+            var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
+            var follow = _hud.GetComponent<XRPanelFollow>();
+            follow.SetPinned(true, _hud.TrackedPose);
+            Panel.position = new Vector3(4f, 2f, 5f);
+            var participant = Panel.Find("Participant Mode").GetComponent<Button>();
+            var outline = participant.GetComponent<Outline>();
+            var hover = new PointerEventData(_eventSystem);
+            ExecuteEvents.Execute(participant.gameObject, hover, ExecuteEvents.pointerEnterHandler);
+            _eventSystem.SetSelectedGameObject(participant.gameObject);
+            Assert.IsTrue(outline.enabled);
+            participant.onClick.Invoke();
+            Assert.IsFalse(outline.enabled);
+            Assert.IsNull(_eventSystem.currentSelectedGameObject);
+
+            void Step(bool x, bool y, float elapsed) =>
+                Invoke(lifecycle, "UpdateControllerRecovery", true, x, y, elapsed);
+            Step(true, false, 3f);
+            Step(true, true, 1f);
+            Step(false, false, 0f);
+            Assert.IsFalse(lifecycle.ResearcherMode);
+            Step(true, true, 2f);
+            Step(false, true, 0f);
+            Assert.IsFalse(lifecycle.ResearcherMode);
+            Step(false, false, 0f);
+            Assert.IsTrue(lifecycle.ResearcherMode);
+            Assert.IsTrue(follow.Pinned);
+            Assert.IsFalse(outline.enabled);
+            Assert.IsFalse(lifecycle.InputReady);
+            Vector3 recalled = _hud.TrackedPose.position + Vector3.forward * follow.Radius - Vector3.up * .1f;
+            Assert.That(Vector3.Distance(Panel.position, recalled), Is.LessThan(.0001f));
+            follow.Step(new Pose(Vector3.one, Quaternion.Euler(0, 90, 0)), true, false, 1f);
+            Assert.That(Vector3.Distance(Panel.position, recalled), Is.LessThan(.0001f));
+        }
+
+        [Test]
         public void LivePanelSettings_ApplyChangedValuesWithoutResettingPoseOrMode_AndDeferDuringCapture()
         {
             var config = ScriptableObject.CreateInstance<SpatialMASConfig>();
