@@ -1,4 +1,4 @@
-# SpatialMAS — Researcher 10-Minute Quickstart Guide (`USER_GUIDE_RESEARCHERS.md`)
+# SpatialMAS researcher guide
 
 **SpatialMAS** provides ready-made multi-agent scenarios on desktop and an OpenXR implementation for headset testing, plus Python, Max/MSP, or C++ control over Wi-Fi. Validate your headset build before an experiment. Apple Vision Pro integration remains experimental and requires a platform provider.
 
@@ -8,9 +8,9 @@
 
 ### On a Configured Meta Quest / OpenXR Headset
 1. Put on the headset and launch **SpatialMAS**.
-2. The application starts in **Mixed Reality (MR Passthrough) Mode** so you can see your physical laboratory room, with the simulation arena centered at chest height ($1.2\text{ m}$ high, $0.8\text{ m}$ in front of you).
+2. The application starts in **Mixed Reality (MR Passthrough) Mode** so you can see your physical laboratory room, with the simulation arena centered at chest height (1.2 m high, 0.8 m in front of you).
 3. **Physical Head Listening**: Your headset position automatically drives the 3D `AudioListener`. Walk around the arena or turn your head to hear spatialized sound synthesis from each agent.
-4. **Tracked-Hand Interaction**: With optical hand tracking available, reach out and pinch an interactive cube to grab it. The generated rig also accepts tracked controller trigger/grip input. Gaze-pinch support is provider-specific.
+4. **Tracked hands.** Reach out and pinch an interactive cube to grab it. In Swarmalators, you can also aim at a distant cube and pinch when the faint grab ray appears. The cube comes directly to your hand. Rotate your wrist to turn it and release the pinch to let go. The rig also accepts tracked controller input.
 
 ### On Desktop (Windows / macOS / Linux — Game-Like Controls)
 1. Press **Play** in Unity or launch the standalone executable.
@@ -21,15 +21,41 @@
    - Press **`C`** at any time to center and reset the camera.
 4. **Grab & Click Agents**:
    - **Hover** over any agent to inspect its ID, shape, and 3D coordinates at the bottom of the screen.
-   - **Left-Click and Drag** any interactive Cube agent (or hold **`Alt + Left-Click`** to force-drag any autonomous agent). Use the **Scroll Wheel** while dragging to push/pull the cube deeper or closer, and press **`R`** while holding a cube to snap-rotate it by $90^\circ$.
+   - **Left-Click and Drag** any interactive Cube agent (or hold **`Alt + Left-Click`** to force-drag any autonomous agent). Use the **Scroll Wheel** while dragging to push/pull the cube deeper or closer, and press **`R`** while holding a cube to rotate it by 90°.
 
 ---
 
-## 2. Scenarios, Physical Layouts and Calibration Reference
+## 2. Use the researcher panel in XR
 
-Use either the on-screen **Researcher Control Panel** or quick keyboard shortcuts:
+### Open, close, and select controls
 
-On a configured headset, point at the world-space panel and pinch/press its buttons. It includes scenario/preset selection, pause/reset, MR/VR, recording, IDs, physical layout/placement, and calibration reference controls; keyboard shortcuts below are for desktop.
+Bring your right index fingertip toward the back of your left hand. When the raised launcher appears, touch its outward face and hold for about one second until the progress bar fills. Repeat the gesture to close an open panel or recall a closed panel in front of you. You can also select **Close** in the panel header.
+
+Point at a control and pinch to select it. With a tracked controller, aim and press the trigger. The header shows the active scenario, whether it is running or paused, and whether recording is active.
+
+### Move the panel
+
+1. Aim at the title or a blank part of the panel until the four-arrow marker appears.
+2. Pinch and hold. Sweep sideways to move the panel around you, aim higher or lower to adjust height, or push your hand away from your head or pull it closer to change distance. A sideways sweep at a steady hand-to-head radius preserves panel distance.
+3. Release to finish placing the panel. You can continue dragging if your ray leaves the panel while you hold the pinch.
+
+In follow mode, the panel responds gradually to larger changes in head position and direction while retaining your chosen distance. Select **Pin in room** to anchor it at its current pose. Select **Follow user** to resume following. **Recenter** brings the panel in front of you at the configured default distance, normally 1.25 m.
+
+### Find the right tab
+
+- **Run** opens first. Choose a scenario or an available preset, pause or resume the simulation, or reset the active scenario.
+- **Setup** holds the layout and spawn controls for the next scenario load or reset, along with the calibration reference, **MR / VR**, and **Agent IDs** controls. **Clear All** asks for confirmation before clearing agents.
+- **Session** holds **Start recording** or **Stop recording**, session information, and the Wi-Fi download address. Select **Show Diagnostics** to inspect device, frame-rate, OSC, and agent information.
+
+### Hand the headset to a participant
+
+Select **Participant Mode** to hide the panel and its hand launcher. To return to researcher mode, hold **X and Y together on the left Touch controller** for about two seconds, then release both. If you are operating the Unity Editor or PC app from a keyboard, use **F8**. Recovery recalls the panel in front of you.
+
+Simulation and recording continue in their current states when you enter Participant Mode. To end a participant recording, recover the panel and select **Stop recording** in **Session**.
+
+## 3. Scenarios, physical layouts, and calibration reference
+
+Use the researcher panel on the headset or the keyboard shortcuts below on desktop.
 
 - **Keys `0` – `5` (or Scenario Buttons)**:
   - **`0`**: *External OSC Mode* (Waits for Python/Max/C++ commands on UDP port `6011`)
@@ -50,7 +76,9 @@ On a configured headset, point at the world-space panel and pinch/press its butt
 
 ---
 
-## 3. Downloading CSV Telemetry Logs Over Wi-Fi (No USB Cable Needed!)
+## 4. Record and download session data
+
+Open **Session** on the XR panel and check the recording status. If recording is already active, the panel shows **Stop recording**. Select **Start recording** to start a new session when recording is off. On desktop, press **L** to start or stop recording.
 
 SpatialMAS records five CSV files and one metadata JSON per session:
 
@@ -63,9 +91,10 @@ SpatialMAS records five CSV files and one metadata JSON per session:
 
 Download all six files for a session. Join object and participant rows by `(SessionId, SampleId)`; their timestamps match. Positions and dimensions are Unity-world meters, rotations are world quaternions `x,y,z,w`. Sampling targets 50 Hz but is frame-limited; use actual `ElapsedMs` values. Exclude untracked-hand samples from measured-hand analysis. Changing the reference never rewrites raw world data. See the [coordinate/recording contract](ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract) for reference-relative conversion and motion-capture alignment.
 
-Each restart creates a new session without overwriting previous recordings.
+Each time you start recording, SpatialMAS creates a new session and keeps previous recordings.
 
-### How to Download Logs to Your Laptop:
-1. Look at the **SpatialMAS Researcher HUD** inside the app to see the Wi-Fi Log URL (for example: `http://192.168.1.42:8080/`).
-2. Open that URL in any web browser on a laptop connected to the same Wi-Fi network.
-3. Click the download button next to each CSV/JSON session file to save it directly to your laptop!
+### Download logs to your laptop
+
+1. Stop recording to finalize the session files. Leave SpatialMAS open so it can serve the downloads.
+2. Find the Wi-Fi download address on **Session** in XR or on the desktop researcher HUD. On a laptop connected to the same network, open that address in a browser.
+3. Download the five CSV files and the metadata JSON for the same session.

@@ -40,8 +40,16 @@ All runtime and saved poses use Unity XYZ (X right, Y up, Z forward), meters, an
 - **[Complete OSC v1 & v2 API Specification (`docs/OSC_API_SPECIFICATION.md`)](./docs/OSC_API_SPECIFICATION.md)**
 - **[Unity 6 Developer & Logic Pack Guide (`docs/DEVELOPER_GUIDE.md`)](./docs/DEVELOPER_GUIDE.md)**
 - **[Scenarios & DSP Audio Mathematical Reference (`docs/SCENARIOS_AND_AUDIO.md`)](./docs/SCENARIOS_AND_AUDIO.md)**
-- **[Researcher 10-Minute Quickstart Guide (`docs/USER_GUIDE_RESEARCHERS.md`)](./docs/USER_GUIDE_RESEARCHERS.md)**
+- **[Researcher guide](./docs/USER_GUIDE_RESEARCHERS.md)** for headset and desktop controls, scenarios, and recording. [Download the PDF](./docs/compiled/spatialmas-researcher-guide.pdf).
 - **[Master AI Implementation Plan (`SPATIALMAS_IMPLEMENTATION_PLAN.md`)](./SPATIALMAS_IMPLEMENTATION_PLAN.md)**
+
+Update the researcher guide when user-facing features or controls change. The guide is the Markdown source for web and PDF editions. To generate standalone HTML from the repository root with Pandoc, run:
+
+```sh
+pandoc docs/USER_GUIDE_RESEARCHERS.md --standalone --toc --metadata pagetitle="SpatialMAS researcher guide" -o docs/spatialmas-researcher-guide.html
+```
+
+Open the HTML in a browser to print it to PDF. The HTML is generated beside the guide so its relative links to other project documentation resolve within the repository. Keep the Markdown as the editable source.
 
 ---
 
