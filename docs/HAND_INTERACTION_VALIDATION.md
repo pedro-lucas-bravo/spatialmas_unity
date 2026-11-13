@@ -50,7 +50,7 @@ The reference's optional release glide is not the default for scenario agents: b
 | MR_HandsInteraction | User confirmed | User confirmed |
 | Main scene / Swarmalators | User confirmed, including target-only ghost ray | User confirmed |
 
-Both APKs were built with the installed Unity 6000.6.6f1 Android toolchain and real Unity 6 Build Profiles, then installed and launched through ADB. Outputs are `Builds/InteractionLab/SpatialMAS_InteractionLab.apk` (65,661,602 bytes; `com.spatialmas.interactionlab`) and `Builds/InteractionLab/SpatialMAS_Swarmalators.apk` (57,543,786 bytes; `com.spatialmas.pickingtest`). Reports are in `Logs/PickingIteration`.
+Both APKs were built with the installed Unity 6000.6.8f1 Android toolchain and real Unity 6 Build Profiles, then installed and launched through ADB. Outputs are `Builds/InteractionLab/SpatialMAS_InteractionLab.apk` (65,661,602 bytes; `com.spatialmas.interactionlab`) and `Builds/InteractionLab/SpatialMAS_Swarmalators.apk` (57,543,786 bytes; `com.spatialmas.pickingtest`). Reports are in `Logs/PickingIteration`.
 
 After switching Gradle homes on this workstation, a stale `.utmp/RelWithDebInfo/6w3u4uz5/arm64-v8a/.ninja_deps` still recorded an obsolete long header path. Removing that generated dependency file after the failed build allowed a fresh dependency scan and a successful main build. Do not delete the global Gradle caches or traverse cache junctions when cleaning local build artifacts.
 

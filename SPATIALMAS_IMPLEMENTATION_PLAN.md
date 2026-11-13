@@ -6,7 +6,7 @@
 
 > [!IMPORTANT]
 > **Commercial & IP Clean-Room Mandate ([Grant Qualification Project](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/pedro-lucas-spatialMAS-qualification-project-2026.pdf))**  
-> To ensure clean IP transfer and Freedom to Operate (FTO) with *Inven2* (UiO TTO), **SpatialMAS** must be implemented as a **100% standalone, clean-room proprietary architecture** in Unity 6 (`6000.6.6f1`). It must **not** copy the messy academic scripts or legacy `OculusIntegration` dependencies from [`human_swarm_ims`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_ims), while maintaining **100% protocol backward-compatibility** with the published [ACSOS 2025 OSC API](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/ACSOS2025___Human_Swarm_IMS_Artifact_camera_ready-public-INCONFERENCE.pdf) so all scripts in [`human_swarm_examples`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_examples) work out of the box.
+> To ensure clean IP transfer and Freedom to Operate (FTO) with *Inven2* (UiO TTO), **SpatialMAS** must be implemented as a **100% standalone, clean-room proprietary architecture** in Unity 6 (`6000.6.8f1`). It must **not** copy the messy academic scripts or legacy `OculusIntegration` dependencies from [`human_swarm_ims`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_ims), while maintaining **100% protocol backward-compatibility** with the published [ACSOS 2025 OSC API](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/ACSOS2025___Human_Swarm_IMS_Artifact_camera_ready-public-INCONFERENCE.pdf) so all scripts in [`human_swarm_examples`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/helping_sources/human_swarm_examples) work out of the box.
 
 ---
 
@@ -38,7 +38,7 @@ All key product and engineering decisions have been locked in:
 To allow an agentic AI (such as OpenAI GPT 6.1 Sol or Antigravity) to generate, wire, compile, and test the entire Unity project in **one single autonomous run** without manual Unity Inspector clicking:
 
 ### 1.1 Required Software & SDKs
-1. **Unity 6 (`6000.6.6f1`)** via Unity Hub (matching [`ProjectVersion.txt`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/ProjectSettings/ProjectVersion.txt)):
+1. **Unity 6 (`6000.6.8f1`)** via Unity Hub (matching [`ProjectVersion.txt`](file:///c:/Users/pitte/Documents/Repositories/spatialmas_unity/ProjectSettings/ProjectVersion.txt)):
    - **Android Build Support** module installed (with **Android SDK & NDK Tools** and **OpenJDK**).
    - **Windows Build Support (IL2CPP)** (or Mac/Linux Build Support as needed).
 2. **Android Platform Tools (`adb`)** in your system `PATH` (for automated Quest 3 APK sideloading and logcat verification).
@@ -456,7 +456,7 @@ Below is the **exact, self-contained prompt** you can give to your AI coding age
 
 ````markdown
 # ROLE & OBJECTIVE
-You are a Principal Unity 6 XR Systems Architect & Audio DSP Engineer. Your task is to implement the complete, production-ready **SpatialMAS** application in this Unity `6000.6.6f1` repository (`c:\Users\pitte\Documents\Repositories\spatialmas_unity`) in **one single autonomous run** with zero compiler errors, full EditMode & PlayMode automated tests, a deterministic Editor Prefab/Scene builder, companion Python verification tools, CI/CD workflow, and full developer/researcher documentation in `/docs`.
+You are a Principal Unity 6 XR Systems Architect & Audio DSP Engineer. Your task is to implement the complete, production-ready **SpatialMAS** application in this Unity `6000.6.8f1` repository (`c:\Users\pitte\Documents\Repositories\spatialmas_unity`) in **one single autonomous run** with zero compiler errors, full EditMode & PlayMode automated tests, a deterministic Editor Prefab/Scene builder, companion Python verification tools, CI/CD workflow, and full developer/researcher documentation in `/docs`.
 
 # CRITICAL TOKEN & CLEAN-ROOM RULES
 1. **DO NOT read or scan `helping_sources/human_swarm_ims`**. It contains 180+ legacy files from unrelated projects that will waste your context window. Everything you need from the legacy protocol is specified in `spatialmas_implementation_plan.md`.

@@ -1,6 +1,6 @@
 # SpatialMAS — Multiplatform XR Multi-Agent Interaction & Spatial Sonification Platform
 
-**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent simulation and procedural spatial audio research prototype built in **Unity 6 (`6000.6.6f1`)**.
+**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent simulation and procedural spatial audio research prototype built in **Unity 6 (`6000.6.8f1`)**.
 
 Developed under the University of Oslo (UiO) Qualification Grant (*SpatialMAS*, 2026), it provides:
 1. **Desktop and OpenXR implementation**: Includes desktop controls and Android/PC OpenXR setup for head tracking and tracked-hand interaction. Headset passthrough, performance, and platform builds require validation on the target hardware. The **Apple Vision Pro (`visionOS`) build menu is experimental scaffolding**; a visionOS XR provider and device validation are still required.
@@ -19,9 +19,9 @@ All runtime and saved poses use Unity XYZ (X right, Y up, Z forward), meters, an
 
 ---
 
-## Quickstart (Unity 6000.6.6f1)
+## Quickstart (Unity 6000.6.8f1)
 
-1. Open this repository in **Unity `6000.6.6f1`**.
+1. Open this repository in **Unity `6000.6.8f1`**.
 2. In the top Unity menu bar, click:
    **`SpatialMAS -> 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`**
    *(Alias: `SpatialMAS -> Build Full SpatialMAS Scene & Prefabs`)*

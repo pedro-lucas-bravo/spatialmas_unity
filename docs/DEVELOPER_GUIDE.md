@@ -25,7 +25,7 @@ SpatialMAS uses strict **Assembly Definitions (`.asmdef`)** under `Assets/_Spati
 
 ## 2. One-Click Project & Scene Generation
 
-You never need to manually wire GameObjects in the Unity Inspector. After opening the project in **Unity 6 (`6000.6.6f1`)**:
+You never need to manually wire GameObjects in the Unity Inspector. After opening the project in **Unity 6 (`6000.6.8f1`)**:
 1. In the top menu bar, click **`SpatialMAS > 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`** (or **`SpatialMAS > Build Full SpatialMAS Scene & Prefabs`**).
 2. This executes [`SpatialMASEditorBuilder.BuildAll()`](../Assets/_SpatialMAS/Editor/SpatialMASEditorBuilder.cs), which deterministically creates:
    - `Assets/_SpatialMAS/SpatialMASConfig.asset` & `Assets/_SpatialMAS/Resources/DefaultSpatialMASConfig.asset`

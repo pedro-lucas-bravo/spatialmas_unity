@@ -2,7 +2,7 @@
 
 ## 1. Overview & Clean-Room Mandate
 
-**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent interaction and spatial sonification research prototype built in **Unity 6 (`6000.6.6f1`)**.
+**SpatialMAS** is a Mixed Reality (MR) and Virtual Reality (VR) multi-agent interaction and spatial sonification research prototype built in **Unity 6 (`6000.6.8f1`)**.
 
 The project targets an independent XR runtime with legacy HS-ims OSC compatibility. Compatibility regressions exercise selected published signatures; commercial readiness, licensing status, and hardware support are separate validation work, not guarantees supplied by this architecture.
 
@@ -17,7 +17,7 @@ flowchart TD
         WebBrowser["Laptop Web Browser\n(http://<headset-ip>:8080/ CSV Download)"]
     end
 
-    subgraph Runtime["SpatialMAS.Runtime Assembly (Unity 6000.6.6f1)"]
+    subgraph Runtime["SpatialMAS.Runtime Assembly (Unity 6000.6.8f1)"]
         Boot["SpatialMASBootstrapper\n(Composition Root)"]
         Bus["SimulationCommandBus\n(Unified Event & Command Router)"]
         Mapper["SpatialCoordinateMapper\nLegacy XZY mm / Canonical XYZ mm <-> Unity meters"]

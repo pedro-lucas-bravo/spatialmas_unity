@@ -7,7 +7,7 @@ This guide covers the **SpatialMAS research prototype** in the Unity Editor, des
 ## 1. Prerequisites & Installed Tools
 
 ### 1.1 Unity Editor & Modules
-- **Unity Version**: `6000.6.6f1` (Unity 6)
+- **Unity Version**: `6000.6.8f1` (Unity 6)
 - **Required Unity Hub Modules** (install the modules matching your target hardware):
   - **Windows / Mac / Linux Dedicated Build Support** (for Desktop mode & Editor testing)
   - **Android Build Support** + **OpenJDK** + **Android SDK & NDK Tools** (for Meta Quest 3 / 3S / Pro, Pico 4 Ultra, Android XR)
@@ -39,7 +39,7 @@ SpatialMAS includes an automated Editor builder ([`SpatialMASEditorBuilder.cs`](
 You can trigger the builder either from the **Unity Editor UI** or directly from your terminal using the **Unity CLI (`unity`)**.
 
 ### Option A: From the Unity Editor Menu
-1. Open the project in Unity `6000.6.6f1`.
+1. Open the project in Unity `6000.6.8f1`.
 2. In the top menu bar, click:
    - **`SpatialMAS > 1. Build Complete Project (Materials, Prefabs, OpenXR & Main Scene)`** *(or the alias **`SpatialMAS > Build Full SpatialMAS Scene & Prefabs`**)*
    - **`SpatialMAS > 2. Configure OpenXR & Multiplatform XR Settings`** *(or **`SpatialMAS > Configure Multiplatform Build Settings`**)*
