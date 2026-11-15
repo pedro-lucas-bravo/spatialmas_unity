@@ -57,15 +57,29 @@ class OscVerifierTests(unittest.TestCase):
 
     def test_failed_handshake_does_not_send_cleanup_to_existing_scene(self):
         client = Mock()
+
+        def fail_handshake(*args, request, target_ip):
+            request()
+            raise TimeoutError()
+
         with patch.object(verifier.socket, "socket") as socket_factory, \
                 patch.object(verifier.udp_client, "SimpleUDPClient", return_value=client), \
-                patch.object(verifier, "wait_for_handshake", side_effect=TimeoutError()):
+                patch.object(verifier, "wait_for_handshake", side_effect=fail_handshake):
             receiver = socket_factory.return_value.__enter__.return_value
             receiver.getsockname.return_value = ("0.0.0.0", 6012)
             with self.assertRaises(TimeoutError):
                 verifier.run_verification("127.0.0.1", 6011, 6012, 0, reply_ip="127.0.0.1")
         client.send_message.assert_called_once_with("/connect", ["127.0.0.1", 6012])
         client.send.assert_not_called()
+
+    def test_handshake_resends_after_first_request_is_lost(self):
+        receiver = Mock()
+        request = Mock()
+        ack = verifier.build_message("/test/alive/", ["127.0.0.1", 6012, "OK"])
+        receiver.recvfrom.side_effect = [socket.timeout(), (ack.dgram, ("127.0.0.1", 6011))]
+        with patch.object(verifier.time, "monotonic", side_effect=[0, 0, 0, 0, 1, 1, 1]):
+            verifier.wait_for_handshake(receiver, "127.0.0.1", 6012, 3, request=request)
+        self.assertEqual(request.call_count, 2)
 
     def test_dry_run_opens_no_network_socket(self):
         with patch.object(verifier.socket, "socket", side_effect=AssertionError("Network used during dry run")):
@@ -111,6 +125,13 @@ class OscVerifierTests(unittest.TestCase):
         receiver.recvfrom.side_effect = [(builder.build().dgram, ("127.0.0.1", 6011)), socket.timeout()]
         with self.assertRaises(TimeoutError):
             verifier.wait_for_handshake(receiver, "127.0.0.1", 6012, 0.5)
+
+    def test_acknowledgment_from_a_different_host_is_ignored(self):
+        ack = verifier.build_message("/test/alive/", ["192.168.137.1", 6012, "OK"])
+        receiver = Mock()
+        receiver.recvfrom.side_effect = [(ack.dgram, ("127.0.0.1", 49152)), socket.timeout()]
+        with self.assertRaisesRegex(TimeoutError, "Ignored UDP packets from other sources: 127.0.0.1"):
+            verifier.wait_for_handshake(receiver, "192.168.137.1", 6012, 0.5, target_ip="192.168.137.95")
 
 
 if __name__ == "__main__":

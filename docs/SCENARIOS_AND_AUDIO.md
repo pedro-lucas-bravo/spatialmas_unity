@@ -18,7 +18,9 @@ flowchart LR
    - Standard MIDI scripts trigger `NoteOn (1)` and `NoteOff (0)` via `/agents/audio/synth/note`.
    - Continuous scripts set `CC 2` (Frequency Hz) and `CC 16` (Gain) without `NoteOn`. These may arrive in either order. Positive gain starts/resumes the tone after frequency control is selected; a note message returns the voice to note-driven ADSR behavior.
 
-The proxy owns the single active `AudioListener`. Head lock follows the physical camera; unlocking allows OSC position/rotation changes to affect the actual listening pose. Unity's default 3D panning/rolloff is configured; an HRTF spatializer is not bundled.
+The proxy owns the single active `AudioListener`. Head lock follows the physical camera, and unlocking lets OSC change the listening pose. The synth multiplies Unity's mono carrier by the generated waveform, preserving the per-channel panning and distance gain already applied to the carrier. Bell and Click clips use their own 3D source.
+
+SpatialMAS uses Unity's built-in 3D mixing with **Spatial Blend** set to 1 and logarithmic distance rolloff. The separate **Spatialize** checkbox routes a source through the spatializer plug-in selected in Project Settings > Audio. The project uses the built-in stereo mix and currently ships without a binaural HRTF plug-in.
 
 ---
 

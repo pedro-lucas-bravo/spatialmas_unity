@@ -1,3 +1,4 @@
+using System.Reflection;
 using NUnit.Framework;
 using SpatialMAS.Audio;
 using UnityEngine;
@@ -6,6 +7,34 @@ namespace SpatialMAS.Tests.EditMode
 {
     public class NativeDspSynthesizerTests
     {
+        [Test]
+        public void AudioFilterPreservesSpatialGainInEachCarrierChannel()
+        {
+            var go = new GameObject("SpatialCarrierTest");
+            try
+            {
+                var synth = go.AddComponent<NativeDspSynthesizer>();
+                synth.ReverbMix = 0f;
+                synth.SetNote(1, 69);
+                var buffer = new float[4096];
+                for (int i = 0; i < buffer.Length; i += 2)
+                {
+                    buffer[i] = 0.5f;
+                    buffer[i + 1] = 0.125f;
+                }
+
+                var filter = typeof(NativeDspSynthesizer).GetMethod("OnAudioFilterRead",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Assert.NotNull(filter);
+                filter.Invoke(synth, new object[] { buffer, 2 });
+
+                Assert.Greater(Rms(buffer), 0.01f);
+                for (int i = 0; i < buffer.Length; i += 2)
+                    Assert.AreEqual(buffer[i], 4f * buffer[i + 1], 0.00001f);
+            }
+            finally { Object.DestroyImmediate(go); }
+        }
+
         [TestCase(true)]
         [TestCase(false)]
         public void ContinuousTone_StartsRegardlessOfFrequencyGainOrder(bool frequencyFirst)

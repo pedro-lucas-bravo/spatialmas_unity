@@ -167,10 +167,7 @@ namespace SpatialMAS.Audio
                 _audioSource.maxDistance = 15.0f;
                 _audioSource.dopplerLevel = 0.15f;
 
-                if (_audioSource.clip == null)
-                {
-                    _audioSource.clip = GetOrCreateSharedCarrierClip(_cachedSampleRate);
-                }
+                _audioSource.clip = GetOrCreateSharedCarrierClip(_cachedSampleRate);
             }
         }
 
@@ -323,14 +320,16 @@ namespace SpatialMAS.Audio
 
         private void OnAudioFilterRead(float[] data, int channels)
         {
-            SynthesizeBlock(data, channels, _cachedSampleRate);
+            SynthesizeBlock(data, channels, _cachedSampleRate, applyCarrier: true);
         }
 
         /// <summary>
-        /// Synthesizes an interleaved audio block. Callable both from Unity's audio thread (OnAudioFilterRead)
-        /// and directly from deterministic EditMode unit tests.
+        /// Synthesizes an interleaved audio block without Unity's carrier for deterministic tests.
         /// </summary>
         public void SynthesizeBlock(float[] data, int channels, int sampleRate)
+            => SynthesizeBlock(data, channels, sampleRate, applyCarrier: false);
+
+        private void SynthesizeBlock(float[] data, int channels, int sampleRate, bool applyCarrier)
         {
             if (data == null || channels <= 0) return;
             if (sampleRate <= 0) sampleRate = 48000;
@@ -500,7 +499,9 @@ namespace SpatialMAS.Audio
                 int frameOffset = f * channels;
                 for (int c = 0; c < channels; c++)
                 {
-                    data[frameOffset + c] = outSample;
+                    int sampleIndex = frameOffset + c;
+                    // Unity can apply panning and distance gain to the carrier before this filter.
+                    data[sampleIndex] = applyCarrier ? data[sampleIndex] * outSample : outSample;
                 }
             }
         }

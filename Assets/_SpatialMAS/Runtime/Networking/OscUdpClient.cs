@@ -91,7 +91,12 @@ namespace SpatialMAS.Networking
             }
             catch (Exception ex)
             {
-                if (!(ex is SocketException))
+                if (ex is SocketException socketError)
+                {
+                    if (message.Address == "/test/alive/")
+                        Debug.LogWarning($"[OscUdpClient] Handshake reply to {targetEp} failed: {socketError.SocketErrorCode} ({socketError.NativeErrorCode}).");
+                }
+                else
                 {
                     Debug.LogWarning($"[OscUdpClient] Send error: {ex.Message}");
                 }

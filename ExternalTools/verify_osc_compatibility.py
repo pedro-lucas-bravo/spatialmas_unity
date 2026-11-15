@@ -48,22 +48,46 @@ class DryRunClient:
         self.message_count += len(messages)
 
 
-def wait_for_handshake(receiver, reply_ip, reply_port, timeout):
+def wait_for_handshake(receiver, reply_ip, reply_port, timeout, *, request=None, target_ip=None):
     deadline = time.monotonic() + timeout
+    next_request = 0
+    pose_count = 0
+    other_sources = set()
+    unexpected_reply = None
     while time.monotonic() < deadline:
-        receiver.settimeout(max(0.001, deadline - time.monotonic()))
+        now = time.monotonic()
+        if request is not None and now >= next_request:
+            request()
+            next_request = now + 1.0
+        wait_until = min(deadline, next_request) if request is not None else deadline
+        receiver.settimeout(max(0.001, wait_until - time.monotonic()))
         try:
-            data, _ = receiver.recvfrom(65535)
+            data, peer = receiver.recvfrom(65535)
         except socket.timeout:
-            break
+            if request is None:
+                break
+            continue
+        if target_ip is not None and peer[0] != target_ip:
+            other_sources.add(peer[0])
+            continue
         for timed_message in osc_packet.OscPacket(data).messages:
             message = timed_message.message
-            if message.address == "/test/alive/" and message.params == [reply_ip, reply_port, "OK"]:
-                return
-    raise TimeoutError("No matching Unity /test/alive/ reply; check Play mode, IP, ports and firewall.")
+            if message.address == "/test/alive/":
+                if message.params == [reply_ip, reply_port, "OK"]:
+                    return
+                unexpected_reply = message.params
+            elif message.address in ("/xr/user/pose", "/xr/hands/pose"):
+                pose_count += 1
+    detail = f" Received {pose_count} XR pose messages." if pose_count else ""
+    if unexpected_reply is not None:
+        detail += f" Last acknowledgement payload: {unexpected_reply!r}."
+    if other_sources:
+        detail += f" Ignored UDP packets from other sources: {', '.join(sorted(other_sources))}."
+    raise TimeoutError(f"No matching Unity /test/alive/ reply on UDP {reply_port}.{detail}")
 
 
-def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply_ip=None, timeout=3.0, keep_scene=False):
+def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply_ip=None, timeout=3.0,
+                     keep_scene=False, handshake_only=False):
     if dry_run:
         client = DryRunClient()
         send_sequence(client, "127.0.0.1", local_port, duration_sec, dry_run=True, keep_scene=keep_scene)
@@ -71,17 +95,21 @@ def run_verification(ip, port, local_port, duration_sec, *, dry_run=False, reply
         return
 
     print(f"[SpatialMAS Verifier] Connecting to SpatialMAS at {ip}:{port}...")
+    target_ip = socket.gethostbyname(ip)
     if reply_ip is None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route:
-            route.connect((ip, port))
+            route.connect((target_ip, port))
             reply_ip = route.getsockname()[0]
-    client = udp_client.SimpleUDPClient(ip, port)
+    client = udp_client.SimpleUDPClient(target_ip, port)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
         receiver.bind(("0.0.0.0", local_port))
         reply_port = receiver.getsockname()[1]
-        client.send_message("/connect", [reply_ip, reply_port])
-        wait_for_handshake(receiver, reply_ip, reply_port, timeout)
+        wait_for_handshake(receiver, reply_ip, reply_port, timeout,
+                           request=lambda: client.send_message("/connect", [reply_ip, reply_port]),
+                           target_ip=target_ip)
         print("[SpatialMAS Verifier] Unity handshake acknowledged.")
+        if handshake_only:
+            return
         send_sequence(client, reply_ip, reply_port, duration_sec, keep_scene=keep_scene)
     print("[SpatialMAS Verifier] Handshake passed; traffic sequence sent.")
     if keep_scene:
@@ -200,6 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=float, default=5.0, help="Duration of orbital streaming test in seconds")
     parser.add_argument("--dry-run", action="store_true", help="Validate packet encoding without network access")
     parser.add_argument("--keep-scene", action="store_true", help="Leave demonstration objects in Unity instead of removing them on exit")
+    parser.add_argument("--handshake-only", action="store_true", help="Check the reply without sending the demonstration")
     parser.add_argument("--reply-ip", help="This workstation's IP reachable by Unity (normally detected automatically)")
     parser.add_argument("--timeout", type=float, default=3.0, help="Seconds to wait for the Unity handshake")
     args = parser.parse_args()
@@ -207,7 +236,8 @@ if __name__ == "__main__":
         parser.error("duration must be nonnegative and timeout must be positive")
     try:
         run_verification(args.ip, args.port, args.local_port, args.duration,
-                         dry_run=args.dry_run, reply_ip=args.reply_ip, timeout=args.timeout, keep_scene=args.keep_scene)
+                         dry_run=args.dry_run, reply_ip=args.reply_ip, timeout=args.timeout, keep_scene=args.keep_scene,
+                         handshake_only=args.handshake_only)
     except KeyboardInterrupt:
         parser.exit(130, "[SpatialMAS Verifier] Interrupted.\n")
     except (OSError, TimeoutError) as error:

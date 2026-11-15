@@ -179,6 +179,22 @@ The demonstration uses explicit Unity-world millimeters (50 mm spheres, 70 mm cu
 
 You can also run any script from `helping_sources/human_swarm_examples/python/` (e.g., `swarmalators/main.py` or `attractors_repellers/main.py`) directly against port `6011`!
 
+For steps 2–4 of the [OSC bridge headset check](https://trello.com/c/LXGVDEUR), stop the verifier and run the interactive menu from the repository root:
+
+```powershell
+python .\ExternalTools\check_osc_interactive.py --ip 192.168.137.95 --reply-ip 192.168.137.1
+```
+
+Replace the example addresses with your Quest and PC IPs. For Link on the same PC, run the command without the IP flags. Keep the app visible while following the prompts. Use a disposable session because the menu switches scenarios and step 4 starts and stops a test recording. After the recording stops, step 4 clears the test crowd and boundary and returns to External OSC. Headset pose telemetry continues while SpatialMAS is active.
+
+For the [spatial audio headset check](https://trello.com/c/Mx5qHOek), close the other OSC tools and start with an empty External OSC scene. Run:
+
+```powershell
+python .\ExternalTools\check_spatial_audio.py --ip 192.168.137.95 --reply-ip 192.168.137.1
+```
+
+Use the same IP rules as above. The menu covers fixed-source panning and distance rolloff, detached and head-locked listener behavior, synth and sound bank controls, and Musical Encounters. The script uses a live head pose to place the two test sources. Keep the headset awake and SpatialMAS visible, and note what you hear separately in Link and native Quest. The script removes its test sounds before returning to the menu.
+
 ### 5.3 Receiving Live Human XR Embodiment Telemetry in Python (`Port 6012`)
 While a user wears the headset (or navigates in Desktop mode), [`XRUserEmbodimentBridge`](../Assets/_SpatialMAS/Runtime/XR/XRUserEmbodimentBridge.cs) and [`OscProtocolRouter`](../Assets/_SpatialMAS/Runtime/Networking/OscProtocolRouter.cs) stream live interaction and 6DoF pose telemetry via UDP OSC to `RemoteIp:RemotePort` (default `127.0.0.1:6012`, updated automatically when `/connect` or `/test/alive` is received):
 - `/xr/user/pose <x_mm> <y_mm> <z_mm> <qx> <qy> <qz> <qw>` (25 Hz head 6DoF in arena `mm`)
@@ -188,6 +204,40 @@ While a user wears the headset (or navigates in Desktop mode), [`XRUserEmbodimen
 - `/agents/touch/id <agentId> <touchState:1|0> <otherAgentId>`
 - `/boundary/event/id <agentId> <boundaryId> <0=enter,1=exit>` & `/boundaries/Touched <agentId> <boundaryId>`
 - `/agents/localcomm/recv <receiverId> <senderId> <msg>` & `/agents/localcomm/id <type> <senderId> <receiverId> <dist_mm> ...`
+
+### 5.4 Troubleshooting OSC timeouts on Quest
+
+Stop Unity Editor Play mode and any other OSC receiver on the PC. Wear the Quest and keep the native SpatialMAS app visible throughout the test. The headset can respond on the network while asleep, while the Unity update loop that handles OSC requests and publishes poses pauses.
+
+Read the Quest's IP from the **Session** tab and use the PC's IP on the same network for `--reply-ip`. From the repository root, run the handshake by itself. The example addresses below are for a Quest connected to a Windows mobile hotspot.
+
+```powershell
+python -m pip install -r .\ExternalTools\requirements.txt
+python .\ExternalTools\verify_osc_compatibility.py --ip 192.168.137.95 --reply-ip 192.168.137.1 --handshake-only --timeout 8
+```
+
+The PC sends `/connect` to the Quest on UDP `6011`. SpatialMAS replies with `/test/alive/` containing the PC reply IP, the reply port (default `6012`), and `"OK"`. The verifier retries and accepts replies from the target IP. It reports packets from other sources separately. For example, poses from `127.0.0.1` can come from a local Editor instance.
+
+If the handshake times out, record a short session on the Quest, run the handshake again, and inspect its `osc_traffic_*.csv` after stopping the recording:
+
+- If there is no `IN,/connect` row, verify that SpatialMAS stayed in the foreground and that the target IP and listen port match the native app.
+- If you see `IN,/connect` and `OUT,/test/alive/`, the Quest processed the request and attempted a reply. Check the logged IP and port against the PC interface and receiver. The `OUT` row records the send attempt. It does not confirm delivery.
+- If the verifier receives Quest poses but still times out, check whether it reports an unexpected acknowledgement payload. Pose messages verify that some UDP traffic reaches the PC, while the handshake requires the expected reply.
+
+#### Check which Python PowerShell and VS Code use
+
+Run these commands in the terminal that fails. Repeat them in a terminal where the verifier works and compare the executable and package paths.
+
+```powershell
+Get-Command python -All | Select-Object CommandType, Source
+python -c "import sys, pythonosc; print(sys.executable); print(pythonosc.__file__)"
+```
+
+Conda's automatic `base` activation and VS Code's selected interpreter can change which executable `python` resolves to. Windows Firewall rules can be scoped to an executable and network profile. If one interpreter works and another times out, check the inbound UDP rule for the failing executable, the active network profile, and the reply port. An allowed interpreter can be invoked by its full path for comparison.
+
+On the development PC, Windows PowerShell was selecting Miniconda, and its UDP rule covered Private networks only. Python 3.12 at `C:\Python312\python.exe` had a rule covering both Private and Public networks. The native handshake passed from a fresh PowerShell after disabling automatic Conda activation, installing `python-osc` for Python 3.12, and confirming that plain `python` resolved to it.
+
+If you want the system Python by default, run `conda config --set auto_activate_base false`, select the intended executable with **Python: Select Interpreter** in VS Code, and open a fresh terminal. Run the dependency install with that interpreter. You can still activate Conda explicitly for other work.
 
 ---
 
