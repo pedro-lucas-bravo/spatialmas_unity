@@ -128,10 +128,12 @@ namespace SpatialMAS.Core
 
             DesktopRig = GetOrAddComponent<DesktopInteractionRig>(gameObject);
             DesktopRig.Initialize(_mainCamera, CommandBus);
+            DesktopRig.EnableDesktopOverview(_config.scenarioCenter);
 
             // 4. Pooled World Entities & 3D Audio Listener Proxy
             AgentManager = GetOrAddChildComponent<AgentManager>("AgentManager");
             AgentManager.Initialize(CommandBus, _agentMaterial, _boundaryMaterial);
+            DesktopRig.SetAgentManager(AgentManager);
 
             BoundaryManager = GetOrAddChildComponent<BoundaryManager>("BoundaryManager");
             BoundaryManager.Initialize(CommandBus, AgentManager, _boundaryMaterial);

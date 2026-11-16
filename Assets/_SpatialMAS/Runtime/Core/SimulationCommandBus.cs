@@ -1,4 +1,5 @@
 using System;
+using SpatialMAS.Environment;
 using UnityEngine;
 
 namespace SpatialMAS.Core
@@ -45,6 +46,11 @@ namespace SpatialMAS.Core
         public event Action<int, AgentShapeType, Vector3, float> OnAddBoundaryUnity;
         public event Action<int, Vector3, Vector3> OnAddBoxBoundaryUnity;
         public event Action<int, Vector3, float> OnUpdateBoundaryUnity;
+        public event Action<int, Vector3, float> OnBoundaryGeometryChanged;
+        public event Action<int, BoundaryHandleShape, float, Color> OnConfigureBoundaryHandle;
+        public event Action<int> OnRemoveBoundaryHandle;
+        public event Action<int, Vector3> OnSetBoundaryHandleOffsetUnity;
+        public event Action<int, Vector3> OnBoundaryMovedByUser;
         public event Action<int, Vector3> OnSetBoundaryDimensionsUnity; // cube full extents; sphere x is radius
         public event Action<int, Color, float> OnSetBoundaryVisuals; // id, color, alpha (-1 = keep existing)
         public event Action<int> OnRemoveBoundary; // id = -1 means remove all
@@ -160,6 +166,20 @@ namespace SpatialMAS.Core
 
         public void UpdateBoundaryUnity(int id, Vector3 posUnity, float radiusOrHalfExtentMeters)
             => OnUpdateBoundaryUnity?.Invoke(id, posUnity, radiusOrHalfExtentMeters);
+
+        public void EmitBoundaryGeometryChanged(int id, Vector3 centerMeters, float sizeMeters)
+            => OnBoundaryGeometryChanged?.Invoke(id, centerMeters, sizeMeters);
+
+        public void ConfigureBoundaryHandle(int id, BoundaryHandleShape shape, float sizeMeters, Color color)
+            => OnConfigureBoundaryHandle?.Invoke(id, shape, sizeMeters, color);
+
+        public void RemoveBoundaryHandle(int id) => OnRemoveBoundaryHandle?.Invoke(id);
+
+        public void SetBoundaryHandleOffsetUnity(int id, Vector3 offsetMeters)
+            => OnSetBoundaryHandleOffsetUnity?.Invoke(id, offsetMeters);
+
+        public void EmitBoundaryMovedByUser(int id, Vector3 centerMeters)
+            => OnBoundaryMovedByUser?.Invoke(id, centerMeters);
 
         public void SetBoundaryDimensionsUnity(int id, Vector3 dimensionsMeters)
             => OnSetBoundaryDimensionsUnity?.Invoke(id, dimensionsMeters);

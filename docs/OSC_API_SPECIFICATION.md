@@ -125,7 +125,7 @@ The `/world` aliases retain the endpoint signatures in Section 2.1, with physica
 | `/scenario/center` | `(x_mm,y_mm,z_mm)` | Physical Unity XYZ spawn center for the **next scenario load/reset**. Existing objects and the reference are unchanged. |
 | `/scenario/layout` | `(int layout)` | `0` Compact; `1` RoomScale. Chooses explicit physical parameters for the **next scenario load/reset**; never rescales an active scene. |
 | `/scenario/load` | `(int scenarioId)` | Switches active scenario: `0`=External OSC, `1`=Crowd Avoidance, `2`=3D Swarmalators, `3`=Attractors & Repellers, `4`=Musical Encounters, `5`=Self-Assembly. |
-| `/scenario/param` | `(string name, float value)` | Updates a live scenario parameter (e.g. `"J"`, `"K"`, `"speed"`, `"personalSpace"`, `"tempo"`). |
+| `/scenario/param` | `(string name, float value)` | Updates a parameter of the active scenario. See [parameter names, ranges, and examples](SCENARIOS_AND_AUDIO.md#control-built-in-scenarios-over-osc). |
 | `/logging/state` | `(int recording)` | `1` = Starts a new CSV recording session; `0` = Flushes and stops recording. |
 
 ---
@@ -170,3 +170,18 @@ The `/world` aliases retain the endpoint signatures in Section 2.1, with physica
 Calibration changes never rebase existing objects or listener poses. A head-locked listener follows the physical camera; a detached listener retains its explicit Unity-world pose until an explicit listener command changes it. Timestamps, musical timing, personal-space radii and participant tracking are independent of scenario layout selection.
 
 `/boundary/scale/id` takes an existing sphere's **radius**, or a cube's three **full dimensions**, in mm. Velocity-mode agents accept explicit position corrections; Follow speed `0` holds position.
+
+### Move a boundary with a handle
+
+A boundary can have one optional grabbable handle identified by the boundary ID. Its position is the boundary center plus an offset that defaults to zero.
+
+| Address | Arguments | Direction and behavior |
+| --- | --- | --- |
+| `/boundary/handle/configure/id` | `(int boundaryId, int shape, float fullSize_mm, string hexColor)` | IN. Creates or replaces the handle for an existing boundary. Shapes are `0` sphere, `1` cube, and `2` diamond. Resend to change its appearance. |
+| `/world/boundary/handle/offset/id` | `(int boundaryId, float dx_mm, float dy_mm, float dz_mm)` | IN. Sets the handle's displacement from the boundary center in Unity XYZ millimeters. Send zeros to recenter it. |
+| `/world/boundary/position/id` | `(int boundaryId, float x_mm, float y_mm, float z_mm)` | IN and OUT. Absolute boundary center in Unity XYZ millimeters. |
+| `/boundary/handle/remove/id` | `(int boundaryId)` | IN. Removes the handle and leaves the boundary in place. Removing or replacing the boundary also removes its handle. |
+
+The unprefixed position and offset aliases use legacy X/depth/up axes. After registering with `/connect`, subscribe to one position address. A user drag moves the boundary and emits its absolute center on both position aliases. The handle keeps its offset during user drags and inbound boundary moves. An inbound offset moves only the handle. Inbound position and offset commands produce no motion echo.
+
+For built-in Musical Encounters, boundary `1` starts with a green diamond. Send `/boundary/handle/configure/id 1 2 130 "#ff00ff"` for a 130 mm magenta diamond. Send `/world/boundary/handle/offset/id 1 0 300 0` to put it 30 cm above the center, then `/world/boundary/position/id 1 500 1200 800` to place the center at Unity XYZ (0.5, 1.2, 0.8) meters. The scenario derives autonomous sphere positions from the arena center and their local simulation positions. The red musical cubes stay independent. A custom external simulation can apply its own behavior using the boundary center received from a drag. Set the next built-in spawn center separately with `/scenario/center`.

@@ -5,6 +5,7 @@ using NUnit.Framework;
 using SpatialMAS.Agents;
 using SpatialMAS.Audio;
 using SpatialMAS.Core;
+using SpatialMAS.Environment;
 using SpatialMAS.UI;
 using SpatialMAS.XR;
 using Unity.XR.CoreUtils;
@@ -418,9 +419,114 @@ namespace SpatialMAS.Tests.PlayMode
             Vector2 pointer = camera.WorldToScreenPoint(original);
             ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left));
             Assert.IsTrue(agent.IsGrabbedByUser);
+            Assert.IsNull(rig.transform.Find("Desktop Drag Cue"));
             Assert.That(Vector3.Distance(original, agent.transform.position), Is.LessThan(0.0001f));
             ProcessMouse(rig, new MouseState { position = pointer });
             Assert.IsFalse(agent.IsGrabbedByUser);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MouseSphereDrag_ShowsPlaneCueUntilReleaseOrTargetLoss(bool forceGrab)
+        {
+            var bus = new SimulationCommandBus();
+            var rig = CreateDesktopRig(bus, out var camera);
+            var agent = CreateAgent(bus, AgentShapeType.Sphere, new Vector3(0f, 0f, 3f));
+            agent.SetInteractable(!forceGrab);
+            Vector2 pointer = camera.WorldToScreenPoint(agent.transform.position);
+            Keyboard keyboard = forceGrab ? InputSystem.AddDevice<Keyboard>() : null;
+            try
+            {
+                if (keyboard != null) InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.LeftAlt));
+                ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left), keyboard);
+                var cue = rig.transform.Find("Desktop Drag Cue");
+                Assert.IsNotNull(cue);
+                Assert.IsTrue(cue.gameObject.activeSelf);
+                Assert.IsNull(cue.GetComponentInChildren<Collider>());
+                Assert.That(Vector3.Angle(cue.forward, camera.transform.forward), Is.LessThan(0.01f));
+
+                if (forceGrab)
+                {
+                    agent.gameObject.SetActive(false);
+                    ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left), keyboard);
+                }
+                else
+                    ProcessMouse(rig, new MouseState { position = pointer });
+                Assert.IsFalse(cue.gameObject.activeSelf);
+            }
+            finally
+            {
+                if (keyboard != null) InputSystem.RemoveDevice(keyboard);
+            }
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void MouseFacePlaneDrag_LocksClickedCubeAxisAndBlocksModeChanges(bool topFace)
+        {
+            var bus = new SimulationCommandBus();
+            var rig = CreateDesktopRig(bus, out var camera);
+            Vector3 center = new Vector3(0f, 0f, 3f);
+            var agent = CreateAgent(bus, AgentShapeType.Cube, center);
+            rig.EnableDesktopOverview(center);
+            Assert.IsTrue(rig.IsOrthographic && rig.UsesFacePlane);
+            Quaternion angle = Quaternion.Euler(topFace ? 65f : 10f, 0f, 0f);
+            camera.transform.SetPositionAndRotation(center - angle * Vector3.forward * 8f, angle);
+            Vector2 pointer = camera.WorldToScreenPoint(center);
+            ProcessMouse(rig, new MouseState { position = pointer });
+            var cue = rig.transform.Find("Desktop Drag Cue");
+            Assert.IsNotNull(cue);
+            Vector3 expectedNormal = topFace ? Vector3.up : Vector3.back;
+            Assert.That(Vector3.Angle(-cue.forward, expectedNormal), Is.LessThan(0.01f));
+            ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left));
+            Assert.IsTrue(agent.IsGrabbedByUser);
+            Assert.That(Vector3.Distance(agent.transform.position, center), Is.LessThan(0.0001f));
+            rig.SetOrthographic(false);
+            rig.SetFacePlaneMode(false);
+            Assert.IsTrue(rig.IsOrthographic && rig.UsesFacePlane);
+            ProcessMouse(rig, new MouseState { position = pointer + new Vector2(30f, 25f), scroll = new Vector2(0f, 120f) }.WithButton(MouseButton.Left));
+            Assert.That(Vector3.Distance(agent.transform.position, center), Is.GreaterThan(0.01f));
+            Assert.That(Vector3.Dot(agent.transform.position - center, expectedNormal), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Vector3.Angle(-cue.forward, expectedNormal), Is.LessThan(0.01f));
+            ProcessMouse(rig, new MouseState { position = pointer });
+            Assert.IsFalse(agent.IsGrabbedByUser);
+            rig.SetFacePlaneMode(false);
+            rig.SetOrthographic(false);
+            Assert.IsFalse(rig.IsOrthographic || rig.UsesFacePlane);
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MouseBoundaryDrag_CueFollowsOffsetDiamondAndHidesOnDisable(bool facePlane)
+        {
+            var bus = new SimulationCommandBus();
+            var rig = CreateDesktopRig(bus, out var camera);
+            rig.SetFacePlaneMode(facePlane);
+            var center = new Vector3(0f, 0f, 3f);
+            var offset = new Vector3(0.25f, 0.15f, 0f);
+            var boundary = NewObject("Boundary").AddComponent<BoundaryManager>();
+            boundary.Initialize(bus, null);
+            bus.AddBoundaryUnity(1, AgentShapeType.Sphere, center, 1f);
+            bus.SetBoundaryHandleOffsetUnity(1, offset);
+            bus.ConfigureBoundaryHandle(1, BoundaryHandleShape.Diamond, 0.2f, Color.green);
+            var handle = boundary.ActiveBoundaries[1].Handle;
+            Assert.AreEqual(Vector3.one, handle.GetComponentInChildren<MeshFilter>().sharedMesh.bounds.size);
+            Assert.AreEqual(Vector3.one * 0.2f, handle.GetComponentInChildren<MeshRenderer>().bounds.size);
+            Physics.SyncTransforms();
+            Vector2 pointer = camera.WorldToScreenPoint(handle.transform.position);
+            ProcessMouse(rig, new MouseState { position = pointer }.WithButton(MouseButton.Left));
+            var cue = rig.transform.Find("Desktop Drag Cue");
+            Assert.IsNotNull(cue);
+            Assert.IsTrue(cue.gameObject.activeSelf);
+            Assert.AreEqual(Vector3.one * 0.2f, cue.localScale);
+            camera.transform.rotation = Quaternion.Euler(0f, 5f, 0f);
+            ProcessMouse(rig, new MouseState { position = pointer + Vector2.right * 30f }.WithButton(MouseButton.Left));
+            Assert.That(Vector3.Distance(cue.position, handle.transform.position), Is.LessThan(0.0001f));
+            Assert.That(Vector3.Distance(cue.position, boundary.ActiveBoundaries[1].CenterUnity + offset), Is.LessThan(0.0001f));
+            Vector3 expectedForward = facePlane ? Vector3.forward : camera.transform.forward;
+            Assert.That(Vector3.Angle(cue.forward, expectedForward), Is.LessThan(0.01f));
+            rig.enabled = false;
+            Assert.IsFalse(cue.gameObject.activeSelf);
         }
 
         [Test]
@@ -471,11 +577,12 @@ namespace SpatialMAS.Tests.PlayMode
             return agent;
         }
 
-        private void ProcessMouse(DesktopInteractionRig rig, MouseState state)
+        private void ProcessMouse(DesktopInteractionRig rig, MouseState state, Keyboard keyboard = null)
         {
             InputSystem.QueueStateEvent(_mouse, state);
             InputSystem.Update();
-            Invoke(rig, "HandleMouseAgentInteraction", _mouse, null);
+            Invoke(rig, "HandleMouseAgentInteraction", _mouse, keyboard);
+            Invoke(rig, "UpdateDragCue", _mouse.leftButton.isPressed);
         }
 
         private static Button FindWorldButton(Transform panel, string label)

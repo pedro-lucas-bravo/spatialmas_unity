@@ -995,6 +995,27 @@ namespace SpatialMAS.UI
             if (GUILayout.Button(fpsLocked ? "Unlock [F]" : "FPS Look [F]")) _pendingToggleFpsLook = true;
             GUILayout.EndHorizontal();
 
+            if (_desktopRig != null)
+            {
+                bool guiEnabled = GUI.enabled;
+                GUI.enabled = guiEnabled && !_desktopRig.IsDraggingObject;
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("View", GUILayout.Width(40f));
+                    int view = _desktopRig.IsOrthographic ? 0 : 1;
+                    int next = GUILayout.Toolbar(view, new[] { "Orthographic", "Perspective" });
+                    if (next != view) _desktopRig.SetOrthographic(next == 0);
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("Drag", GUILayout.Width(40f));
+                    int dragMode = _desktopRig.UsesFacePlane ? 0 : 1;
+                    next = GUILayout.Toolbar(dragMode, new[] { "Face plane", "Camera plane" });
+                    if (next != dragMode) _desktopRig.SetFacePlaneMode(next == 0);
+                    GUILayout.EndHorizontal();
+                }
+                GUI.enabled = guiEnabled;
+            }
+
             GUILayout.Label($"Unity world meters | Next layout: {_scenarioManager?.NextLayout}");
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Next: Compact")) _pendingLayout = 0;

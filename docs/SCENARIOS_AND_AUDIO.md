@@ -45,9 +45,11 @@ Includes 5 macro-state presets (*Static Sync*, *Static Async*, *Static Phase Wav
 Autonomous spheres orbit in spherical coordinates $(r, \theta, \varphi)$ around user-grabbable **Cyan Attractor Cubes**. Entering a **Red Repeller Cube** field reverses orbital velocity once, with exit hysteresis before another reversal. Speed parameters and presets immediately rescale existing angular velocities. Agents periodically broadcast their orbital phase via expanding `/agents/localcomm` wavefront spheres.
 
 ### Scenario 4: Musical Encounters (`MusicalEncountersScenario.cs`)
-Autonomous agents bounce elastically inside a translucent spherical boundary. Whenever two agents (or a user-held interactive cube) come within `detectionRadius`, both flash warm gold and trigger a C-Major chord note quantized by radial distance from the boundary center ($r / R_{\text{boundary}}$).
+Musical Encounters starts with five constant-speed spheres that pick a new inward direction at the boundary, and two red cubes that the user can place inside or outside it. The translucent detection radius is 30% of the arena radius. A sphere's detection field changes from cyan to blue when it detects a neighbor, and a cube's field changes from red to yellow.
 
-Speed parameters and presets immediately rescale existing velocities. Calibration reference changes leave active scenario positions, dimensions, velocities, and audio unchanged.
+Each agent sustains one pitch while it has at least one neighbor in range. The pitch depends on distance from the arena center and the agent's assigned scale and octave range. Crossing into a new pitch band replaces the note. When the last neighbor leaves, the note releases. Agent speed controls the reverb amount on each note onset or pitch change.
+
+Grab the green diamond to move the arena. Each autonomous sphere is simulated relative to the arena center and follows its translation. The two musical cubes stay in place. The boundary's OSC position address accepts commands and reports its center during user motion. You can configure the handle's shape, color, and offset from the center. See [boundary handle control](OSC_API_SPECIFICATION.md#move-a-boundary-with-a-handle).
 
 ### Scenario 5: Self-Assembly (`SelfAssemblyScenario.cs`)
 Cubic agents with 6 orthogonal face connection slots (`+X, -X, +Z, -Z, +Y, -Y`):
@@ -71,3 +73,35 @@ All simulation state uses world meters. Choose Compact or RoomScale for the next
 Live speed/behavior parameters are explicit experimental settings. Reset preserves active behavior parameters when the physical layout is unchanged. Switching layout selects its dimensions and layout-dependent motion defaults, including Crowd and Musical Encounters speed; other settings such as Swarm coupling, Attractor angular speed, and assembly tempo/maximum structure size persist. Agent size means the full primitive/unit-mesh dimension; a sphere radius is half its diameter. Boundary radius/full-extents signatures remain documented separately in the OSC specification.
 
 Swarmalator dynamics use world-meter positions and an explicit interaction-length model parameter to express dimensionless coupling distances; it does not alter coordinate conversion or participant properties. Camera/listener rolloff is physical world-space audio. Calibration metadata permits external analysis without rebasing the simulation.
+
+## Control built-in scenarios over OSC
+
+Send `/scenario/param <name> <value>` to change a parameter on the **currently active scenario**. Send the name as a string and the value as a number. Names are case-insensitive. Select the scenario first in the Researcher Panel or with `/scenario/load <id>`.
+
+| Scenario | Parameter | Range and effect |
+| --- | --- | --- |
+| 0 · External OSC | — | The external controller owns its simulation parameters. |
+| 1 · Crowd Avoidance | `speed` | 0.1–3 m/s cruise speed |
+| | `personalSpace` | 0.2–2.5 m user repulsion radius |
+| | `repulsion` | 0–10 user repulsion strength |
+| | `agentCount` | 4–120 agents. Changing it rebuilds the crowd. |
+| 2 · Swarmalators | `J` | −1.5 to 1.5 phase-dependent spatial coupling |
+| | `K` | −1.5 to 1.5 phase coupling |
+| | `speed` | 0.1–4× motion speed |
+| | `preset` | 0 Sync, 1 Async, 2 Phase Wave, 3 Splinter, 4 Active Wave |
+| 3 · Attractors & Repellers | `speed` | 0.2–5 rad/s base angular speed |
+| 4 · Musical Encounters | `speed` | 0.1–3 m/s base sphere speed |
+| | `agentCount` | 0–120 autonomous spheres. Default 5. Changes live. |
+| 5 · Self-Assembly | `tempo` | 0.2–2.5 Hz base musical tempo |
+| | `maxSize` | 2–18 cubes per structure |
+
+To run Musical Encounters with 12 autonomous spheres, send these OSC messages in order:
+
+```text
+/scenario/load 4
+/scenario/param "agentCount" 12
+```
+
+The count is rounded to a whole number and clamped to 0–120. Increasing it adds simulated spheres at the current arena location. Decreasing it removes the last sphere IDs first. The remaining spheres, the two cubes (IDs 5 and 6), and the arena keep their current state. Count 0 leaves a cube-only setup. The selected count is retained on reset or when returning to the scenario during the same app run.
+
+Speed parameters and presets immediately rescale existing velocities. Calibration reference changes leave active scenario positions, dimensions, velocities, and audio unchanged.

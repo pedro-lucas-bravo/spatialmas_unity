@@ -1,186 +1,281 @@
+using System;
 using SpatialMAS.Audio;
 using SpatialMAS.Core;
+using SpatialMAS.Environment;
 using UnityEngine;
 
 namespace SpatialMAS.Scenarios.BuiltIn
 {
-    /// <summary>
-    /// Scenario 4: Musical Encounters (SysMus25 Workshop Scenario).
-    /// Clean-room C# port of sysmus25_workshop/HS_systems/musical_encounters.
-    /// Autonomous spherical agents bounce inside a translucent spherical boundary; whenever two agents
-    /// (or an interactive user-held cube / user hand) cross detection radii, an "encounter" triggers
-    /// a quantized musical scale note based on radial distance from the boundary center.
-    /// </summary>
+    /// <summary>HS-IMS Musical Encounters with a translation handle for the XR arena.</summary>
     public class MusicalEncountersScenario : IScenarioModule
     {
         public int ScenarioId => 4;
         public string DisplayName => "4. Musical Encounters (SysMus25)";
-        public string ShortDescription => "Elastic boundary reflection + pairwise proximity encounters triggering radial-quantized musical chords.";
+        public string ShortDescription => "Moving agents sustain radial pitches while neighbors are inside their detection spheres.";
+
+        internal const int BoundaryId = 1;
+        private const int DefaultSphereCount = 5;
+        private const int MaxSphereCount = 120;
+        private const int AgentCapacity = MaxSphereCount + 2;
+        private const float DetectionRadiusRatio = 0.3f;
+        private static readonly int[] s_CubeIds = { 5, 6 };
+        private static readonly int[][] s_Scales =
+        {
+            new[] { 0, 2, 4, 5, 6, 9 },
+            new[] { 0, 2, 4, 5, 7, 9, 11 },
+            new[] { 0, 2, 4, 7, 9 },
+            new[] { 0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5 }
+        };
 
         private ScenarioContext _ctx;
-        private int _sphereCount = 14;
-        private int _interactiveCubeCount = 2;
-        private float _boundaryRadiusMeters = 1.2f;
+        private Vector3 _center;
+        private float _boundaryRadius;
+        private float _sphereDiameter;
+        private int _sphereCount = DefaultSphereCount;
         private float _speed = 0.65f;
         private ScenarioLayout _lastLayout;
         private bool _hasLayout;
+        private System.Random _rng;
 
-        private Vector3[] _positions;
-        private Vector3[] _velocities;
-        private float[] _cooldowns;
-        private float[] _noteOffTimers;
-
-        private static readonly int[] s_CMajorScale = { 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 79, 84 };
+        private readonly Vector3[] _positions = new Vector3[AgentCapacity];
+        private readonly Vector3[] _sphereOffsets = new Vector3[AgentCapacity];
+        private readonly Vector3[] _velocities = new Vector3[AgentCapacity];
+        private readonly int[][] _pitchClasses = new int[AgentCapacity][];
+        private readonly int[] _octaves = new int[AgentCapacity];
+        private readonly int[] _notes = new int[AgentCapacity];
+        private int MusicalAgentCount => _sphereCount + s_CubeIds.Length;
 
         public void OnScenarioStart(ScenarioContext context)
         {
-            if (!_hasLayout || _lastLayout != context.Layout)
-                _speed = context.Layout == ScenarioLayout.RoomScale ? 1.1f : 0.65f;
-            _lastLayout = context.Layout;
-            _hasLayout = true;
             _ctx = context;
-            SpawnEncountersArena();
-        }
-
-        private void SpawnEncountersArena()
-        {
             if (_ctx.Bus == null) return;
 
-            Vector3 center = _ctx.ScenarioCenter;
-            bool room = _ctx.Layout == ScenarioLayout.RoomScale;
-            _boundaryRadiusMeters = room ? 2.5f : 1.0f;
-            float agentSize = room ? 0.14f : 0.07f;
+            bool room = context.Layout == ScenarioLayout.RoomScale;
+            if (!_hasLayout || _lastLayout != context.Layout)
+                _speed = room ? 1.1f : 0.65f;
+            _lastLayout = context.Layout;
+            _hasLayout = true;
+            _rng = new System.Random(404);
+            _center = context.ScenarioCenter;
+            _boundaryRadius = room ? 2.5f : 1f;
+            _sphereDiameter = room ? 0.14f : 0.07f;
 
-            _ctx.Bus.AddBoundaryUnity(1, AgentShapeType.Sphere, center, _boundaryRadiusMeters);
-            _ctx.Bus.InstantiateAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, _sphereCount, agentSize, "127.0.0.1", 6012);
+            _ctx.Bus.AddBoundaryUnity(BoundaryId, AgentShapeType.Sphere, _center, _boundaryRadius);
+            _ctx.Bus.SetBoundaryVisuals(BoundaryId, Color.green, 0.10f);
+            AddSpheres(0, _sphereCount);
+            _ctx.Bus.AddAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, _sphereDiameter * 1.3f,
+                "127.0.0.1", 6012, s_CubeIds);
+            _ctx.Bus.ConfigureBoundaryHandle(BoundaryId, BoundaryHandleShape.Diamond,
+                room ? 0.176f : 0.104f, new Color(0.25f, 1f, 0.15f));
 
-            int total = _sphereCount + _interactiveCubeCount;
-            if (_interactiveCubeCount > 0)
-            {
-                int[] cubeIds = new int[_interactiveCubeCount];
-                for (int i = 0; i < _interactiveCubeCount; i++) cubeIds[i] = _sphereCount + i;
-                _ctx.Bus.AddAgents(AgentShapeType.Cube, AgentMovementMode.Teleport, agentSize * 1.3f, "127.0.0.1", 6012, cubeIds);
-                for (int i = 0; i < cubeIds.Length; i++)
-                {
-                    _ctx.Bus.SetAgentInteractable(cubeIds[i], true);
-                    _ctx.Bus.SetAgentColor(cubeIds[i], new Color(1.0f, 0.82f, 0.15f, 1.0f));
-                }
-            }
+            foreach (int id in s_CubeIds) InitializeAgent(id, false);
 
-            _positions = new Vector3[total];
-            _velocities = new Vector3[total];
-            _cooldowns = new float[total];
-            _noteOffTimers = new float[total];
+            _ctx.Bus.OnBoundaryGeometryChanged += HandleBoundaryGeometryChanged;
+            _ctx.Bus.OnSetAgentMute += HandleMute;
+        }
 
-            var rng = new System.Random(404);
-            for (int i = 0; i < total; i++)
-            {
-                Vector3 dir = new Vector3(
-                    (float)(rng.NextDouble() * 2.0 - 1.0),
-                    (float)(rng.NextDouble() * 2.0 - 1.0),
-                    (float)(rng.NextDouble() * 2.0 - 1.0)).normalized;
+        // Keep the original cube IDs stable as spheres are added and removed.
+        private static int SphereId(int index) => index < DefaultSphereCount ? index : index + s_CubeIds.Length;
 
-                _positions[i] = center + dir * (_boundaryRadiusMeters * 0.45f * (float)rng.NextDouble());
-                _velocities[i] = dir * (_speed * (0.7f + 0.6f * (float)rng.NextDouble()));
-                _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
+        private int MusicalId(int index)
+            => index < _sphereCount ? SphereId(index) : s_CubeIds[index - _sphereCount];
 
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_OscillatorWaveform, (float)(i % 2 == 0 ? SynthWaveformType.Sine : SynthWaveformType.Triangle));
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_AttackPrimary, 0.015f);
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_DecayPrimary, 0.18f);
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_SustainPrimary, 0.20f);
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_ReleasePrimary, 0.28f);
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_ReverbPrimary, 0.28f);
-                _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_GainPrimary, 0.22f);
-            }
+        private static bool IsSphere(int id) => id != s_CubeIds[0] && id != s_CubeIds[1];
+
+        private void AddSpheres(int first, int count)
+        {
+            if (count == 0) return;
+            var ids = new int[count];
+            for (int i = 0; i < count; i++) ids[i] = SphereId(first + i);
+            _ctx.Bus.AddAgents(AgentShapeType.Sphere, AgentMovementMode.Teleport, _sphereDiameter, "127.0.0.1", 6012, ids);
+            foreach (int id in ids) InitializeAgent(id, true);
+        }
+
+        private void InitializeAgent(int i, bool autonomous)
+        {
+            Vector3 offset = RandomPointInUnitSphere();
+            Vector3 initialOffset = offset * (_boundaryRadius * 0.95f);
+            if (autonomous) _sphereOffsets[i] = initialOffset;
+            _positions[i] = _center + initialOffset;
+            _velocities[i] = autonomous ? offset.normalized * (_speed * (0.5f + (float)_rng.NextDouble())) : Vector3.zero;
+            _pitchClasses[i] = s_Scales[_rng.Next(s_Scales.Length)];
+            _octaves[i] = _rng.Next(1, 4);
+            _notes[i] = -1;
+
+            _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
+            _ctx.Bus.SetAgentColor(i, autonomous ? Color.cyan : Color.red);
+            _ctx.Bus.SetAgentInteractable(i, !autonomous);
+            SetRadiusVisual(i, false);
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_OscillatorWaveform,
+                (float)(autonomous ? SynthWaveformType.Sine : SynthWaveformType.Square));
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_AttackPrimary, 0.01f);
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_DecayPrimary, 0.1f);
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_SustainPrimary, 0.8f);
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_ReleasePrimary, 1f);
+            _ctx.Bus.SetAgentSynthParam(i, NativeDspSynthesizer.CC_GainPrimary, autonomous ? 0.5f : 0.2f);
         }
 
         public void OnScenarioTick(float deltaTime)
         {
-            if (_ctx.Bus == null || _positions == null) return;
+            if (_ctx.Bus == null) return;
 
             float dt = Mathf.Clamp(deltaTime, 0.001f, 0.05f);
-            Vector3 center = _ctx.ScenarioCenter;
-            int total = _positions.Length;
-            float encounterRadius = _boundaryRadiusMeters * 0.20f;
-
-            // Update positions & elastic spherical boundary reflection
-            for (int i = 0; i < total; i++)
+            for (int index = 0; index < _sphereCount; index++)
             {
-                if (_cooldowns[i] > 0f) _cooldowns[i] -= dt;
-                if (_noteOffTimers[i] > 0f)
+                int i = SphereId(index);
+                Vector3 offset = _sphereOffsets[i];
+                if (offset.sqrMagnitude >= _boundaryRadius * _boundaryRadius)
                 {
-                    _noteOffTimers[i] -= dt;
-                    if (_noteOffTimers[i] <= 0f)
-                    {
-                        _ctx.Bus.SetAgentSynthNote(i, 0, 60, 0);
-                        Color idleCol = i >= _sphereCount
-                            ? new Color(1.0f, 0.82f, 0.15f, 1.0f)
-                            : new Color(0.25f, 0.65f, 1.0f, 1.0f);
-                        _ctx.Bus.SetAgentColor(i, idleCol);
-                    }
+                    Vector3 outward = offset.normalized;
+                    Vector3 direction = RandomPointInUnitSphere().normalized;
+                    if (Vector3.Dot(outward, direction) > 0f) direction = -direction;
+                    _velocities[i] = direction * _velocities[i].magnitude;
+                    offset = outward * (_boundaryRadius * 0.999f);
                 }
 
-                // Interactive cubes follow user hand if grabbed
-                if (i >= _sphereCount && _ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var cubeEnt) && cubeEnt != null)
-                {
-                    _positions[i] = cubeEnt.transform.position;
-                    continue;
-                }
-
-                _positions[i] += _velocities[i] * dt;
-                Vector3 offset = _positions[i] - center;
-                float dist = offset.magnitude;
-                if (dist > _boundaryRadiusMeters * 0.92f && dist > 0.0001f)
-                {
-                    Vector3 normal = offset / dist;
-                    _velocities[i] = Vector3.Reflect(_velocities[i], normal);
-                    _positions[i] = center + normal * (_boundaryRadiusMeters * 0.91f);
-                }
-
-                _ctx.Bus.SetAgentPositionUnity(i, _positions[i]);
+                _sphereOffsets[i] = offset + _velocities[i] * dt;
+                ApplySpherePosition(i);
             }
 
-            // Detect pairwise encounters
-            for (int i = 0; i < total; i++)
+            foreach (int i in s_CubeIds)
             {
-                for (int j = i + 1; j < total; j++)
+                if (_ctx.AgentManager != null && _ctx.AgentManager.TryGetAgent(i, out var cube) && cube != null)
                 {
-                    float d = Vector3.Distance(_positions[i], _positions[j]);
-                    if (d <= encounterRadius)
-                    {
-                        TriggerEncounterIfReady(i, center);
-                        TriggerEncounterIfReady(j, center);
-                    }
+                    Vector3 position = cube.transform.position;
+                    _velocities[i] = (position - _positions[i]) / dt;
+                    _positions[i] = position;
                 }
+            }
+
+            float radius = _boundaryRadius * DetectionRadiusRatio;
+            for (int index = 0; index < MusicalAgentCount; index++)
+            {
+                int i = MusicalId(index);
+                bool nearby = false;
+                for (int other = 0; other < MusicalAgentCount; other++)
+                {
+                    int j = MusicalId(other);
+                    if (i == j || (_positions[i] - _positions[j]).sqrMagnitude >= radius * radius) continue;
+                    nearby = true;
+                    break;
+                }
+
+                UpdateNote(i, nearby);
             }
         }
 
-        private void TriggerEncounterIfReady(int id, Vector3 arenaCenter)
+        private void ApplySpherePosition(int id)
         {
-            if (_cooldowns[id] > 0f) return;
-            _cooldowns[id] = 0.32f;
-            _noteOffTimers[id] = 0.22f;
+            _positions[id] = _center + _sphereOffsets[id];
+            _ctx.Bus.SetAgentPositionUnity(id, _positions[id]);
+        }
 
-            float normDist = Mathf.Clamp01(Vector3.Distance(_positions[id], arenaCenter) / Mathf.Max(0.1f, _boundaryRadiusMeters));
-            int scaleIdx = Mathf.Clamp(Mathf.RoundToInt((1.0f - normDist) * (s_CMajorScale.Length - 1)), 0, s_CMajorScale.Length - 1);
-            int midiNote = s_CMajorScale[scaleIdx];
+        private void UpdateNote(int id, bool nearby)
+        {
+            int note = -1;
+            if (nearby)
+            {
+                int[] scale = _pitchClasses[id];
+                int count = scale.Length * _octaves[id];
+                float radialFraction = Mathf.Clamp01(Vector3.Distance(_positions[id], _center) / _boundaryRadius);
+                int index = Mathf.Min((int)(radialFraction * count), count - 1);
+                note = 48 + scale[index % scale.Length] + 12 * (index / scale.Length);
+            }
 
-            _ctx.Bus.SetAgentColor(id, new Color(1.0f, 0.98f, 0.75f, 1.0f)); // Flash warm gold/white on encounter
-            _ctx.Bus.SetAgentSynthNote(id, 1, midiNote, 105);
+            int previousNote = _notes[id];
+            if (previousNote == note) return;
+            if (previousNote >= 0)
+                _ctx.Bus.SetAgentSynthNote(id, 0, previousNote, 0);
+            if (note >= 0)
+            {
+                float speedForFullReverb = IsSphere(id) ? 2f : 5f;
+                _ctx.Bus.SetAgentSynthParam(id, NativeDspSynthesizer.CC_ReverbPrimary,
+                    Mathf.Clamp01(_velocities[id].magnitude / speedForFullReverb));
+                _ctx.Bus.SetAgentSynthNote(id, 1, note, 127);
+            }
+
+            if ((previousNote >= 0) != nearby) SetRadiusVisual(id, nearby);
+            _notes[id] = note;
+        }
+
+        private void SetRadiusVisual(int id, bool nearby)
+        {
+            Color color = IsSphere(id)
+                ? (nearby ? Color.blue : Color.cyan)
+                : (nearby ? Color.yellow : Color.red);
+            _ctx.Bus.SetAgentRadiusVisual(id, _boundaryRadius * DetectionRadiusRatio, 0.10f, color);
+        }
+
+        private void HandleBoundaryGeometryChanged(int id, Vector3 center, float radius)
+        {
+            if (id != BoundaryId) return;
+            if (!_center.Equals(center))
+            {
+                _center = center;
+                for (int i = 0; i < _sphereCount; i++) ApplySpherePosition(SphereId(i));
+            }
+
+            if (_boundaryRadius == radius) return;
+            _boundaryRadius = radius;
+            for (int i = 0; i < MusicalAgentCount; i++)
+            {
+                int agentId = MusicalId(i);
+                SetRadiusVisual(agentId, _notes[agentId] >= 0);
+            }
+        }
+
+        private void HandleMute(int id, bool muted)
+        {
+            // Scenario pause flushes the synth. Re-evaluate held notes on resume.
+            if (id != -1 || !muted) return;
+            for (int i = 0; i < MusicalAgentCount; i++) UpdateNote(MusicalId(i), false);
+        }
+
+        private Vector3 RandomPointInUnitSphere()
+        {
+            Vector3 point;
+            do
+            {
+                point = new Vector3((float)_rng.NextDouble(), (float)_rng.NextDouble(), (float)_rng.NextDouble());
+                point = point * 2f - Vector3.one;
+            } while (point.sqrMagnitude > 1f || point.sqrMagnitude < 0.000001f);
+            return point;
         }
 
         public void OnScenarioStop()
         {
-            _ctx.Bus?.SetAgentMute(-1, true);
+            if (_ctx.Bus == null) return;
+            _ctx.Bus.OnBoundaryGeometryChanged -= HandleBoundaryGeometryChanged;
+            _ctx.Bus.OnSetAgentMute -= HandleMute;
+            _ctx.Bus.SetAgentMute(-1, true);
+            _ctx.Bus.RemoveBoundaryHandle(BoundaryId);
+            _ctx = default;
         }
 
         public void SetParameter(string paramName, float value)
         {
-            if (string.IsNullOrEmpty(paramName)) return;
-            if (paramName.Equals("speed", System.StringComparison.OrdinalIgnoreCase))
+            if (!float.IsFinite(value)) return;
+            if (string.Equals(paramName, "speed", StringComparison.OrdinalIgnoreCase))
+                SetSpeed(Mathf.Clamp(value, 0.1f, 3f));
+            else if (string.Equals(paramName, "agentCount", StringComparison.OrdinalIgnoreCase))
+                SetSphereCount(Mathf.RoundToInt(Mathf.Clamp(value, 0f, MaxSphereCount)));
+        }
+
+        private void SetSphereCount(int count)
+        {
+            int previousCount = _sphereCount;
+            _sphereCount = count;
+            if (_ctx.Bus == null || count == previousCount) return;
+
+            if (count > previousCount)
             {
-                SetSpeed(Mathf.Clamp(value, 0.1f, 3.0f));
+                AddSpheres(previousCount, count - previousCount);
+                return;
             }
+
+            var ids = new int[previousCount - count];
+            for (int i = 0; i < ids.Length; i++) ids[i] = SphereId(count + i);
+            _ctx.Bus.RemoveAgents(ids);
         }
 
         public void ApplyPreset(int presetIndex)
@@ -192,9 +287,7 @@ namespace SpatialMAS.Scenarios.BuiltIn
         {
             float ratio = speed / _speed;
             _speed = speed;
-            if (_velocities == null) return;
-            for (int i = 0; i < _velocities.Length; i++) _velocities[i] *= ratio;
+            for (int i = 0; i < _sphereCount; i++) _velocities[SphereId(i)] *= ratio;
         }
-
     }
 }

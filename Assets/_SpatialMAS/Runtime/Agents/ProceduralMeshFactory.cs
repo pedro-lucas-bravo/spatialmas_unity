@@ -9,6 +9,7 @@ namespace SpatialMAS.Agents
     public static class ProceduralMeshFactory
     {
         private static Mesh s_PyramidMesh;
+        private static Mesh s_DiamondMesh;
         private static Mesh s_ArrowMesh;
 
         /// <summary>
@@ -68,6 +69,35 @@ namespace SpatialMAS.Agents
 
             s_PyramidMesh = mesh;
             return s_PyramidMesh;
+        }
+
+        /// <summary>Creates a flat-shaded octahedron with unit bounds.</summary>
+        public static Mesh GetOrCreateDiamondMesh()
+        {
+            if (s_DiamondMesh != null) return s_DiamondMesh;
+
+            Vector3 top = Vector3.up * 0.5f;
+            Vector3 bottom = -top;
+            Vector3[] rim = { Vector3.right * 0.5f, Vector3.forward * 0.5f, Vector3.left * 0.5f, Vector3.back * 0.5f };
+            var vertices = new Vector3[24];
+            var triangles = new int[vertices.Length];
+            for (int i = 0; i < rim.Length; i++)
+            {
+                Vector3 next = rim[(i + 1) % rim.Length];
+                int face = i * 6;
+                vertices[face] = rim[i];
+                vertices[face + 1] = top;
+                vertices[face + 2] = next;
+                vertices[face + 3] = rim[i];
+                vertices[face + 4] = next;
+                vertices[face + 5] = bottom;
+            }
+            for (int i = 0; i < triangles.Length; i++) triangles[i] = i;
+
+            s_DiamondMesh = new Mesh { name = "SpatialMAS_Diamond", vertices = vertices, triangles = triangles };
+            s_DiamondMesh.RecalculateNormals();
+            s_DiamondMesh.RecalculateBounds();
+            return s_DiamondMesh;
         }
 
         /// <summary>

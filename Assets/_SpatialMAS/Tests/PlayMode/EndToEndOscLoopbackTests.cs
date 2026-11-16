@@ -1,11 +1,14 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using NUnit.Framework;
 using SpatialMAS.Agents;
 using SpatialMAS.Core;
 using SpatialMAS.Environment;
 using SpatialMAS.LocalComm;
 using SpatialMAS.Networking;
+using SpatialMAS.Scenarios;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -275,6 +278,104 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.Less(Vector3.Distance(new Vector3(1f, 2f, 3f), _boundaries.ActiveBoundaries[7].CenterUnity), 0.0001f);
             Assert.Less(Vector3.Distance(new Vector3(2f, 4f, 6f), _boundaries.ActiveBoundaries[7].GameObject.transform.localScale), 0.0001f);
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator MusicalEncountersOscAgentCount_ResizesLiveAndPreservesCubesAndArena()
+        {
+            var scenarios = _root.AddComponent<ScenarioManager>();
+            scenarios.Initialize(_bus, Vector3.zero, _agents, null);
+            _router.DispatchMessage(new OscMessage("/scenario/load", 4));
+            Assert.AreEqual(7, _agents.ActiveCount);
+            var arena = _boundaries.ActiveBoundaries[1];
+            var cube = _agents.ActiveAgents[5];
+            var existingSphere = _agents.ActiveAgents[0];
+            var cubePosition = new Vector3(2f, 1f, 3f);
+            cube.PlaceImmediately(cubePosition);
+
+            _router.DispatchMessage(new OscMessage("/scenario/param", "agentCount", 12));
+            Assert.AreEqual(14, _agents.ActiveCount);
+            Assert.AreSame(existingSphere, _agents.ActiveAgents[0]);
+            Assert.AreSame(cube, _agents.ActiveAgents[5]);
+            Assert.AreEqual(cubePosition, cube.transform.position);
+            Assert.AreSame(arena, _boundaries.ActiveBoundaries[1]);
+            var newSphere = _agents.ActiveAgents[13];
+            Assert.AreEqual(AgentShapeType.Sphere, newSphere.ShapeType);
+            Assert.IsFalse(newSphere.IsInteractable);
+            Assert.IsNotNull(newSphere.transform.Find("RadiusVisualizer"));
+            Vector3 initialPosition = newSphere.transform.position;
+            scenarios.ActiveScenario.OnScenarioTick(0.02f);
+            Assert.AreNotEqual(initialPosition, newSphere.transform.position);
+
+            _router.DispatchMessage(new OscMessage("/scenario/param", "AGENTCOUNT", 0));
+            Assert.AreEqual(2, _agents.ActiveCount);
+            Assert.AreSame(cube, _agents.ActiveAgents[5]);
+            Assert.AreEqual(cubePosition, cube.transform.position);
+            Assert.AreSame(arena, _boundaries.ActiveBoundaries[1]);
+            scenarios.ResetActiveScenario();
+            Assert.AreEqual(2, _agents.ActiveCount);
+            _router.DispatchMessage(new OscMessage("/scenario/param", "agentCount", 6));
+            Assert.AreEqual(8, _agents.ActiveCount);
+            Assert.IsTrue(_agents.ActiveAgents.ContainsKey(7));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator BoundaryHandle_ReportsBoundaryCenterAndAcceptsRelativeOffset()
+        {
+            _router.DispatchMessage(new OscMessage("/world/boundary/add/id", 7, 0, 0f, 0f, 0f, 1000f));
+            _router.DispatchMessage(new OscMessage("/boundary/handle/configure/id", 7, 2, 130f, "ff00ff"));
+            var boundary = _boundaries.ActiveBoundaries[7];
+            var handle = boundary.Handle;
+            Assert.AreEqual(BoundaryHandleShape.Diamond, handle.Shape);
+            Assert.AreEqual(Color.magenta, handle.Color);
+            Assert.AreEqual(0, _agents.ActiveCount);
+
+            using var receiver = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            Assert.IsTrue(_client.SetDestination("127.0.0.1", ((IPEndPoint)receiver.Client.LocalEndPoint).Port));
+            Assert.AreEqual(Vector3.zero, handle.transform.position);
+            _router.DispatchMessage(new OscMessage("/world/boundary/handle/offset/id", 7, 125f, 500f, -250f));
+            var offset = new Vector3(0.125f, 0.5f, -0.25f);
+            Assert.AreEqual(offset, handle.transform.position);
+            Assert.AreEqual(Vector3.zero, boundary.CenterUnity);
+            Assert.AreEqual(0L, _client.TotalMessagesSent);
+            var target = new Vector3(0.5f, 0.25f, 0.125f);
+            handle.MoveByUser(target + offset);
+
+            var feedback = new List<OscMessage>();
+            float deadline = Time.realtimeSinceStartup + 1f;
+            while (feedback.Count < 2 && Time.realtimeSinceStartup < deadline)
+            {
+                if (receiver.Available == 0)
+                {
+                    yield return null;
+                    continue;
+                }
+                IPEndPoint sender = null;
+                byte[] packet = receiver.Receive(ref sender);
+                OscPacketCodec.DecodePacket(packet, 0, packet.Length, feedback);
+            }
+            Assert.AreEqual(2, feedback.Count);
+            var legacy = feedback.Find(message => message.Address == "/boundary/position/id");
+            Assert.AreEqual("/boundary/position/id", legacy.Address);
+            Assert.AreEqual(125f, legacy.GetFloat(2));
+            var world = feedback.Find(message => message.Address == "/world/boundary/position/id");
+            Assert.AreEqual("/world/boundary/position/id", world.Address);
+            Assert.AreEqual(4, world.ArgCount);
+            Assert.AreEqual(500f, world.GetFloat(1));
+            Assert.AreEqual(250f, world.GetFloat(2));
+            Assert.AreEqual(125f, world.GetFloat(3));
+            Assert.AreEqual(target + offset, handle.transform.position);
+            Assert.AreEqual(7, world.GetInt(0));
+            Assert.AreEqual(target, boundary.CenterUnity);
+            _router.DispatchMessage(new OscMessage(world.Address, 7, 250f, 125f, 500f));
+            Assert.AreEqual(new Vector3(0.25f, 0.125f, 0.5f), boundary.CenterUnity);
+            Assert.AreEqual(boundary.CenterUnity + offset, handle.transform.position);
+            yield return null;
+            Assert.AreEqual(2L, _client.TotalMessagesSent, "Applying an OSC command must not echo as user motion.");
+            _router.DispatchMessage(new OscMessage("/boundary/handle/remove/id", 7));
+            Assert.IsNull(boundary.Handle);
+            Assert.IsFalse(handle.gameObject.activeSelf);
         }
 
         [UnityTest]

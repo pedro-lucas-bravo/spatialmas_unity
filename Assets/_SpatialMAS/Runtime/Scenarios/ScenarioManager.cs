@@ -64,6 +64,7 @@ namespace SpatialMAS.Scenarios
                 bus.OnSetScenarioParam += SetActiveScenarioParameter;
                 bus.OnSetScenarioCenter += SetNextScenarioCenter;
                 bus.OnSetScenarioLayout += SetNextLayout;
+                bus.OnBoundaryGeometryChanged += HandleBoundaryGeometryChanged;
             }
 
             LoadScenarioById(initialScenarioId);
@@ -77,6 +78,7 @@ namespace SpatialMAS.Scenarios
                 _context.Bus.OnSetScenarioParam -= SetActiveScenarioParameter;
                 _context.Bus.OnSetScenarioCenter -= SetNextScenarioCenter;
                 _context.Bus.OnSetScenarioLayout -= SetNextLayout;
+                _context.Bus.OnBoundaryGeometryChanged -= HandleBoundaryGeometryChanged;
             }
             _activeScenario?.OnScenarioStop();
         }
@@ -85,6 +87,12 @@ namespace SpatialMAS.Scenarios
         {
             if (module == null) return;
             _scenarios.Add(module);
+        }
+
+        private void HandleBoundaryGeometryChanged(int id, Vector3 center, float size)
+        {
+            if (_activeScenario is MusicalEncountersScenario && id == MusicalEncountersScenario.BoundaryId)
+                ActiveScenarioCenter = center;
         }
 
         public void LoadScenarioById(int scenarioId)

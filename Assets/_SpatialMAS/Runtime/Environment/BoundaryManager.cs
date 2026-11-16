@@ -11,6 +11,8 @@ namespace SpatialMAS.Environment
         public AgentShapeType Shape;
         public GameObject GameObject;
         public Renderer Renderer;
+        public BoundaryHandle Handle;
+        public Vector3 HandleOffsetUnity;
         public MaterialPropertyBlock Mpb;
         public Color Color = new Color(0.2f, 0.75f, 1.0f, 0.14f);
         public Vector3 CenterUnity;
@@ -46,6 +48,9 @@ namespace SpatialMAS.Environment
                 _bus.OnAddBoundaryUnity += HandleAddBoundary;
                 _bus.OnAddBoxBoundaryUnity += HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity += HandleUpdateBoundary;
+                _bus.OnConfigureBoundaryHandle += HandleConfigureBoundaryHandle;
+                _bus.OnRemoveBoundaryHandle += HandleRemoveBoundaryHandle;
+                _bus.OnSetBoundaryHandleOffsetUnity += HandleSetBoundaryHandleOffset;
                 _bus.OnSetBoundaryDimensionsUnity += HandleSetBoundaryDimensions;
                 _bus.OnSetBoundaryVisuals += HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary += HandleRemoveBoundary;
@@ -59,6 +64,9 @@ namespace SpatialMAS.Environment
                 _bus.OnAddBoundaryUnity -= HandleAddBoundary;
                 _bus.OnAddBoxBoundaryUnity -= HandleAddBoxBoundary;
                 _bus.OnUpdateBoundaryUnity -= HandleUpdateBoundary;
+                _bus.OnConfigureBoundaryHandle -= HandleConfigureBoundaryHandle;
+                _bus.OnRemoveBoundaryHandle -= HandleRemoveBoundaryHandle;
+                _bus.OnSetBoundaryHandleOffsetUnity -= HandleSetBoundaryHandleOffset;
                 _bus.OnSetBoundaryDimensionsUnity -= HandleSetBoundaryDimensions;
                 _bus.OnSetBoundaryVisuals -= HandleSetBoundaryVisuals;
                 _bus.OnRemoveBoundary -= HandleRemoveBoundary;
@@ -103,6 +111,7 @@ namespace SpatialMAS.Environment
         {
             if (_boundaries.TryGetValue(id, out BoundaryInstance existing))
             {
+                HandleRemoveBoundaryHandle(id);
                 if (existing.GameObject != null) Destroy(existing.GameObject);
                 _boundaries.Remove(id);
             }
@@ -158,14 +167,57 @@ namespace SpatialMAS.Environment
         {
             if (_boundaries.TryGetValue(id, out BoundaryInstance instance))
             {
-                if (!float.IsNaN(posUnity.x)) instance.CenterUnity = posUnity;
-                if (sizeMeters > 0f)
+                if (IsFinite(posUnity) && IsFinite(posUnity + instance.HandleOffsetUnity))
+                    instance.CenterUnity = posUnity;
+                if (float.IsFinite(sizeMeters) && sizeMeters > 0f)
                 {
                     instance.SizeMeters = Mathf.Max(0.01f, sizeMeters);
                     instance.HalfExtentsMeters = Vector3.one * instance.SizeMeters;
                 }
                 ApplyBoundaryTransform(instance);
+                _bus.EmitBoundaryGeometryChanged(id, instance.CenterUnity, instance.SizeMeters);
             }
+        }
+
+        private void HandleConfigureBoundaryHandle(int id, BoundaryHandleShape shape, float sizeMeters, Color color)
+        {
+            if (!_boundaries.TryGetValue(id, out BoundaryInstance instance) || !float.IsFinite(sizeMeters) || sizeMeters <= 0f)
+                return;
+            HandleRemoveBoundaryHandle(id);
+            var go = new GameObject($"Boundary_{id}_Handle");
+            go.transform.SetParent(transform, false);
+            instance.Handle = go.AddComponent<BoundaryHandle>();
+            instance.Handle.Initialize(shape, sizeMeters, color, instance.CenterUnity + instance.HandleOffsetUnity, position =>
+            {
+                Vector3 center = position - instance.HandleOffsetUnity;
+                if (!IsFinite(center) || !IsFinite(center + instance.HandleOffsetUnity) ||
+                    center.Equals(instance.CenterUnity))
+                {
+                    instance.Handle.SetPosition(instance.CenterUnity + instance.HandleOffsetUnity);
+                    return;
+                }
+                HandleUpdateBoundary(id, center, -1f);
+                _bus.EmitBoundaryMovedByUser(id, center);
+            });
+        }
+
+        private void HandleSetBoundaryHandleOffset(int id, Vector3 offset)
+        {
+            if (!_boundaries.TryGetValue(id, out BoundaryInstance instance) || !IsFinite(offset) ||
+                !IsFinite(instance.CenterUnity + offset)) return;
+            instance.HandleOffsetUnity = offset;
+            if (instance.Handle != null) instance.Handle.SetPosition(instance.CenterUnity + offset);
+        }
+
+        private static bool IsFinite(Vector3 position)
+            => float.IsFinite(position.x) && float.IsFinite(position.y) && float.IsFinite(position.z);
+
+        private void HandleRemoveBoundaryHandle(int id)
+        {
+            if (!_boundaries.TryGetValue(id, out BoundaryInstance instance) || instance.Handle == null) return;
+            instance.Handle.gameObject.SetActive(false);
+            Destroy(instance.Handle.gameObject);
+            instance.Handle = null;
         }
 
         private void HandleSetBoundaryDimensions(int id, Vector3 dimensions)
@@ -182,6 +234,7 @@ namespace SpatialMAS.Environment
             }
             else instance.SizeMeters = Mathf.Max(0.01f, dimensions.x);
             ApplyBoundaryTransform(instance);
+            _bus.EmitBoundaryGeometryChanged(id, instance.CenterUnity, instance.SizeMeters);
         }
 
         private void HandleSetBoundaryVisuals(int id, Color color, float alpha)
@@ -214,6 +267,7 @@ namespace SpatialMAS.Environment
             {
                 foreach (var kvp in _boundaries)
                 {
+                    HandleRemoveBoundaryHandle(kvp.Key);
                     if (kvp.Value.GameObject != null) Destroy(kvp.Value.GameObject);
                 }
                 _boundaries.Clear();
@@ -222,6 +276,7 @@ namespace SpatialMAS.Environment
 
             if (_boundaries.TryGetValue(id, out BoundaryInstance inst))
             {
+                HandleRemoveBoundaryHandle(id);
                 if (inst.GameObject != null) Destroy(inst.GameObject);
                 _boundaries.Remove(id);
             }
@@ -234,6 +289,7 @@ namespace SpatialMAS.Environment
             instance.GameObject.transform.rotation = instance.RotationUnity;
             instance.GameObject.transform.localScale = instance.Shape == AgentShapeType.Cube
                 ? instance.HalfExtentsMeters * 2f : Vector3.one * (instance.SizeMeters * 2f);
+            if (instance.Handle != null) instance.Handle.SetPosition(instance.CenterUnity + instance.HandleOffsetUnity);
         }
 
         private void FixedUpdate()

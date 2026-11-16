@@ -16,12 +16,14 @@
 1. Press **Play** in Unity or launch the standalone executable.
 2. **Walk / Fly Around Arena**: Press **`W` `A` `S` `D`** (or **Arrow Keys**) and **`E` / `Q`** (Up/Down) at any time—**no need to hold a mouse button to walk**! Hold **`Left Shift`** to sprint or **`Left Ctrl`** for slow precision movement.
 3. **Camera Look, Pan & Zoom**:
-   - Hold **Right Mouse Button (`RMB`) + Mouse Move** to look around, OR press **`F`** to toggle **First-Person Game Look Mode** (locks cursor for effortless mouse-look; press **`F`** or **`Esc`** to unlock).
+   - Desktop starts in the isometric **Orthographic** view. Hold **Right Mouse Button (`RMB`)** and move the mouse to orbit. Scroll to zoom. Choose **Perspective** in the **View** row for a first-person view. In Perspective, right drag looks around and **`F`** toggles cursor lock.
    - Hold **Middle Mouse Button (`MMB`) + Mouse Move** to pan laterally/vertically, and use the **Scroll Wheel** to zoom in/out.
    - Press **`C`** at any time to center and reset the camera.
 4. **Grab & Click Agents**:
    - **Hover** over any agent to inspect its ID, shape, and 3D coordinates at the bottom of the screen.
-   - **Left-Click and Drag** any interactive Cube agent (or hold **`Alt + Left-Click`** to force-drag any autonomous agent). Use the **Scroll Wheel** while dragging to push/pull the cube deeper or closer, and press **`R`** while holding a cube to rotate it by 90°.
+   - In the **Drag** row, choose **Face plane** or **Camera plane** independently of the view. Left-drag a movable object. Hold **`Alt + Left-Click`** to force-drag an autonomous agent.
+   - **Face plane** previews the selected face and its two movement axes. Non-cubes use a world-aligned box preview. A top face keeps height fixed. A side face keeps motion in that side's plane. The chosen plane and grab offset are fixed until release. Scroll depth, camera navigation, and object rotation are suspended during face-plane capture.
+   - **Camera plane** follows the current view. Scroll while holding an object to change its depth, or press **`R`** while holding an agent to rotate it by 90°. Dragging a non-cube shows the translucent camera-facing cue until release.
 
 ---
 
@@ -62,7 +64,7 @@ Use the researcher panel on the headset or the keyboard shortcuts below on deskt
   - **`1`**: *Crowd Navigation & Human Avoidance* (Walk through the crowd to observe agents dispersing around your body!)
   - **`2`**: *3D Swarmalators* (Coupled swarming & color/musical phase synchronization, with 5 instant preset buttons)
   - **`3`**: *Orbital Attractors & Repellers* (Grab the Cyan Attractor cubes and Red Repeller cubes to reshape agent orbits)
-  - **`4`**: *Musical Encounters* (Move the Golden cubes inside the sphere to trigger musical encounters)
+  - **`4`**: *Musical Encounters*. Move either red cube near another musical agent until its translucent detection sphere turns yellow. Hold it in range to hear its note sustain, or pull it away to hear the note release. Grab the green center diamond to move the arena and its autonomous spheres together. The two red cubes stay where you placed them.
   - **`5`**: *Self-Assembly* (Watch 6-face musical cubes assemble autonomously, or grab and snap them together yourself!)
 - **Key `Space`**: Pause / Resume the active scenario.
 - **Key `R`**: Reset and re-seed the active scenario.

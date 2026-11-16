@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using SpatialMAS.Core;
+using SpatialMAS.Environment;
 using UnityEngine;
 
 namespace SpatialMAS.Networking
@@ -34,6 +35,7 @@ namespace SpatialMAS.Networking
 
             // Subscribe to outgoing feedback events from the simulation world
             _bus.OnAgentMovedByUserUnity += HandleAgentMovedByUser;
+            _bus.OnBoundaryMovedByUser += HandleBoundaryMovedByUser;
             _bus.OnAgentTouchEvent += HandleAgentTouch;
             _bus.OnAgentControlClickEvent += HandleAgentControlClick;
             _bus.OnLocalCommDeliveredUnity += HandleLocalCommDelivered;
@@ -649,6 +651,29 @@ namespace SpatialMAS.Networking
                     break;
                 }
 
+                case "/boundary/handle/offset/id":
+                {
+                    if (msg.ArgCount < 4) break;
+                    _bus.SetBoundaryHandleOffsetUnity(msg.GetInt(0),
+                        ReadPosition(worldAxes, msg.GetFloat(1), msg.GetFloat(2), msg.GetFloat(3)));
+                    break;
+                }
+
+                case "/boundary/handle/configure/id":
+                {
+                    if (msg.ArgCount < 4) break;
+                    int shape = msg.GetInt(1, -1);
+                    if (shape < 0 || shape > (int)BoundaryHandleShape.Diamond ||
+                        !TryParseHexColor(msg.GetString(3), out var color)) break;
+                    _bus.ConfigureBoundaryHandle(msg.GetInt(0), (BoundaryHandleShape)shape,
+                        _mapper.OscMillimeterLengthToUnityMeters(msg.GetFloat(2)), color);
+                    break;
+                }
+
+                case "/boundary/handle/remove/id":
+                    if (msg.ArgCount >= 1) _bus.RemoveBoundaryHandle(msg.GetInt(0));
+                    break;
+
                 case "/boundary/scale/id":
                 {
                     if (msg.ArgCount < 2) break;
@@ -892,6 +917,14 @@ namespace SpatialMAS.Networking
             SendAndLog(new OscMessage("/world/agents/position/id", id, worldMm.x, worldMm.y, worldMm.z));
         }
 
+        private void HandleBoundaryMovedByUser(int id, Vector3 center)
+        {
+            Vector3 legacy = _mapper.UnityMetersToOscMillimeters(center);
+            SendAndLog(new OscMessage("/boundary/position/id", id, legacy.x, legacy.y, legacy.z));
+            Vector3 world = _mapper.UnityMetersToWorldMillimeters(center);
+            SendAndLog(new OscMessage("/world/boundary/position/id", id, world.x, world.y, world.z));
+        }
+
         private void HandleAgentTouch(int id, int touchState, int otherAgentId)
         {
             SendAndLog(new OscMessage("/agents/touch/id", id, touchState, otherAgentId));
@@ -989,6 +1022,7 @@ namespace SpatialMAS.Networking
         public void Dispose()
         {
             _bus.OnAgentMovedByUserUnity -= HandleAgentMovedByUser;
+            _bus.OnBoundaryMovedByUser -= HandleBoundaryMovedByUser;
             _bus.OnAgentTouchEvent -= HandleAgentTouch;
             _bus.OnAgentControlClickEvent -= HandleAgentControlClick;
             _bus.OnLocalCommDeliveredUnity -= HandleLocalCommDelivered;
