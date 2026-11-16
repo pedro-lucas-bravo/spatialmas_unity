@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -20,6 +23,14 @@ namespace SpatialMAS.Logging
     /// </summary>
     public class WifiLogExportServer : IDisposable
     {
+        private const string MetadataPrefix = "session_metadata_";
+        private const string SessionRoute = "/sessions/";
+        private const string FolderSessionPrefix = "folder-";
+        private static readonly string[] CsvPrefixes =
+        {
+            "osc_traffic_", "xr_embodiment_", "object_state_", "calibration_", "session_events_"
+        };
+
         private readonly DataRecordingService _recordingService;
         private TcpListener _listener;
         private CancellationTokenSource _cts;
@@ -106,10 +117,11 @@ namespace SpatialMAS.Logging
                         }
 
                         string[] parts = requestLine.Split(' ');
-                        string path = parts.Length >= 2 ? Uri.UnescapeDataString(parts[1]) : "/";
+                        string path = parts.Length >= 2 ? parts[1] : "/";
 
                         int queryIdx = path.IndexOf('?');
                         if (queryIdx >= 0) path = path.Substring(0, queryIdx);
+                        path = Uri.UnescapeDataString(path);
 
                         if (path == "/" || path == "/index.html")
                         {
@@ -121,17 +133,21 @@ namespace SpatialMAS.Logging
                             byte[] jsonBytes = Encoding.UTF8.GetBytes(BuildJsonLogsList());
                             await WriteHttpResponseAsync(stream, "200 OK", "application/json; charset=utf-8", jsonBytes, null).ConfigureAwait(false);
                         }
+                        else if (path.StartsWith(SessionRoute, StringComparison.Ordinal) && path.EndsWith(".zip", StringComparison.Ordinal))
+                        {
+                            string session = path.Substring(SessionRoute.Length, path.Length - SessionRoute.Length - 4);
+                            await WriteSessionZipAsync(stream, session, token).ConfigureAwait(false);
+                        }
                         else if (path.StartsWith("/logs/", StringComparison.OrdinalIgnoreCase))
                         {
-                            string fileName = Path.GetFileName(path.Substring("/logs/".Length));
-                            string fullPath = Path.Combine(_recordingService.LogsDirectory, fileName);
-
-                            _recordingService.Flush();
-                            bool isMetadata = fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-                            if (File.Exists(fullPath) && (isMetadata || fullPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)))
+                            string relativePath = path.Substring("/logs/".Length);
+                            FileInfo file = _recordingService.GetRecordedLogFiles()
+                                .FirstOrDefault(candidate => RelativeLogPath(candidate) == relativePath);
+                            if (file != null)
                             {
-                                byte[] fileBytes = ReadFileShared(fullPath);
-                                await WriteHttpResponseAsync(stream, "200 OK", isMetadata ? "application/json; charset=utf-8" : "text/csv; charset=utf-8", fileBytes, fileName).ConfigureAwait(false);
+                                bool isMetadata = file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase);
+                                byte[] fileBytes = ReadFileShared(file.FullName);
+                                await WriteHttpResponseAsync(stream, "200 OK", isMetadata ? "application/json; charset=utf-8" : "text/csv; charset=utf-8", fileBytes, file.Name).ConfigureAwait(false);
                             }
                             else
                             {
@@ -148,6 +164,70 @@ namespace SpatialMAS.Logging
                 }
                 catch { }
             }
+        }
+
+        private string RelativeLogPath(FileInfo file)
+            => Path.GetRelativePath(_recordingService.LogsDirectory, file.FullName)
+                .Replace(Path.DirectorySeparatorChar, '/');
+
+        private string LogUrl(FileInfo file)
+            => "/logs/" + string.Join("/", RelativeLogPath(file).Split('/').Select(Uri.EscapeDataString));
+
+        private string SessionName(FileInfo file)
+        {
+            string relativePath = RelativeLogPath(file);
+            int slash = relativePath.IndexOf('/');
+            if (slash >= 0) return FolderSessionPrefix + relativePath.Substring(0, slash);
+            string name = Path.GetFileNameWithoutExtension(file.Name);
+            if (name.Contains("\\")) return "";
+            if (file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+                return name.StartsWith(MetadataPrefix, StringComparison.Ordinal) ? name.Substring(MetadataPrefix.Length) : "";
+            foreach (string prefix in CsvPrefixes)
+                if (name.StartsWith(prefix, StringComparison.Ordinal)) return name.Substring(prefix.Length);
+            return "";
+        }
+
+        private static string SessionLabel(string session, string format)
+        {
+            bool folderSession = session.StartsWith(FolderSessionPrefix, StringComparison.Ordinal);
+            string name = folderSession ? session.Substring(FolderSessionPrefix.Length) : session;
+            if (!DataRecordingService.TryParseSessionTimestamp(name, out DateTime timestamp)) return name;
+            string suffix = folderSession ? name.Substring(DataRecordingService.SessionTimestampFormat.Length) : "";
+            return timestamp.ToString(format, CultureInfo.InvariantCulture) + suffix;
+        }
+
+        private async Task WriteSessionZipAsync(Stream stream, string session, CancellationToken token)
+        {
+            FileInfo[] files = _recordingService.GetRecordedLogFiles(out string activeMetadataPath);
+            FileInfo[] members = string.IsNullOrEmpty(session) ? Array.Empty<FileInfo>() :
+                files.Where(file => SessionName(file) == session).ToArray();
+            if (members.Length == 0)
+            {
+                await WriteHttpResponseAsync(stream, "404 Not Found", "text/plain; charset=utf-8",
+                    Encoding.UTF8.GetBytes("Session not found."), null).ConfigureAwait(false);
+                return;
+            }
+            if (members.Any(file => file.FullName == activeMetadataPath))
+            {
+                await WriteHttpResponseAsync(stream, "409 Conflict", "text/plain; charset=utf-8",
+                    Encoding.UTF8.GetBytes("Stop recording before downloading the session ZIP."), null).ConfigureAwait(false);
+                return;
+            }
+
+            // Connection-close framing lets the archive stream without buffering an entire session.
+            string folderName = SessionLabel(session, DataRecordingService.SessionTimestampFormat);
+            await WriteHttpHeadersAsync(stream, "200 OK", "application/zip", null, folderName + ".zip").ConfigureAwait(false);
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+            {
+                foreach (FileInfo member in members)
+                {
+                    token.ThrowIfCancellationRequested();
+                    using (var input = new FileStream(member.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (Stream entry = zip.CreateEntry(folderName + "/" + member.Name, System.IO.Compression.CompressionLevel.Fastest).Open())
+                        input.CopyTo(entry);
+                }
+            }
+            await stream.FlushAsync().ConfigureAwait(false);
         }
 
         private static byte[] ReadFileShared(string fullPath)
@@ -167,24 +247,28 @@ namespace SpatialMAS.Logging
             byte[] body,
             string attachmentFileName)
         {
+            await WriteHttpHeadersAsync(stream, status, contentType, body.Length, attachmentFileName).ConfigureAwait(false);
+            if (body.Length > 0)
+                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
+        }
+
+        private static async Task WriteHttpHeadersAsync(Stream stream, string status, string contentType,
+            int? contentLength, string attachmentFileName)
+        {
             var sb = new StringBuilder(256);
             sb.Append("HTTP/1.1 ").Append(status).Append("\r\n");
             sb.Append("Content-Type: ").Append(contentType).Append("\r\n");
-            sb.Append("Content-Length: ").Append(body.Length).Append("\r\n");
+            if (contentLength.HasValue) sb.Append("Content-Length: ").Append(contentLength.Value).Append("\r\n");
             sb.Append("Access-Control-Allow-Origin: *\r\n");
             if (!string.IsNullOrEmpty(attachmentFileName))
             {
-                sb.Append("Content-Disposition: attachment; filename=\"").Append(attachmentFileName).Append("\"\r\n");
+                sb.Append("Content-Disposition: attachment; filename*=UTF-8''").Append(Uri.EscapeDataString(attachmentFileName)).Append("\r\n");
             }
             sb.Append("Connection: close\r\n\r\n");
 
             byte[] headerBytes = Encoding.ASCII.GetBytes(sb.ToString());
             await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
-            if (body.Length > 0)
-            {
-                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
-            }
-            await stream.FlushAsync().ConfigureAwait(false);
         }
 
         private string BuildJsonLogsList()
@@ -199,7 +283,7 @@ namespace SpatialMAS.Logging
                 sb.Append("{\"name\":\"").Append(f.Name)
                   .Append("\",\"size\":").Append(f.Length)
                   .Append(",\"lastModifiedUtc\":\"").Append(f.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture))
-                  .Append("\",\"url\":\"/logs/").Append(Uri.EscapeDataString(f.Name)).Append("\"}");
+                  .Append("\",\"url\":\"").Append(LogUrl(f)).Append("\"}");
             }
             sb.Append(']');
             return sb.ToString();
@@ -207,41 +291,49 @@ namespace SpatialMAS.Logging
 
         private string BuildHtmlDashboard()
         {
-            FileInfo[] files = _recordingService.GetRecordedLogFiles();
+            FileInfo[] files = _recordingService.GetRecordedLogFiles(out string activeMetadataPath);
             var sb = new StringBuilder(2048);
             sb.Append("<!DOCTYPE html><html><head><meta charset='utf-8'><title>SpatialMAS Researcher Telemetry Portal</title>");
             sb.Append("<style>");
             sb.Append("body{font-family:system-ui,-apple-system,sans-serif;background:#0d111a;color:#e6edf3;margin:0;padding:32px;}");
             sb.Append(".card{max-width:920px;margin:0 auto;background:#161b26;border:1px solid #2a3245;border-radius:12px;padding:24px;}");
             sb.Append("h1{margin-top:0;color:#38bdf8;font-size:24px;}");
-            sb.Append("table{width:100%;border-collapse:collapse;margin-top:16px;}");
-            sb.Append("th,td{text-align:left;padding:12px;border-bottom:1px solid #262e40;}");
+            sb.Append("section{padding:16px 0;border-top:1px solid #2a3245;}summary{cursor:pointer;overflow-wrap:anywhere;}");
+            sb.Append("li{margin:8px 0;overflow-wrap:anywhere;}a{color:#7dd3fc;}small{color:#b6c4d3;}");
             sb.Append("a.btn{background:#0284c7;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;}");
             sb.Append("a.btn:hover{background:#0369a1;}");
             sb.Append("</style></head><body><div class='card'>");
             sb.Append("<h1>SpatialMAS — Wi-Fi Telemetry &amp; OSC Log Export</h1>");
             sb.Append("<p>Download synchronized world poses, object dimensions, calibration history, session events, OSC traffic, and coordinate metadata over Wi-Fi.</p>");
-            sb.Append("<table><thead><tr><th>Session File</th><th>Size (KB)</th><th>Last Updated (UTC)</th><th>Action</th></tr></thead><tbody>");
-
             if (files.Length == 0)
+                sb.Append("<p>No session logs recorded yet.</p>");
+
+            foreach (var session in files.GroupBy(SessionName))
             {
-                sb.Append("<tr><td colspan='4'>No session logs recorded yet.</td></tr>");
-            }
-            else
-            {
-                for (int i = 0; i < files.Length; i++)
+                bool active = session.Any(file => file.FullName == activeMetadataPath);
+                sb.Append("<section><details><summary><strong>")
+                  .Append(session.Key.Length == 0 ? "Other logs" : WebUtility.HtmlEncode(
+                      SessionLabel(session.Key, "yyyy-MM-dd HH:mm:ss.fff 'UTC'")))
+                  .Append("</strong> <small>").Append(session.Count()).Append(" files");
+                if (active) sb.Append(" · Recording");
+                sb.Append("</small></summary><ul>");
+                foreach (FileInfo file in session)
                 {
-                    FileInfo f = files[i];
-                    double kb = f.Length / 1024.0;
-                    string url = "/logs/" + Uri.EscapeDataString(f.Name);
-                    sb.Append("<tr><td><code>").Append(f.Name).Append("</code></td>")
-                      .Append("<td>").Append(kb.ToString("F1", CultureInfo.InvariantCulture)).Append(" KB</td>")
-                      .Append("<td>").Append(f.LastWriteTimeUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)).Append("</td>")
-                      .Append("<td><a class='btn' href='").Append(url).Append("'>Download</a></td></tr>");
+                    sb.Append("<li><a href='").Append(LogUrl(file)).Append("'>")
+                      .Append(WebUtility.HtmlEncode(file.Name)).Append("</a> <small>")
+                      .Append((file.Length / 1024.0).ToString("F1", CultureInfo.InvariantCulture))
+                      .Append(" KB</small></li>");
                 }
+                sb.Append("</ul></details>");
+                if (active)
+                    sb.Append("<small>Stop recording and refresh to download the ZIP.</small>");
+                else if (session.Key.Length > 0)
+                    sb.Append("<a class='btn' href='").Append(SessionRoute).Append(Uri.EscapeDataString(session.Key))
+                      .Append(".zip'>Download session ZIP</a>");
+                sb.Append("</section>");
             }
 
-            sb.Append("</tbody></table></div></body></html>");
+            sb.Append("</div></body></html>");
             return sb.ToString();
         }
 

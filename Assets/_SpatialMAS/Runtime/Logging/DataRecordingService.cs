@@ -12,6 +12,13 @@ namespace SpatialMAS.Logging
     /// <summary>Buffered physical-world recordings with synchronized samples and explicit calibration provenance.</summary>
     public class DataRecordingService : IDisposable
     {
+        internal const string SessionTimestampFormat = "yyyy-MM-dd_HH-mm-ss-fff";
+        private static readonly object SessionDirectoryLock = new object();
+        private static readonly string[] SessionFiles =
+        {
+            "osc_traffic.csv", "xr_embodiment.csv", "object_state.csv", "calibration.csv",
+            "session_events.csv", "session_metadata.json"
+        };
         private const string SamplePrefix = "TimestampISO,ElapsedMs,SampleId,Frame,SessionId";
         private const string EmbodimentHeader = SamplePrefix +
             ",Scenario,Layout,XRMode,ActiveAgents,FrameTimeMs,CoordinatesValid,CalibrationId,CalibrationRevision,TrackingRevision" +
@@ -79,20 +86,12 @@ namespace SpatialMAS.Logging
             {
                 if (_isRecording) return;
                 string sessionId = Guid.NewGuid().ToString("N");
-                string startedUtc = UtcNow();
-                string suffix = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss-fff", CultureInfo.InvariantCulture) + "_" + sessionId;
+                DateTime start = DateTime.UtcNow;
+                string startedUtc = start.ToString("O", CultureInfo.InvariantCulture);
+                string directory = CreateSessionDirectory(start);
                 string safeTag = SanitizeSessionTag(sessionTag);
-                if (safeTag.Length > 0) suffix += "_" + safeTag;
-                string[] paths =
-                {
-                    Path.Combine(_logsDirectory, "osc_traffic_" + suffix + ".csv"),
-                    Path.Combine(_logsDirectory, "xr_embodiment_" + suffix + ".csv"),
-                    Path.Combine(_logsDirectory, "object_state_" + suffix + ".csv"),
-                    Path.Combine(_logsDirectory, "calibration_" + suffix + ".csv"),
-                    Path.Combine(_logsDirectory, "session_events_" + suffix + ".csv"),
-                    Path.Combine(_logsDirectory, "session_metadata_" + suffix + ".json")
-                };
-                string[] headers = { "TimestampISO,ElapsedMs,Direction,OscAddress,Arguments", EmbodimentHeader, ObjectHeader, CalibrationHeader, EventsHeader };
+                string[] paths = Array.ConvertAll(SessionFiles, file => Path.Combine(directory, file));
+                string[] headers = { "TimestampISO,ElapsedMs,Direction,OscAddress,Arguments,SessionId", EmbodimentHeader, ObjectHeader, CalibrationHeader, EventsHeader };
                 var opened = new List<StreamWriter>(5);
                 var createdPaths = new List<string>(6);
                 CalibrationSnapshot initialCalibration = CurrentCalibration();
@@ -106,7 +105,7 @@ namespace SpatialMAS.Logging
                         writer.Flush();
                     }
                     using (StreamWriter metadata = CreateNewWriter(paths[5], createdPaths))
-                        metadata.Write(BuildMetadata(sessionId, startedUtc, initialCalibration, paths));
+                        metadata.Write(BuildMetadata(sessionId, startedUtc, safeTag, initialCalibration, paths));
                 }
                 catch
                 {
@@ -128,6 +127,19 @@ namespace SpatialMAS.Logging
                 _isRecording = true;
                 WriteCalibrationLocked(initialCalibration);
                 WriteEventLocked("RecordingStarted", "{}", -1);
+            }
+        }
+
+        private string CreateSessionDirectory(DateTime start)
+        {
+            string timestamp = start.ToString(SessionTimestampFormat, CultureInfo.InvariantCulture);
+            lock (SessionDirectoryLock)
+            {
+                string directory = Path.Combine(_logsDirectory, timestamp);
+                for (int index = 2; Directory.Exists(directory) || File.Exists(directory); index++)
+                    directory = Path.Combine(_logsDirectory, timestamp + "_" + index.ToString(CultureInfo.InvariantCulture));
+                Directory.CreateDirectory(directory);
+                return directory;
             }
         }
 
@@ -175,7 +187,7 @@ namespace SpatialMAS.Logging
             {
                 if (!_isRecording) return;
                 _oscWriter.WriteLine(UtcNow() + "," + Number(_sessionStopwatch.Elapsed.TotalMilliseconds) + "," +
-                    EscapeCsvField(direction) + "," + EscapeCsvField(oscAddress) + "," + EscapeCsvField(argumentsCsv));
+                    EscapeCsvField(direction) + "," + EscapeCsvField(oscAddress) + "," + EscapeCsvField(argumentsCsv) + "," + SessionId);
                 OscRowsWritten++;
             }
         }
@@ -271,12 +283,13 @@ namespace SpatialMAS.Logging
         private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
         private static string UtcNow() => DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 
-        private string BuildMetadata(string sessionId, string startedUtc, CalibrationSnapshot calibration, string[] paths)
+        private string BuildMetadata(string sessionId, string startedUtc, string tag, CalibrationSnapshot calibration, string[] paths)
         {
             var sb = new StringBuilder(2048).Append('{');
             JsonProperty(sb, "schemaVersion", "2", true);
             JsonProperty(sb, "sessionId", sessionId);
             JsonProperty(sb, "startedUtc", startedUtc);
+            if (tag.Length > 0) JsonProperty(sb, "sessionTag", tag);
             JsonProperty(sb, "coordinateFrame", "UnityWorld");
             JsonProperty(sb, "positionUnits", "meters");
             JsonProperty(sb, "velocityUnits", "meters/second");
@@ -341,16 +354,57 @@ namespace SpatialMAS.Logging
 
         public FileInfo[] GetRecordedCsvFiles() => GetRecordedFiles(false);
         public FileInfo[] GetRecordedLogFiles() => GetRecordedFiles(true);
+
+        internal FileInfo[] GetRecordedLogFiles(out string activeMetadataPath)
+        {
+            lock (_lock)
+            {
+                activeMetadataPath = _isRecording ? ActiveMetadataPath : null;
+                return GetRecordedLogFiles();
+            }
+        }
+
         private FileInfo[] GetRecordedFiles(bool includeMetadata)
         {
             Flush();
             if (!Directory.Exists(_logsDirectory)) return Array.Empty<FileInfo>();
             var files = new List<FileInfo>();
-            foreach (FileInfo file in new DirectoryInfo(_logsDirectory).GetFiles())
-                if (file.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase) ||
-                    (includeMetadata && file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase))) files.Add(file);
+            var root = new DirectoryInfo(_logsDirectory);
+            foreach (FileInfo file in root.GetFiles())
+                if ((file.Attributes & FileAttributes.ReparsePoint) == 0 &&
+                    (file.Extension.Equals(".csv", StringComparison.OrdinalIgnoreCase) ||
+                     (includeMetadata && file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase)))) files.Add(file);
+            foreach (DirectoryInfo directory in root.GetDirectories())
+            {
+                if ((directory.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                    !IsSessionDirectoryName(directory.Name)) continue;
+                foreach (string name in SessionFiles)
+                {
+                    if (!includeMetadata && name.EndsWith(".json", StringComparison.Ordinal)) continue;
+                    var file = new FileInfo(Path.Combine(directory.FullName, name));
+                    if (file.Exists && (file.Attributes & FileAttributes.ReparsePoint) == 0) files.Add(file);
+                }
+            }
             files.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
             return files.ToArray();
+        }
+
+        internal static bool TryParseSessionTimestamp(string name, out DateTime timestamp)
+        {
+            int length = SessionTimestampFormat.Length;
+            timestamp = default;
+            return name.Length >= length &&
+                DateTime.TryParseExact(name.Substring(0, length), SessionTimestampFormat,
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out timestamp);
+        }
+
+        private static bool IsSessionDirectoryName(string name)
+        {
+            if (!TryParseSessionTimestamp(name, out _)) return false;
+            int length = SessionTimestampFormat.Length;
+            return name.Length == length || (name[length] == '_' &&
+                int.TryParse(name.Substring(length + 1), NumberStyles.None, CultureInfo.InvariantCulture, out int index) &&
+                index >= 2);
         }
 
         private void HandleOscTrafficLogged(string direction, string address, string formattedArgs) => LogOscMessage(direction, address, formattedArgs);

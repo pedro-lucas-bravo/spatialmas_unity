@@ -22,15 +22,17 @@ namespace SpatialMAS.Tests.EditMode
                         string oscPath = recorder.ActiveOscCsvPath;
                         string embodimentPath = recorder.ActiveEmbodimentCsvPath;
                         Assert.IsTrue(paths.Add(oscPath), "Each restart must use a fresh file.");
-                        Assert.AreEqual(Path.GetFileName(oscPath).Substring("osc_traffic_".Length),
-                            Path.GetFileName(embodimentPath).Substring("xr_embodiment_".Length));
+                        Assert.AreEqual("osc_traffic.csv", Path.GetFileName(oscPath));
+                        Assert.AreEqual("xr_embodiment.csv", Path.GetFileName(embodimentPath));
+                        Assert.AreEqual(Path.GetDirectoryName(oscPath), Path.GetDirectoryName(embodimentPath));
                         recorder.LogOscMessage("IN", "/session/" + session, "value");
                         recorder.LogEmbodimentRow(new EmbodimentTelemetryRow { Frame = session });
                         recorder.StopRecording();
                     }
 
-                    Assert.AreEqual(60, Directory.GetFiles(tempDir, "*.csv").Length);
-                    Assert.AreEqual(12, Directory.GetFiles(tempDir, "*.json").Length);
+                    Assert.AreEqual(12, Directory.GetDirectories(tempDir).Length);
+                    Assert.AreEqual(60, Directory.GetFiles(tempDir, "*.csv", SearchOption.AllDirectories).Length);
+                    Assert.AreEqual(12, Directory.GetFiles(tempDir, "*.json", SearchOption.AllDirectories).Length);
                     int expectedSession = 0;
                     foreach (string path in paths)
                     {
@@ -186,7 +188,9 @@ namespace SpatialMAS.Tests.EditMode
                 using (var recorder = new DataRecordingService(null, tempDir))
                 {
                     recorder.StartRecording("../participant\\\"one\"");
-                    Assert.AreEqual(Path.GetFullPath(tempDir), Path.GetDirectoryName(recorder.ActiveOscCsvPath));
+                    string folder = Path.GetDirectoryName(recorder.ActiveOscCsvPath);
+                    Assert.AreEqual(Path.GetFullPath(tempDir), Path.GetDirectoryName(folder));
+                    StringAssert.DoesNotContain("participant", Path.GetFileName(folder));
                     recorder.LogOscMessage("IN", "/message", "line one\nline two");
                     recorder.StopRecording();
                     StringAssert.Contains("\"line one\nline two\"", File.ReadAllText(recorder.ActiveOscCsvPath));
@@ -235,7 +239,12 @@ namespace SpatialMAS.Tests.EditMode
 
                     string[] oscLines = File.ReadAllLines(recorder.ActiveOscCsvPath);
                     Assert.AreEqual(2, oscLines.Length);
+                    StringAssert.EndsWith(",SessionId", oscLines[0]);
+                    StringAssert.EndsWith("," + recorder.SessionId, oscLines[1]);
                     StringAssert.Contains("/agents/position/id", oscLines[1]);
+                    string metadata = File.ReadAllText(recorder.ActiveMetadataPath);
+                    StringAssert.Contains("\"sessionId\":\"" + recorder.SessionId + "\"", metadata);
+                    StringAssert.Contains("\"osc_traffic.csv\"", metadata);
 
                     string[] embLines = File.ReadAllLines(recorder.ActiveEmbodimentCsvPath);
                     Assert.AreEqual(2, embLines.Length);

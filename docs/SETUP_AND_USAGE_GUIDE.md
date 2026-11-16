@@ -246,18 +246,31 @@ If you want the system Python by default, run `conda config --set auto_activate_
 SpatialMAS eliminates the need for USB `adb pull` cables when running user studies on standalone headsets:
 
 1. **Start / Stop Recording**: Press **`L`** or click **`Start CSV [L]` / `Stop CSV [L]`** on the HUD (or send `/logging/state 1` or `/recorder/start` over OSC).
-2. **Recorded Files** (all under `Application.persistentDataPath/SpatialMAS_Logs/`, sharing a session ID):
-   - `osc_traffic_*.csv`: Raw protocol traffic.
-   - `xr_embodiment_*.csv`: Actual head/hand world poses, full quaternions and tracking flags, scenario/layout/center, reference revision and tracking-origin pose/scale.
-   - `object_state_*.csv`: Actual agent/boundary/arrow poses and physical dimensions at the same sample timestamps.
-   - `calibration_*.csv`: Initial reference snapshot and every change.
-   - `session_events_*.csv`: Scenario/parameter/preset and calibration/tracking events.
-   - `session_metadata_*.json`: Schema version 2, units/axes/quaternion conventions, configuration snapshot and file inventory.
+2. **Recorded files**. Each new session gets a UTC timestamp folder under `Application.persistentDataPath/SpatialMAS_Logs/`, such as `2026-11-16_12-03-35-123/`. If a timestamp repeats, a number distinguishes the folders. Every CSV and the metadata contain the session ID.
+   - `osc_traffic.csv` contains raw protocol traffic.
+   - `xr_embodiment.csv` contains head and hand world poses, full quaternions and tracking flags, scenario context, reference revision and tracking-origin pose and scale.
+   - `object_state.csv` contains agent, boundary and arrow poses and physical dimensions at the same sample timestamps.
+   - `calibration.csv` contains the initial reference snapshot and every change.
+   - `session_events.csv` contains scenario, parameter, preset, calibration and tracking events.
+   - `session_metadata.json` lists the files and describes schema version 2, coordinate conventions, and the configuration snapshot.
    - Join object and participant rows on `(SessionId, SampleId)`. Sampling targets 50 Hz with at most one observation per frame. Use `ElapsedMs` for analysis rather than assuming fixed intervals. All pose data stays in Unity-world meters and quaternion `x,y,z,w`; OSC traffic uses the units documented for each endpoint. Files use unique names and never truncate earlier sessions.
-3. **Download over Wi-Fi**: Open `http://<device-ip>:8080/` (or localhost on desktop) and download all six session files. `/api/logs` lists CSV and JSON downloads.
+3. **Download over Wi-Fi**. Stop the recording, then open the download address shown in the **Session** tab from a browser on the same network. The default address is `http://<device-ip>:8080/`. Use `http://localhost:8080/` from the PC that runs the Editor.
+   - The dashboard shows one collapsed group per session, with the most recently updated recordings first. Expand a group to download individual CSV or JSON files.
+   - Select **Download session ZIP** to get one archive. The page label, ZIP name and extracted folder use the recording's UTC timestamp. The files inside retain their original names and session ID. Refresh the page after stopping a recording to see its ZIP button.
+   - New recordings are grouped by folder. Older flat recordings are grouped by their shared filename suffix. Files without a recognized session name appear under **Other logs**.
 4. **Calibration workflow**: Unlock the reference, place/rotate it to match a known physical frame observed by the external system, then lock it. Hiding the marker leaves its frame active. Convert world data to reference coordinates using the matching calibration revision, as specified in [Architecture sections 5–6](ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract). Reference pose changes do not move the simulation. Revalidate alignment after tracking-origin changes; spatial alignment does not synchronize external clocks.
 
 Old world-scale/origin JSON fields are ignored and the old `/xr/scale`/`/xr/origin` OSC commands return `/error`. Existing legacy scripts now use actual physical millimeters without the former `.20` multiplier or chest-height offset. Use `/world/...` for Unity XYZ messages, or keep the legacy Y/Z axis adapter explicitly. Old recordings are left unchanged; use their original interpretation rather than the new schema.
+
+### 6.1 How the local export site works
+
+SpatialMAS starts a small HTTP server inside the running app. `WifiLogExportServer` uses a .NET `TcpListener` on IPv4, normally on TCP port 8080. The app serves the page itself. Keep SpatialMAS running while browsing or downloading, and keep the Quest awake when using the native app.
+
+- `/` builds the dashboard from the CSV and JSON files in the app's `SpatialMAS_Logs` directory.
+- `/api/logs` returns a flat JSON file list for scripts. Follow each item's `url` to download it. New sessions use `/logs/<folder>/<filename>`, and legacy files use `/logs/<filename>`. The server flushes the recorder before reading so individual downloads include buffered rows written up to that point.
+- `/sessions/<session-name>.zip` returns a ZIP of the selected session. The server reads and compresses the stopped session directly into the HTTP response and closes the connection to end the download. It returns HTTP 409 if the session is still recording.
+
+The site serves plain HTTP without a login. Anyone who can reach its port can download the recordings, so use a trusted network for research data. If the page does not open, verify the app's current IP and that the browser can reach TCP 8080. When serving from the Editor, check the PC's inbound firewall rules for Unity.
 
 ---
 
