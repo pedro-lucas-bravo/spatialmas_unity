@@ -1,0 +1,5 @@
+TimestampISO,ElapsedMs,Frame,SessionId,EventType,PayloadJson
+2026-11-16T11:54:27.4248810Z,0.0347,-1,3dca164998744a72a1dae4ea3796b25b,RecordingStarted,{}
+2026-11-16T11:54:27.4252920Z,0.44870000000000004,7468,3dca164998744a72a1dae4ea3796b25b,scenario_state,"{""scenarioId"":1,""scenarioName"":""1. Crowd Navigation & Human Avoidance"",""activeLayout"":""Compact"",""nextLayout"":""Compact"",""activeCenter_m"":{""x"":0.0,""y"":1.2000000476837158,""z"":0.800000011920929},""nextCenter_m"":{""x"":0.0,""y"":1.2000000476837158,""z"":0.800000011920929},""paused"":false}"
+2026-11-16T11:54:27.4253380Z,0.49260000000000004,7468,3dca164998744a72a1dae4ea3796b25b,tracking_frame,"{""revision"":3,""position_m"":{""x"":0.0,""y"":0.0,""z"":0.0},""scale"":{""x"":1.0,""y"":1.0,""z"":1.0},""rotation_xyzw"":{""x"":0.0,""y"":0.0,""z"":0.0,""w"":1.0},""coordinatesValid"":true,""reason"":""initial""}"
+2026-11-16T11:54:54.0589270Z,26634.0852,-1,3dca164998744a72a1dae4ea3796b25b,RecordingStopped,{}
