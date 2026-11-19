@@ -67,7 +67,7 @@ namespace SpatialMAS.Core
         public event Action<Vector3> OnSetScenarioCenter;
         public event Action<ScenarioLayout> OnSetScenarioLayout;
         public event Action<bool, float, float> OnConfigureUserRepeller;
-        public event Action<int> OnLoadScenario;
+        public event Action<int, string> OnLoadScenario;
         public event Action<string, float> OnSetScenarioParam;
         public event Action<bool> OnSetRecordingState;
         public event Action<string, int, float> OnTestAliveReceived;
@@ -226,8 +226,8 @@ namespace SpatialMAS.Core
         public void ConfigureUserRepeller(bool enabled, float radiusMeters, float force)
             => OnConfigureUserRepeller?.Invoke(enabled, radiusMeters, force);
 
-        public void LoadScenario(int scenarioIndex)
-            => OnLoadScenario?.Invoke(scenarioIndex);
+        public void LoadScenario(int scenarioIndex, string source = "local")
+            => OnLoadScenario?.Invoke(scenarioIndex, source);
 
         public void SetScenarioParam(string paramName, float value)
             => OnSetScenarioParam?.Invoke(paramName, value);

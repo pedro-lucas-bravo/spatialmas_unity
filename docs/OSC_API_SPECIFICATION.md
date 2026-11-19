@@ -124,7 +124,7 @@ The `/world` aliases retain the endpoint signatures in Section 2.1, with physica
 | `/calibration/get` | `()` | Requests the current `/calibration/state`, including reference ID, revision and lock state. |
 | `/scenario/center` | `(x_mm,y_mm,z_mm)` | Physical Unity XYZ spawn center for the **next scenario load/reset**. Existing objects and the reference are unchanged. |
 | `/scenario/layout` | `(int layout)` | `0` Compact; `1` RoomScale. Chooses explicit physical parameters for the **next scenario load/reset**; never rescales an active scene. |
-| `/scenario/load` | `(int scenarioId)` | Switches active scenario: `0`=External OSC, `1`=Crowd Avoidance, `2`=3D Swarmalators, `3`=Attractors & Repellers, `4`=Musical Encounters, `5`=Self-Assembly. |
+| `/scenario/load` | `(int scenarioId)` | Immediately clears the outgoing world and loads the requested scenario. IDs are `0` External OSC, `1` Crowd Avoidance, `2` Swarmalators, `3` Attractors & Repellers, `4` Musical Encounters, and `5` Self-Assembly. |
 | `/scenario/param` | `(string name, float value)` | Updates a parameter of the active scenario. See [parameter names, ranges, and examples](SCENARIOS_AND_AUDIO.md#control-built-in-scenarios-over-osc). |
 | `/logging/state` | `(int recording)` | `1` = Starts a new CSV recording session; `0` = Flushes and stops recording. |
 
@@ -185,3 +185,5 @@ A boundary can have one optional grabbable handle identified by the boundary ID.
 The unprefixed position and offset aliases use legacy X/depth/up axes. After registering with `/connect`, subscribe to one position address. A user drag moves the boundary and emits its absolute center on both position aliases. The handle keeps its offset during user drags and inbound boundary moves. An inbound offset moves only the handle. Inbound position and offset commands produce no motion echo.
 
 For built-in Musical Encounters, boundary `1` starts with a green diamond. Send `/boundary/handle/configure/id 1 2 130 "#ff00ff"` for a 130 mm magenta diamond. Send `/world/boundary/handle/offset/id 1 0 300 0` to put it 30 cm above the center, then `/world/boundary/position/id 1 500 1200 800` to place the center at Unity XYZ (0.5, 1.2, 0.8) meters. The scenario derives autonomous sphere positions from the arena center and their local simulation positions. The red musical cubes stay independent. A custom external simulation can apply its own behavior using the boundary center received from a drag. Set the next built-in spawn center separately with `/scenario/center`.
+
+An OSC scenario load runs without a confirmation dialog. External OSC starts empty, replacing the previous behavior that handed existing agents to the controller. Send setup commands after the load, or in order after it in the same OSC bundle. Incoming OSC commands are still processed in every scenario. An unknown scenario ID leaves the current world in place.

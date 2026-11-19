@@ -99,7 +99,7 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator ExternalOscTransfer_PreservesAndUnmutesExistingAgents()
+        public IEnumerator ExternalOscSwitch_ClearsExistingAgentsAndLogsSource()
         {
             var root = new GameObject("ExternalOscTransferRegression");
             try
@@ -109,15 +109,26 @@ namespace SpatialMAS.Tests.PlayMode
                 agents.Initialize(bus);
                 var manager = root.AddComponent<ScenarioManager>();
                 manager.Initialize(bus, Vector3.zero, agents, null, 1);
-                Assert.IsTrue(agents.TryGetAgent(0, out var preservedAgent));
                 int count = agents.ActiveCount;
-
-                bus.LoadScenario(0);
-
+                string type = null, payload = null;
+                int events = 0;
+                manager.WorldActionExecuted += (name, json) => { type = name; payload = json; events++; };
+                bus.LoadScenario(99, "osc");
                 Assert.AreEqual(count, agents.ActiveCount);
-                Assert.IsTrue(agents.TryGetAgent(0, out var transferredAgent));
-                Assert.AreSame(preservedAgent, transferredAgent);
-                foreach (var pair in agents.ActiveAgents) Assert.IsFalse(pair.Value.Synth.IsMuted);
+                Assert.AreEqual(0, events);
+                bus.LoadScenario(0, "osc");
+                Assert.AreEqual(0, agents.ActiveCount);
+                Assert.AreEqual(1, events);
+                Assert.AreEqual("scenario_switch", type);
+                StringAssert.Contains("\"source\":\"osc\"", payload);
+                StringAssert.Contains("\"fromScenario\":1", payload);
+                StringAssert.Contains("\"toScenario\":0", payload);
+                StringAssert.Contains($"\"agentsRemoved\":{count}", payload);
+                manager.ResetActiveScenario();
+                Assert.AreEqual(1, events);
+                manager.ClearAll("desktop_ui");
+                Assert.AreEqual("clear_all", type);
+                Assert.AreEqual(2, events);
                 yield return null;
             }
             finally

@@ -124,12 +124,21 @@ namespace SpatialMAS.Tests.PlayMode
                 recorder.StopRecording();
                 recorder.StartRecording(); // No intervening LateUpdate to observe IsRecording == false.
                 Assert.AreNotEqual(firstSessionId, recorder.SessionId);
+                string sessionId = recorder.SessionId;
+                bus.LoadScenario(4, "osc");
+                bus.LoadScenario(0, "osc");
+                scenarios.ClearAll("desktop_ui");
+                Assert.AreEqual(sessionId, recorder.SessionId);
                 yield return new WaitForSecondsRealtime(0.05f);
                 recorder.StopRecording();
 
                 string events = File.ReadAllText(recorder.ActiveEventsCsvPath);
                 StringAssert.Contains(",scenario_state,", events);
                 StringAssert.Contains(",tracking_frame,", events);
+                StringAssert.Contains($",{sessionId},scenario_switch,", events);
+                StringAssert.Contains($",{sessionId},clear_all,", events);
+                StringAssert.Contains("\"\"source\"\":\"\"osc\"\"", events);
+                StringAssert.Contains("\"\"source\"\":\"\"desktop_ui\"\"", events);
                 StringAssert.Contains("\"\"reason\"\":\"\"initial\"\"", events);
                 Assert.Greater(File.ReadAllLines(recorder.ActiveEmbodimentCsvPath).Length, 1);
             }

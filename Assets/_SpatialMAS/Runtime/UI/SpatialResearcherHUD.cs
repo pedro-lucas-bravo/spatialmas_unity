@@ -166,12 +166,18 @@ namespace SpatialMAS.UI
         private float _smoothedFps = 90f;
 
         // Deferred UI action flags (drained in Update() so scene/GPU mutations never run inside OnGUI!)
-        private int _pendingScenarioToLoad = -1;
+
         private int _pendingPresetToApply = -1;
         private bool _pendingToggleDisplayMode;
         private bool _pendingTogglePause;
         private bool _pendingResetScenario;
-        private bool _pendingRemoveAllAgents;
+        private int _confirmationTarget = -1;
+        private int _confirmedTarget = -1;
+        private string _confirmationSource, _confirmedSource;
+        private TextMeshProUGUI _confirmationText, _oscActivityLabel;
+        private long _lastOscIn, _lastOscOut;
+        private float _oscInUntil = -1f, _oscOutUntil = -1f;
+        private const int ClearTarget = -2;
         private bool _pendingCenterCamera;
         private bool _pendingToggleFpsLook;
         private bool _pendingToggleAgentIds;
@@ -261,9 +267,10 @@ namespace SpatialMAS.UI
             CreatePanelLabel(rt, "Researcher Panel", new Rect(18, 14, 424, 46), 26, palette => palette.primaryText);
             CreateWorldButton(rt, "Close", new Rect(454, 14, 148, 46), () => _panelLifecycle.Hide());
             _worldHudStatusText = CreatePanelLabel(rt, "", new Rect(18, 67, 584, 28), 22, palette => palette.primaryText);
+            _oscActivityLabel = CreatePanelLabel(rt, "", new Rect(395, 102, 205, 22), 16, palette => palette.primaryText);
             _runStatus = CreatePanelLabel(rt, "", new Rect(18, 99, 235, 26), 19, palette => _scenarioManager?.IsPaused == true ? palette.paused : palette.running);
             _recordDot = CreatePanelLabel(rt, "●", new Rect(254, 99, 20, 26), 17, palette => palette.recording);
-            _recordStatus = CreatePanelLabel(rt, "", new Rect(276, 99, 326, 26), 19,
+            _recordStatus = CreatePanelLabel(rt, "", new Rect(276, 99, 118, 26), 16,
                 palette => _recorder?.IsRecording == true ? palette.recording : palette.notRecording);
 
             CreatePanelImage(rt, "Content Inset", new Rect(18, 183, 584, 612), palette => palette.inset);
@@ -287,6 +294,7 @@ namespace SpatialMAS.UI
             CreateWorldButton(rt, "Participant Mode", new Rect(18, 854, 584, 46), () => _panelLifecycle.ResearcherMode = false);
             _moveHint = CreatePanelLabel(rt, "Pinch and drag blank space to move", new Rect(18, 908, 584, 35), 19, palette => palette.accent);
             _moveHint.gameObject.SetActive(false);
+            BuildConfirmation(rt);
             ConfigureWorldCanvas();
             ConfigurePanelLifecycle();
             PositionWorldPanel();
@@ -304,7 +312,7 @@ namespace SpatialMAS.UI
             {
                 int scenario = i;
                 var button = CreateWorldButton(page, names[i], new Rect(18 + i % 2 * 296, 311 + i / 2 * 57, 288, 51),
-                    () => _pendingScenarioToLoad = scenario);
+                    () => RequestConfirmation(scenario, "xr_panel"));
                 _scenarioIndicators[i] = CreateSelectionMark(button).gameObject;
             }
             CreatePanelLabel(page, "Scenario presets", new Rect(18, 495, 584, 26), 20, palette => palette.secondaryText);
@@ -352,16 +360,53 @@ namespace SpatialMAS.UI
         private void BuildSecondaryActions(Transform page)
         {
             CreatePanelLabel(page, "Secondary actions", new Rect(18, 695, 584, 26), 18, palette => palette.secondaryText);
-            CreateWorldButton(page, "Clear All", new Rect(18, 733, 288, 48), () => SetClearConfirmation(true));
-            _clearConfirmation = CreatePanelGroup(page, "Clear Confirmation");
-            var confirmation = CreatePanelImage(_clearConfirmation.transform, "Confirmation backdrop",
-                new Rect(18, 727, 584, 66), palette => palette.inset, true);
-            CreateWorldButton(confirmation.transform, "Confirm clear all agents", new Rect(0, 6, 352, 48), () =>
+            CreateWorldButton(page, "Clear All", new Rect(18, 733, 288, 48), () => RequestConfirmation(ClearTarget, "xr_panel"));
+        }
+
+        private void BuildConfirmation(Transform root)
+        {
+            _clearConfirmation = CreatePanelGroup(root, "Clear Confirmation");
+            var backdrop = CreatePanelImage(_clearConfirmation.transform, "Confirmation backdrop",
+                new Rect(18, 183, 584, 612), palette => palette.inset, true);
+            _confirmationText = CreatePanelLabel(backdrop.transform, "", new Rect(20, 185, 544, 100),
+                23, palette => palette.primaryText);
+            CreateWorldButton(backdrop.transform, "Confirm", new Rect(20, 300, 260, 52), ConfirmWorldAction,
+                palette => palette.confirmation);
+            CreateWorldButton(backdrop.transform, "Cancel", new Rect(296, 300, 260, 52), () => SetClearConfirmation(false));
+            SetClearConfirmation(false);
+        }
+
+        private string ConfirmationMessage()
+        {
+            if (_confirmationTarget == ClearTarget) return "Clear all agents, boundaries, and arrows and stop their audio?";
+            var destination = _scenarioManager?.RegisteredScenarios;
+            string name = _confirmationTarget.ToString();
+            if (destination != null)
+                foreach (var scenario in destination)
+                    if (scenario.ScenarioId == _confirmationTarget) name = scenario.DisplayName;
+            return $"Switch to {name}? Current objects and their audio will be cleared.";
+        }
+
+        private void RequestConfirmation(int target, string source)
+        {
+            if (target == _scenarioManager?.ActiveScenarioId || _confirmedTarget != -1) return;
+            _confirmationTarget = target;
+            _confirmationSource = source;
+            if (_confirmationText != null) _confirmationText.text = ConfirmationMessage();
+            SetClearConfirmation(true);
+            if (IsHeadsetActive && source == "desktop_shortcut") _panelLifecycle?.Recall();
+            if (!IsHeadsetActive)
             {
-                SetClearConfirmation(false);
-                _pendingRemoveAllAgents = true;
-            }, palette => palette.confirmation);
-            CreateWorldButton(confirmation.transform, "Cancel", new Rect(364, 6, 220, 48), () => SetClearConfirmation(false));
+                _showScreenOverlayOnDesktop = true;
+                if (_desktopRig?.IsFpsCursorLocked == true) _desktopRig.SetFpsCursorLock(false);
+            }
+        }
+
+        private void ConfirmWorldAction()
+        {
+            if (_confirmationTarget == -1) return;
+            _confirmedTarget = _confirmationTarget;
+            _confirmedSource = _confirmationSource;
             SetClearConfirmation(false);
         }
 
@@ -374,6 +419,7 @@ namespace SpatialMAS.UI
 
         private void SetClearConfirmation(bool visible)
         {
+            if (!visible) _confirmationTarget = -1;
             if (_clearConfirmation != null) _clearConfirmation.SetActive(visible);
         }
 
@@ -426,9 +472,9 @@ namespace SpatialMAS.UI
             foreach (var clear in _clearButtonHover) clear();
             _panelPresses.Clear();
             SetClearConfirmation(false);
-            _pendingScenarioToLoad = _pendingPresetToApply = _pendingLayout = -1;
+            _confirmedTarget = _pendingPresetToApply = _pendingLayout = -1;
             _pendingToggleDisplayMode = _pendingTogglePause = _pendingResetScenario = false;
-            _pendingRemoveAllAgents = _pendingCenterCamera = _pendingToggleFpsLook = false;
+            _pendingCenterCamera = _pendingToggleFpsLook = false;
             _pendingToggleAgentIds = _pendingToggleRecording = false;
             _pendingToggleReferenceVisible = _pendingToggleReferenceLocked = false;
             _pendingPlaceReference = _pendingResetReference = _pendingRotateReference = false;
@@ -758,13 +804,38 @@ namespace SpatialMAS.UI
             _moveHint.gameObject.SetActive(visible && Time.unscaledTime < _moveHintUntil);
         }
 
+        private void UpdateOscActivity()
+        {
+            float now = Time.unscaledTime;
+            long received = _oscServer?.TotalMessagesReceived ?? 0;
+            long sent = _oscClient?.TotalMessagesSent ?? 0;
+            if (received != _lastOscIn) _oscInUntil = now + 0.45f;
+            if (sent != _lastOscOut) _oscOutUntil = now + 0.45f;
+            _lastOscIn = received;
+            _lastOscOut = sent;
+            if (_oscActivityLabel != null)
+            {
+                string status = OscActivityText(true);
+                if (_oscActivityLabel.text != status) _oscActivityLabel.text = status;
+            }
+        }
+
+        private string OscActivityText(bool color)
+        {
+            string Light(float until) => Time.unscaledTime < until
+                ? (color ? "<color=#55ee99>●</color>" : "●") : "○";
+            return $"OSC IN {Light(_oscInUntil)}    OSC OUT {Light(_oscOutUntil)}";
+        }
+
         private void ProcessDeferredUiActions()
         {
-            if (_pendingScenarioToLoad >= 0)
+            UpdateOscActivity();
+            if (_confirmedTarget != -1)
             {
-                int target = _pendingScenarioToLoad;
-                _pendingScenarioToLoad = -1;
-                _bus?.LoadScenario(target);
+                int target = _confirmedTarget;
+                _confirmedTarget = -1;
+                if (target == ClearTarget) _scenarioManager?.ClearAll(_confirmedSource);
+                else if (target != _scenarioManager?.ActiveScenarioId) _bus?.LoadScenario(target, _confirmedSource);
             }
 
             if (_pendingPresetToApply >= 0)
@@ -790,14 +861,6 @@ namespace SpatialMAS.UI
             {
                 _pendingResetScenario = false;
                 _scenarioManager?.ResetActiveScenario();
-            }
-
-            if (_pendingRemoveAllAgents)
-            {
-                _pendingRemoveAllAgents = false;
-                _bus?.RemoveAgents(null);
-                _bus?.RemoveBoundary(-1);
-                _bus?.RemoveArrow(-1);
             }
 
             if (_pendingCenterCamera)
@@ -849,12 +912,12 @@ namespace SpatialMAS.UI
             var kb = Keyboard.current;
             if (kb == null) return;
 
-            if (kb[Key.Digit0].wasPressedThisFrame || kb[Key.Numpad0].wasPressedThisFrame) _bus?.LoadScenario(0);
-            if (kb[Key.Digit1].wasPressedThisFrame || kb[Key.Numpad1].wasPressedThisFrame) _bus?.LoadScenario(1);
-            if (kb[Key.Digit2].wasPressedThisFrame || kb[Key.Numpad2].wasPressedThisFrame) _bus?.LoadScenario(2);
-            if (kb[Key.Digit3].wasPressedThisFrame || kb[Key.Numpad3].wasPressedThisFrame) _bus?.LoadScenario(3);
-            if (kb[Key.Digit4].wasPressedThisFrame || kb[Key.Numpad4].wasPressedThisFrame) _bus?.LoadScenario(4);
-            if (kb[Key.Digit5].wasPressedThisFrame || kb[Key.Numpad5].wasPressedThisFrame) _bus?.LoadScenario(5);
+            if (kb[Key.Digit0].wasPressedThisFrame || kb[Key.Numpad0].wasPressedThisFrame) RequestConfirmation(0, "desktop_shortcut");
+            if (kb[Key.Digit1].wasPressedThisFrame || kb[Key.Numpad1].wasPressedThisFrame) RequestConfirmation(1, "desktop_shortcut");
+            if (kb[Key.Digit2].wasPressedThisFrame || kb[Key.Numpad2].wasPressedThisFrame) RequestConfirmation(2, "desktop_shortcut");
+            if (kb[Key.Digit3].wasPressedThisFrame || kb[Key.Numpad3].wasPressedThisFrame) RequestConfirmation(3, "desktop_shortcut");
+            if (kb[Key.Digit4].wasPressedThisFrame || kb[Key.Numpad4].wasPressedThisFrame) RequestConfirmation(4, "desktop_shortcut");
+            if (kb[Key.Digit5].wasPressedThisFrame || kb[Key.Numpad5].wasPressedThisFrame) RequestConfirmation(5, "desktop_shortcut");
 
             // [M] or [Tab]: Toggle MR Passthrough / VR Immersive Studio
             if ((kb[Key.M].wasPressedThisFrame || kb[Key.Tab].wasPressedThisFrame) && _modeSwitcher != null)
@@ -928,7 +991,7 @@ namespace SpatialMAS.UI
             _sessionStatus.text = $"{sessionLabel}\nLog download address\n{_wifiServer?.DashboardUrl ?? "Unavailable"}";
             if (_diagnostics.activeInHierarchy)
             {
-                string osc = _oscServer == null ? "OSC unavailable" : $"OSC UDP {_oscServer.ListenPort} · {_oscServer.TotalMessagesReceived} received";
+                string osc = _oscServer == null ? "OSC unavailable" : $"OSC UDP {_oscServer.ListenPort} · {_oscServer.TotalMessagesReceived} received · {_oscClient?.TotalMessagesSent ?? 0} sent";
                 _diagnosticsStatus.text = $"{_platformAdapter?.ActiveDeviceName ?? "XR/Desktop"} · {_smoothedFps:F0} FPS\n{osc}\nAgents · {_agentManager?.ActiveCount ?? 0}";
             }
         }
@@ -950,7 +1013,7 @@ namespace SpatialMAS.UI
             // Draw live Hovered / Grabbed Agent Inspector Badge at bottom-center of screen
             DrawHoveredOrGrabbedAgentBadge();
 
-            if (!_showScreenOverlayOnDesktop)
+            if (!_showScreenOverlayOnDesktop && _confirmationTarget == -1)
             {
                 if (GUI.Button(new Rect(14f, 14f, 175f, 28f), "Show HUD Panel [H]"))
                 {
@@ -960,6 +1023,14 @@ namespace SpatialMAS.UI
             }
 
             GUILayout.BeginArea(_hudRect, GUI.skin.box);
+            if (_confirmationTarget != -1)
+            {
+                GUILayout.Label(ConfirmationMessage());
+                if (GUILayout.Button("Confirm")) ConfirmWorldAction();
+                if (GUILayout.Button("Cancel")) SetClearConfirmation(false);
+                GUILayout.EndArea();
+                return;
+            }
             GUILayout.BeginHorizontal();
             GUILayout.Label("<b>SpatialMAS Researcher Control Panel</b>");
             if (GUILayout.Button("Hide [H]", GUILayout.Width(70f)))
@@ -974,7 +1045,8 @@ namespace SpatialMAS.UI
             long rxMsgs = _oscServer != null ? _oscServer.TotalMessagesReceived : 0;
             bool isPaused = _scenarioManager != null && _scenarioManager.IsPaused;
 
-            GUILayout.Label($"FPS: {_smoothedFps:F0} | Agents: {agents} | Mode: {mode} | OSC Rx: {rxMsgs}");
+            GUILayout.Label($"FPS: {_smoothedFps:F0} | Agents: {agents} | Mode: {mode} | OSC Rx: {rxMsgs} | Tx: {_oscClient?.TotalMessagesSent ?? 0}");
+            GUILayout.Label(OscActivityText(false));
             GUILayout.Label($"Wi-Fi CSV Logs: {wifiUrl}");
 
             // Row 1: Display Mode, CSV Recording, Agent IDs
@@ -1021,7 +1093,7 @@ namespace SpatialMAS.UI
             if (GUILayout.Button("Next: Compact")) _pendingLayout = 0;
             if (GUILayout.Button("Next: Room Layout")) _pendingLayout = 1;
             if (GUILayout.Button("Spawn Next Here")) _pendingSetScenarioCenter = true;
-            if (GUILayout.Button("Clear All")) _pendingRemoveAllAgents = true;
+            if (GUILayout.Button("Clear All")) RequestConfirmation(ClearTarget, "desktop_ui");
             GUILayout.EndHorizontal();
             GUILayout.Label("Placement/layout apply on next scenario load or reset.");
             if (_calibration != null)
@@ -1044,12 +1116,12 @@ namespace SpatialMAS.UI
             // Row 4: Built-In Scenarios (0..5)
             int activeId = _scenarioManager != null ? _scenarioManager.ActiveScenarioId : 0;
             GUILayout.Label($"<b>Scenarios (Active: #{activeId} {(isPaused ? "[PAUSED]" : "")}):</b>");
-            if (GUILayout.Button("0. External OSC Mode (HS-ims Port 6011)")) _pendingScenarioToLoad = 0;
-            if (GUILayout.Button("1. Crowd Navigation & Human Avoidance")) _pendingScenarioToLoad = 1;
-            if (GUILayout.Button("2. 3D Swarmalators (Sync & Swarm)")) _pendingScenarioToLoad = 2;
-            if (GUILayout.Button("3. Orbital Attractors & Repellers")) _pendingScenarioToLoad = 3;
-            if (GUILayout.Button("4. Musical Encounters (SysMus25)")) _pendingScenarioToLoad = 4;
-            if (GUILayout.Button("5. Self-Assembly (6-Face Musical Cubes)")) _pendingScenarioToLoad = 5;
+            if (GUILayout.Button("0. External OSC Mode (HS-ims Port 6011)")) RequestConfirmation(0, "desktop_ui");
+            if (GUILayout.Button("1. Crowd Navigation & Human Avoidance")) RequestConfirmation(1, "desktop_ui");
+            if (GUILayout.Button("2. 3D Swarmalators (Sync & Swarm)")) RequestConfirmation(2, "desktop_ui");
+            if (GUILayout.Button("3. Orbital Attractors & Repellers")) RequestConfirmation(3, "desktop_ui");
+            if (GUILayout.Button("4. Musical Encounters (SysMus25)")) RequestConfirmation(4, "desktop_ui");
+            if (GUILayout.Button("5. Self-Assembly (6-Face Musical Cubes)")) RequestConfirmation(5, "desktop_ui");
 
             // Row 5: Scenario Presets Bar
             GUILayout.BeginHorizontal();

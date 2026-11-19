@@ -1,0 +1,5 @@
+TimestampISO,ElapsedMs,Frame,SessionId,EventType,PayloadJson
+2026-11-19T11:56:38.5471100Z,0.0412,-1,124d0ce1984e40ad9b809f7d93f2fc8d,RecordingStarted,{}
+2026-11-19T11:56:38.5490750Z,2.0075000000000003,7110,124d0ce1984e40ad9b809f7d93f2fc8d,scenario_state,"{""scenarioId"":4,""scenarioName"":""4. Musical Encounters (SysMus25)"",""activeLayout"":""RoomScale"",""nextLayout"":""RoomScale"",""activeCenter_m"":{""x"":0.0,""y"":1.2000000476837158,""z"":0.800000011920929},""nextCenter_m"":{""x"":0.0,""y"":1.2000000476837158,""z"":0.800000011920929},""paused"":false}"
+2026-11-19T11:56:38.5491350Z,2.0651,7110,124d0ce1984e40ad9b809f7d93f2fc8d,tracking_frame,"{""revision"":2,""position_m"":{""x"":0.0,""y"":0.0,""z"":0.0},""scale"":{""x"":1.0,""y"":1.0,""z"":1.0},""rotation_xyzw"":{""x"":0.0,""y"":0.0,""z"":0.0,""w"":1.0},""coordinatesValid"":true,""reason"":""initial""}"
+2026-11-19T11:56:51.7402720Z,13193.202200000002,-1,124d0ce1984e40ad9b809f7d93f2fc8d,RecordingStopped,{}

@@ -170,7 +170,7 @@ namespace SpatialMAS.Core
             // 7. Scenario Manager (Built-In Scenarios 0..5)
             ScenarioManager = GetOrAddChildComponent<ScenarioManager>("ScenarioManager");
             ScenarioManager.Initialize(CommandBus, _config.scenarioCenter, AgentManager, EmbodimentBridge,
-                _config.startupScenarioIndex, _config.scenarioLayout);
+                _config.startupScenarioIndex, _config.scenarioLayout, BoundaryManager, ArrowManager);
 
             TelemetrySampler = GetOrAddChildComponent<EmbodimentTelemetrySampler>("EmbodimentTelemetrySampler");
             TelemetrySampler.Initialize(

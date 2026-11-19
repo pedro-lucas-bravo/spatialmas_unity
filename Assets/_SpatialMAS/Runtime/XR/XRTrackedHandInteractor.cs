@@ -261,6 +261,13 @@ namespace SpatialMAS.XR
             _defaultUiRayGradient = gradient;
             _appliedPanelRayTint = Color.white;
             _visual.customizeLinePropertiesForState = true;
+            _visual.hoverHitProperties ??= new LineProperties();
+            _visual.uiHitProperties ??= new LineProperties();
+            _visual.uiPressHitProperties ??= new LineProperties();
+            _visual.noValidHitProperties ??= new LineProperties();
+            _visual.selectHitProperties ??= new LineProperties();
+            _visual.noValidHitProperties.gradient ??= gradient;
+            _visual.selectHitProperties.gradient ??= gradient;
             foreach (var properties in new[] { _visual.hoverHitProperties, _visual.uiHitProperties,
                 _visual.uiPressHitProperties })
             {

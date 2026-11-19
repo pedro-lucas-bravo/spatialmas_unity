@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using SpatialMAS.Core;
+using SpatialMAS.Networking;
 using SpatialMAS.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -45,6 +46,29 @@ namespace SpatialMAS.Tests.PlayMode
             _objects.Clear();
             if (_previousEventSystem != null && _previousEventSystem.isActiveAndEnabled)
                 EventSystem.current = _previousEventSystem;
+        }
+
+        [Test]
+        public void OscActivity_TracksDirectionsIndependently()
+        {
+            using var server = new OscUdpServer();
+            using var receiver = new System.Net.Sockets.UdpClient(0);
+            int port = ((System.Net.IPEndPoint)receiver.Client.LocalEndPoint).Port;
+            using var client = new OscUdpClient("127.0.0.1", port);
+            _hud.Initialize(_bus, new SpatialCoordinateMapper(), null, null, null, null,
+                server, client, null, null);
+            var status = typeof(SpatialResearcherHUD).GetMethod("OscActivityText",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            string Lights() => (string)status.Invoke(_hud, new object[] { false });
+            Assert.AreEqual("OSC IN ○    OSC OUT ○", Lights());
+            server.InjectTestMessage(new OscMessage("/input"));
+            Invoke(_hud, "UpdateOscActivity");
+            Assert.AreEqual("OSC IN ●    OSC OUT ○", Lights());
+            typeof(SpatialResearcherHUD).GetField("_oscInUntil",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(_hud, -1f);
+            client.Send(new OscMessage("/output"));
+            Invoke(_hud, "UpdateOscActivity");
+            Assert.AreEqual("OSC IN ○    OSC OUT ●", Lights());
         }
 
         [Test]
@@ -123,17 +147,17 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.IsFalse(run.activeSelf);
             Assert.IsTrue(setup.activeSelf);
             var clear = setup.transform.Find("Clear All").GetComponent<Button>();
-            var confirmation = setup.transform.Find("Clear Confirmation");
-            var pendingClear = typeof(SpatialResearcherHUD).GetField("_pendingRemoveAllAgents",
+            var confirmation = Panel.Find("Clear Confirmation");
+            var pendingClear = typeof(SpatialResearcherHUD).GetField("_confirmedTarget",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             clear.onClick.Invoke();
             Assert.IsTrue(confirmation.gameObject.activeSelf);
-            Assert.IsFalse((bool)pendingClear.GetValue(_hud));
+            Assert.AreEqual(-1, pendingClear.GetValue(_hud));
             confirmation.Find("Confirmation backdrop/Cancel").GetComponent<Button>().onClick.Invoke();
             Assert.IsFalse(confirmation.gameObject.activeSelf);
             clear.onClick.Invoke();
-            confirmation.Find("Confirmation backdrop/Confirm clear all agents").GetComponent<Button>().onClick.Invoke();
-            Assert.IsTrue((bool)pendingClear.GetValue(_hud));
+            confirmation.Find("Confirmation backdrop/Confirm").GetComponent<Button>().onClick.Invoke();
+            Assert.AreEqual(-2, pendingClear.GetValue(_hud));
 
             Panel.Find("Session").GetComponent<Button>().onClick.Invoke();
             Assert.IsFalse(setup.activeSelf);
@@ -167,7 +191,7 @@ namespace SpatialMAS.Tests.PlayMode
         public IEnumerator TrackedRayPressAndRelease_RaycastThePanelAndLoadScenario()
         {
             int requestedScenario = -1;
-            _bus.OnLoadScenario += scenario => requestedScenario = scenario;
+            _bus.OnLoadScenario += (scenario, _) => requestedScenario = scenario;
             Panel.SetPositionAndRotation(new Vector3(0f, 0f, 2f), Quaternion.identity);
             yield return null;
             Canvas.ForceUpdateCanvases();
@@ -189,6 +213,9 @@ namespace SpatialMAS.Tests.PlayMode
                 pointer.Pressed = false;
                 Invoke(module, "DoProcess");
                 Invoke(_hud, "ProcessDeferredUiActions");
+            Assert.AreEqual(-1, requestedScenario);
+            Panel.Find("Clear Confirmation/Confirmation backdrop/Confirm").GetComponent<Button>().onClick.Invoke();
+            Invoke(_hud, "ProcessDeferredUiActions");
                 Assert.AreEqual(2, requestedScenario, "A real XR pointer press/release must invoke the scenario action.");
             }
             finally { module.UnregisterInteractor(pointer); }
@@ -360,7 +387,7 @@ namespace SpatialMAS.Tests.PlayMode
         {
             var lifecycle = _hud.GetComponent<XRResearcherPanelLifecycle>();
             int loads = 0;
-            _bus.OnLoadScenario += _ => loads++;
+            _bus.OnLoadScenario += (_, __) => loads++;
             Panel.Find("Run Content/2 · Swarmalators").GetComponent<Button>().onClick.Invoke();
             lifecycle.ResearcherMode = false;
             Assert.IsFalse(Panel.gameObject.activeSelf);

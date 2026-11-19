@@ -281,6 +281,22 @@ namespace SpatialMAS.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator OscScenarioSwitch_ClearsWorldAndKeepsCommandsAvailable()
+        {
+            var scenarios = _root.AddComponent<ScenarioManager>();
+            scenarios.Initialize(_bus, Vector3.zero, _agents, null, 1, boundaries: _boundaries);
+            _router.DispatchMessage(new OscMessage("/world/agents/position/id", 0, 100f, 200f, 300f));
+            Assert.That(Vector3.Distance(_agents.ActiveAgents[0].transform.position, new Vector3(0.1f, 0.2f, 0.3f)), Is.LessThan(0.0001f));
+            _router.DispatchMessage(new OscMessage("/scenario/load", 0));
+            Assert.AreEqual(0, scenarios.ActiveScenarioId);
+            Assert.AreEqual(0, _agents.ActiveCount);
+            Assert.AreEqual(0, _boundaries.ActiveBoundaries.Count);
+            _router.DispatchMessage(new OscMessage("/agents/instantiate/id", 0, 0, 12));
+            Assert.IsTrue(_agents.ActiveAgents.ContainsKey(12));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator MusicalEncountersOscAgentCount_ResizesLiveAndPreservesCubesAndArena()
         {
             var scenarios = _root.AddComponent<ScenarioManager>();

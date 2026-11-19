@@ -146,7 +146,7 @@ def check_telemetry(client, show_poses):
         finally:
             send("/logging/state", [0])
     finally:
-        # External OSC preserves existing agents, so clear the test scene before switching.
+        # Explicit cleanup also supports older builds that preserved objects on this switch.
         cleanup = osc_bundle_builder.OscBundleBuilder(osc_bundle_builder.IMMEDIATELY)
         cleanup.add_content(build_message("/agents/remove", []))
         cleanup.add_content(build_message("/boundaries/remove", []))

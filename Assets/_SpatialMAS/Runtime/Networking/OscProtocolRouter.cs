@@ -853,7 +853,7 @@ namespace SpatialMAS.Networking
                 case "/scenario/load":
                 {
                     if (msg.ArgCount < 1) break;
-                    _bus.LoadScenario(msg.GetInt(0));
+                    _bus.LoadScenario(msg.GetInt(0, -1), "osc");
                     break;
                 }
 

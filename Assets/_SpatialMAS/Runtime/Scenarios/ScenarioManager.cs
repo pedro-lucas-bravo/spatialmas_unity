@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using SpatialMAS.Agents;
 using SpatialMAS.Core;
+using SpatialMAS.Environment;
 using SpatialMAS.Scenarios.BuiltIn;
 using SpatialMAS.XR;
 using UnityEngine;
@@ -18,6 +19,17 @@ namespace SpatialMAS.Scenarios
         private ScenarioContext _context;
         private IScenarioModule _activeScenario;
         private bool _isPaused;
+        private BoundaryManager _boundaries;
+        private EnvironmentArrowManager _arrows;
+        public event Action<string, string> WorldActionExecuted;
+
+        [Serializable]
+        private struct WorldAction
+        {
+            public string source;
+            public int fromScenario, toScenario;
+            public int agentsRemoved, boundariesRemoved, arrowsRemoved;
+        }
 
         public IReadOnlyList<IScenarioModule> RegisteredScenarios => _scenarios;
         public IScenarioModule ActiveScenario => _activeScenario;
@@ -39,8 +51,11 @@ namespace SpatialMAS.Scenarios
             AgentManager agentManager,
             XRUserEmbodimentBridge embodiment,
             int initialScenarioId = 0,
-            ScenarioLayout layout = ScenarioLayout.Compact)
+            ScenarioLayout layout = ScenarioLayout.Compact,
+            BoundaryManager boundaries = null, EnvironmentArrowManager arrows = null)
         {
+            _boundaries = boundaries;
+            _arrows = arrows;
             _context = new ScenarioContext
             {
                 Bus = bus,
@@ -67,7 +82,7 @@ namespace SpatialMAS.Scenarios
                 bus.OnBoundaryGeometryChanged += HandleBoundaryGeometryChanged;
             }
 
-            LoadScenarioById(initialScenarioId);
+            LoadScenario(initialScenarioId, null);
         }
 
         private void OnDestroy()
@@ -95,7 +110,11 @@ namespace SpatialMAS.Scenarios
                 ActiveScenarioCenter = center;
         }
 
-        public void LoadScenarioById(int scenarioId)
+        public void LoadScenarioById(int scenarioId) => LoadScenario(scenarioId, "local");
+
+        private void LoadScenarioById(int scenarioId, string source) => LoadScenario(scenarioId, source);
+
+        private void LoadScenario(int scenarioId, string source)
         {
             IScenarioModule target = null;
             for (int i = 0; i < _scenarios.Count; i++)
@@ -107,42 +126,49 @@ namespace SpatialMAS.Scenarios
                 }
             }
 
-            if (target == null && _scenarios.Count > 0)
-            {
-                target = _scenarios[0];
-            }
-
             if (target == null) return;
 
+            bool switched = _activeScenario != null && ActiveScenarioId != scenarioId;
+            var action = DescribeCleanup(source, scenarioId);
             _isPaused = false;
             _activeScenario?.OnScenarioStop();
-
-            // Clean world before starting new scenario (unless switching to External OSC when agents are already active)
-            if (target.ScenarioId != 0)
-            {
-                _context.Bus?.RemoveAgents(null);
-                _context.Bus?.RemoveBoundary(-1);
-                _context.Bus?.RemoveArrow(-1);
-            }
+            ClearWorld();
 
             ActiveLayout = _context.Layout;
             ActiveScenarioCenter = _context.ScenarioCenter;
             _activeScenario = target;
             _activeScenario.OnScenarioStart(_context);
             OnScenarioChanged?.Invoke(_activeScenario);
+            if (switched && source != null)
+                WorldActionExecuted?.Invoke("scenario_switch", JsonUtility.ToJson(action));
             Debug.Log($"[ScenarioManager] Activated Scenario [{_activeScenario.ScenarioId}]: {_activeScenario.DisplayName}");
         }
 
-        public void ResetActiveScenario()
+        public void ResetActiveScenario() => LoadScenario(ActiveScenarioId, null);
+
+        public void ClearAll(string source)
         {
-            int id = ActiveScenarioId;
-            if (id == 0)
-            {
-                _context.Bus?.RemoveAgents(null);
-                _context.Bus?.RemoveBoundary(-1);
-                _context.Bus?.RemoveArrow(-1);
-            }
-            LoadScenarioById(id);
+            var action = DescribeCleanup(source, ActiveScenarioId);
+            ClearWorld();
+            WorldActionExecuted?.Invoke("clear_all", JsonUtility.ToJson(action));
+        }
+
+        private WorldAction DescribeCleanup(string source, int destination) => new WorldAction
+        {
+            source = source,
+            fromScenario = ActiveScenarioId,
+            toScenario = destination,
+            agentsRemoved = _context.AgentManager?.ActiveCount ?? -1,
+            boundariesRemoved = _boundaries?.ActiveBoundaries.Count ?? -1,
+            arrowsRemoved = _arrows?.ActiveArrows.Count ?? -1
+        };
+
+        private void ClearWorld()
+        {
+            _context.Bus?.FlushAgentSynth(-1);
+            _context.Bus?.RemoveAgents(null);
+            _context.Bus?.RemoveBoundary(-1);
+            _context.Bus?.RemoveArrow(-1);
         }
 
         public void TogglePause()

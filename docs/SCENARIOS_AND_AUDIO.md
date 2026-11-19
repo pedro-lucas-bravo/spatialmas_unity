@@ -27,7 +27,7 @@ SpatialMAS uses Unity's built-in 3D mixing with **Spatial Blend** set to 1 and l
 ## 2. Built-In No-Code Interactive Scenarios
 
 ### Scenario 0: External OSC Controller Mode (`ExternalOscScenario.cs`)
-Pure transceiver mode on UDP port `6011` for external Python, Cycling '74 Max, or C++ scripts. Switching from a built-in scenario preserves its agents and unmutes them for external control; reset clears them.
+Pure transceiver mode on UDP port `6011` for external Python, Cycling '74 Max, or C++ scripts. Switching here clears the outgoing world. Send your objects after loading External OSC.
 
 ### Scenario 1: Crowd Navigation & Human Avoidance (`CrowdAvoidanceScenario.cs`)
 Implements the behavioral psychology & architectural crowd navigation use case from the *SpatialMAS* Grant Proposal:
@@ -73,6 +73,20 @@ All simulation state uses world meters. Choose Compact or RoomScale for the next
 Live speed/behavior parameters are explicit experimental settings. Reset preserves active behavior parameters when the physical layout is unchanged. Switching layout selects its dimensions and layout-dependent motion defaults, including Crowd and Musical Encounters speed; other settings such as Swarm coupling, Attractor angular speed, and assembly tempo/maximum structure size persist. Agent size means the full primitive/unit-mesh dimension; a sphere radius is half its diameter. Boundary radius/full-extents signatures remain documented separately in the OSC specification.
 
 Swarmalator dynamics use world-meter positions and an explicit interaction-length model parameter to express dimensionless coupling distances; it does not alter coordinate conversion or participant properties. Camera/listener rolloff is physical world-space audio. Calibration metadata permits external analysis without rebasing the simulation.
+
+### Check recorded dimensions automatically
+
+You can also pass a parent folder to check all immediate recording subfolders and print a combined summary. For example, run `python .\ExternalTools\check_recording_layout.py .\ExternalTools\musical_encounters_example`. Subfolders containing either recording CSV are checked, including incomplete exports. Other subfolders are ignored. Checking continues if one recording fails or is incomplete. The combined exit code is 2 if any recording is incomplete, otherwise 1 if any fails, otherwise 0.
+
+Download and extract a recording folder containing `object_state.csv` and `xr_embodiment.csv`. From the repository root, run the following command with your folder path.
+
+```powershell
+python .\ExternalTools\check_recording_layout.py "C:\path\to\recording-folder"
+```
+
+The checker uses Python's standard library and reads the layout table above. It joins records by SessionId and SampleId, so one recording may contain several scenarios or layouts. It supports the older filenames that include a session suffix. It compares all three recorded mesh dimensions with the table and converts boundary radii into diameters. The default absolute tolerance is 1 mm, adjustable with `--tolerance-mm 0.5`.
+
+Output groups checks by scenario, layout, object kind, and shape. Exit code 0 means all comparable recorded dimensions passed, 1 means a dimension or tracking-scale/coordinate-validity check failed, and 2 means the recording could not be checked completely. Only geometry present in the recording is checked. Orbit radii, model interaction lengths, speed, detection visuals, and the boundary handle are outside this geometry check. Hand alignment and physical grab reach still require headset observation for point 2 of the physical-layout feature check.
 
 ## Control built-in scenarios over OSC
 

@@ -339,7 +339,7 @@ namespace SpatialMAS.Tests.PlayMode
             int requestedScenario = -1;
             ScenarioLayout requestedLayout = ScenarioLayout.Compact;
             Vector3 requestedCenter = Vector3.zero;
-            bus.OnLoadScenario += scenario => requestedScenario = scenario;
+            bus.OnLoadScenario += (scenario, _) => requestedScenario = scenario;
             bus.OnSetScenarioLayout += layout => requestedLayout = layout;
             bus.OnSetScenarioCenter += center => requestedCenter = center;
             var camera = NewObject("Reference Placement Camera").AddComponent<Camera>();
@@ -380,6 +380,9 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.That(Quaternion.Angle(reference.Snapshot.Rotation, Quaternion.Euler(0, 90, 0)), Is.LessThan(0.001f));
             var button = panel.Find("Run Content/5 · Self-Assembly").GetComponent<Button>();
             button.onClick.Invoke();
+            Invoke(hud, "ProcessDeferredUiActions");
+            Assert.AreEqual(-1, requestedScenario);
+            panel.Find("Clear Confirmation/Confirmation backdrop/Confirm").GetComponent<Button>().onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
             Assert.AreEqual(5, requestedScenario);
         }

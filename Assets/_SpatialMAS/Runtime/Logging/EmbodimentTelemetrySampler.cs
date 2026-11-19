@@ -70,6 +70,7 @@ namespace SpatialMAS.Logging
             if (_scenarios != null)
             {
                 _scenarios.OnScenarioChanged += HandleScenarioChanged;
+                _scenarios.WorldActionExecuted += LogWorldAction;
                 _scenarios.ParameterApplied += HandleParameter;
                 _scenarios.PresetApplied += HandlePreset;
             }
@@ -79,6 +80,7 @@ namespace SpatialMAS.Logging
         {
             if (_scenarios == null) return;
             _scenarios.OnScenarioChanged -= HandleScenarioChanged;
+            _scenarios.WorldActionExecuted -= LogWorldAction;
             _scenarios.ParameterApplied -= HandleParameter;
             _scenarios.PresetApplied -= HandlePreset;
         }
@@ -88,6 +90,8 @@ namespace SpatialMAS.Logging
             foreach (var input in _subscribedInputs) input.trackingOriginUpdated -= HandleTrackingOriginUpdated;
         }
         private void HandleTrackingOriginUpdated(XRInputSubsystem _) => _trackingOriginUpdated = true;
+        private void LogWorldAction(string type, string payload) => _recorder?.LogEvent(type, payload, Time.frameCount);
+
         private void HandleScenarioChanged(IScenarioModule _) => LogScenarioState();
         private void HandleParameter(string name, float value)
             => _recorder?.LogEvent("scenario_parameter", JsonUtility.ToJson(new ParameterChange { name = name, value = value }), Time.frameCount);

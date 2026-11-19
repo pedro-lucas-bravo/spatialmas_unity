@@ -485,7 +485,7 @@ namespace SpatialMAS.Agents
 
         public void ResetForPool()
         {
-            IsGrabbedByUser = false;
+            EndUserGrab();
             if (_radiusSphereGo != null) _radiusSphereGo.SetActive(false);
             if (_idLabelMesh != null) _idLabelMesh.gameObject.SetActive(false);
             if (Synth != null)

@@ -45,8 +45,8 @@ In follow mode, the panel responds gradually to larger changes in head position 
 
 ### Find the right tab
 
-- **Run** opens first. Choose a scenario or an available preset, pause or resume the simulation, or reset the active scenario.
-- **Setup** holds the layout and spawn controls for the next scenario load or reset, along with the calibration reference, **MR / VR**, and **Agent IDs** controls. **Clear All** asks for confirmation before clearing agents.
+- **Run** opens first. Choose a scenario and confirm the switch, choose an available preset, pause or resume the simulation, or reset the active scenario.
+- **Setup** holds the layout and spawn controls for the next scenario load or reset, along with the calibration reference, **MR / VR**, and **Agent IDs** controls. **Clear All** asks for confirmation before removing the current agents, boundaries, and arrows and stopping their audio.
 - **Session** holds **Start recording** or **Stop recording**, session information, and the Wi-Fi download address. Select **Show Diagnostics** to inspect device, frame-rate, OSC, and agent information.
 
 ### Hand the headset to a participant
@@ -100,3 +100,9 @@ Each time you start recording, SpatialMAS creates a new session and keeps previo
 1. Stop recording to finalize the session files. Leave SpatialMAS open so it can serve the downloads.
 2. Find the Wi-Fi download address on **Session** in XR or on the desktop researcher HUD. On a laptop connected to the same network, open that address in a browser.
 3. Download the five CSV files and the metadata JSON for the same session.
+
+### Scenario changes and OSC activity
+
+Select a different scenario in the XR panel, the desktop HUD, or with a number key. The confirmation explains that switching clears the current agents, boundaries, arrows, and their audio. Select Cancel to keep the current world. External OSC opens with an empty world ready for controller commands. Clear All also asks for confirmation. Calibration, the active recording, and the OSC connection carry across these actions.
+
+The OSC IN and OSC OUT lights flash independently for incoming and outgoing traffic and appear steady during a stream. An OSC handshake, telemetry stream, or command can produce activity. The diagnostic counters show the cumulative traffic. During a recording, look for scenario_switch and clear_all in session_events.csv to see the timestamp, source, scenario IDs, and cleanup counts.
