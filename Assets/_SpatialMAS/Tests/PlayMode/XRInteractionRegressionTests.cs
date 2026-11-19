@@ -559,6 +559,26 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.IsFalse(reference.GetComponent<Collider>().enabled);
         }
 
+        [Test]
+        public void XrDisplayDrop_DoesNotRestoreDesktopOverview()
+        {
+            var rig = CreateDesktopRig(new SimulationCommandBus(), out var camera);
+            var platform = rig.gameObject.AddComponent<XRPlatformAdapter>();
+            rig.Initialize(camera);
+            rig.EnableDesktopOverview(Vector3.zero);
+            var active = typeof(XRPlatformAdapter).GetProperty(nameof(XRPlatformAdapter.IsXRHeadsetActive));
+            active.SetValue(platform, true);
+            Invoke(rig, "UpdateDesktopView");
+            Assert.IsFalse(camera.orthographic);
+            var trackedPosition = new Vector3(0.4f, 1.6f, 0.8f);
+            camera.transform.position = trackedPosition;
+            active.SetValue(platform, false);
+            Invoke(rig, "UpdateDesktopView");
+            rig.CenterCamera();
+            Assert.IsFalse(camera.orthographic);
+            Assert.AreEqual(trackedPosition, camera.transform.position);
+        }
+
         private DesktopInteractionRig CreateDesktopRig(SimulationCommandBus bus, out Camera camera)
         {
             camera = NewObject("Desktop Camera").AddComponent<Camera>();

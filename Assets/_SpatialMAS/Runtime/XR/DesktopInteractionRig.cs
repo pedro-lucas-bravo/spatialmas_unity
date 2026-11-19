@@ -87,7 +87,9 @@ namespace SpatialMAS.XR
         public bool IsFpsCursorLocked => _fpsCursorLockMode;
         public bool IsOrthographic => _camera != null && _camera.orthographic;
         public bool UsesFacePlane => _facePlaneMode;
-        private bool IsDesktop => !XRSettings.isDeviceActive && (_platform == null || !_platform.IsXRHeadsetActive);
+        private bool _xrViewSeen;
+        private bool IsXrViewActive => XRSettings.isDeviceActive || (_platform?.IsXRHeadsetActive ?? false);
+        private bool IsDesktop => !_xrViewSeen && !IsXrViewActive;
 
         public void Initialize(Camera cam, SimulationCommandBus bus = null)
         {
@@ -144,6 +146,9 @@ namespace SpatialMAS.XR
 
         private void UpdateDesktopView()
         {
+            // A headset can briefly lose its display while asleep. Keep the XR camera
+            // assigned to tracking for this scene instead of applying the desktop overview.
+            _xrViewSeen |= IsXrViewActive;
             if (!_overviewEnabled || _camera == null || _desktopViewApplied == IsDesktop) return;
             _desktopViewApplied = IsDesktop;
             if (_desktopViewApplied)
