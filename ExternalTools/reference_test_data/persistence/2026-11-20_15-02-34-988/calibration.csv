@@ -1,0 +1,2 @@
+TimestampISO,ElapsedMs,SessionId,CalibrationId,Revision,PositionX_m,PositionY_m,PositionZ_m,RotationX,RotationY,RotationZ,RotationW,Visible,Locked
+2026-11-20T15:02:34.9953750Z,0.0091,a6e82fccb35646debfa86814d280f02f,b82d922eea5a471e96e158f6e1e726a2,0,0,0,0,0,0,0,1,1,1

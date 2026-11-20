@@ -136,6 +136,7 @@ namespace SpatialMAS.UI
             if (_panelPalette.Matches(palette)) return false;
             _panelPalette = palette.Copy();
             foreach (var binding in _paletteBindings) binding(_panelPalette);
+            RefreshReferenceControls();
             UpdateTabSurfaceColors();
             if (_moveHandle != null) _moveHandle.SetOutlineColor(_panelPalette.dragOutline);
             _nextPanelStatusRefresh = 0f;
@@ -379,11 +380,7 @@ namespace SpatialMAS.UI
             UnityAction action, bool editsPose = true)
         {
             var button = CreateWorldButton(page, name, new Rect(x, y, width, 38), action);
-            if (editsPose)
-            {
-                _referenceEdits.Add(button);
-                button.gameObject.AddComponent<CanvasGroup>();
-            }
+            if (editsPose) _referenceEdits.Add(button);
             return button.GetComponentInChildren<TextMeshProUGUI>();
         }
 
@@ -410,7 +407,9 @@ namespace SpatialMAS.UI
                 bool enabled = available && !state.Locked &&
                     (!button.transform.IsChildOf(_referenceRotationActions.transform) || _calibration.RotateMode);
                 button.interactable = enabled;
-                button.GetComponent<CanvasGroup>().alpha = enabled ? 1f : 0.45f;
+                button.targetGraphic.color = enabled ? Opaque(_panelPalette.button) : new Color32(39, 42, 46, 255);
+                button.GetComponentInChildren<TextMeshProUGUI>().color =
+                    enabled ? _panelPalette.primaryText : new Color32(162, 167, 174, 255);
             }
         }
 
@@ -688,14 +687,14 @@ namespace SpatialMAS.UI
             }
             else
             {
-                BindPanelColor(image, palette => palette.button);
+                BindPanelColor(image, palette => Opaque(palette.button));
                 void ApplyButtonTints(ResearcherPanelPalette palette)
                 {
                     var colors = button.colors;
                     colors.highlightedColor = palette.buttonHoverTint;
                     colors.pressedColor = palette.buttonPressedTint;
                     colors.selectedColor = palette.buttonSelectedTint;
-                    colors.disabledColor = palette.buttonDisabledTint;
+                    colors.disabledColor = Opaque(palette.buttonDisabledTint);
                     button.colors = colors;
                 }
                 ApplyButtonTints(_panelPalette);
@@ -716,6 +715,12 @@ namespace SpatialMAS.UI
             _clearButtonHover.Add(() => setHover(false));
             events.triggers.Add(exit);
             return button;
+        }
+
+        private static Color Opaque(Color color)
+        {
+            color.a = 1f;
+            return color;
         }
 
         private void PositionWorldPanel()

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SpatialMAS is software for studying how people interact with groups of virtual objects. Try a scene and explore recordings from a headset.">
+  <title>SpatialMAS — Interactive worlds for research</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="home.css">
+  <link rel="stylesheet" href="encounter.css">
+  <script defer src="scene-art.js"></script>
+  <script defer src="crowd-scene.js"></script>
+  <script defer src="other-scenes.js"></script>
+  <script defer src="encounter.js"></script>
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header>
+    <a class="brand" href="index.html" aria-label="SpatialMAS home"><img src="logo.svg" width="34" height="34" alt=""><span>Spatial<span class="word-mas">MAS</span></span></a>
+    <nav aria-label="Main navigation"><a href="#scenarios">Scenes</a><a href="#resources">Recordings</a><a href="#project">About</a></nav>
+    <button class="nav-demo" type="button" data-detail="demo">Request a demo</button>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="intro-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="tiny-square"></span> RESEARCH SOFTWARE FOR HEADSET &amp; DESKTOP</div>
+        <h1 id="intro-title">Explore worlds<br>that respond<br> to you<span class="accent">.</span></h1>
+        <p class="intro">SpatialMAS is a research platform for exploring how people interact with groups of virtual objects. On a headset or desktop, you can shape a swarm, play notes through movement, or study how a crowd makes room. Record a session to see how the interaction unfolded.</p>
+        <div class="actions"><button class="button primary" type="button" data-detail="demo">Request a demo</button><a class="text-link" href="#scene-examples">Try an example</a></div>
+      </div>
+      <section id="scene-examples" class="encounter" aria-labelledby="encounter-title">
+        <div class="encounter-heading">
+          <h2 id="encounter-title">Interactive examples</h2>
+          <p>Explore a simplified version of each headset scene in your browser.</p>
+        </div>
+        <div class="scene-picker" role="group" aria-label="Choose an example">
+          <button type="button" data-scene="crowd" aria-pressed="true">Crowd Avoidance</button>
+          <button type="button" data-scene="music" aria-pressed="false">Musical Encounters</button>
+          <button type="button" data-scene="swarm" aria-pressed="false">Swarmalators</button>
+        </div>
+        <div class="encounter-stage" id="encounter-stage" tabindex="0" role="group" aria-label="Crowd Avoidance, interactive scene" aria-describedby="reach-guide key-guide">
+          <canvas id="encounter-canvas" aria-hidden="true"></canvas>
+        </div>
+        <div class="encounter-panel">
+          <p id="encounter-status">Reach towards the moving pyramids.</p>
+          <p id="reach-guide" class="encounter-hint"></p>
+          <div class="encounter-controls">
+            <button id="encounter-reach" type="button">Try a reach</button>
+            <button id="encounter-sound" type="button" aria-pressed="false">Sound off</button>
+            <button id="encounter-motion" type="button" aria-pressed="false">Pause motion</button>
+          </div>
+          <details class="keyboard-help"><summary>Keyboard controls</summary><p id="key-guide">Tab to the scene. Use the arrow keys to move the hand. In scenes with cubes, press Space to pick up the nearest cube and Space again to release it.</p></details>
+        </div>
+      </section>
+    </section>
+
+    <section id="scenarios" class="section scenarios">
+      <div class="section-heading"><div><div class="section-label">INSIDE THE PLATFORM</div><h2>Three scenes you can explore.</h2></div>
+        <p>Start with a ready-made scene. You can change its settings without writing code.</p>
+      </div>
+      <div class="scenario-grid">
+        <button class="scenario-card" type="button" data-open-scene="crowd">
+          <div class="scenario-art crowd"><svg viewBox="0 0 360 240" aria-hidden="true"><g fill="none" stroke="#bdc5b6" stroke-width="1"><ellipse cx="180" cy="126" rx="125" ry="64"/><ellipse cx="180" cy="126" rx="79" ry="40"/></g><g fill="#78c7bb"><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(60 118) rotate(8)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(95 80) rotate(29)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(139 62) rotate(71)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(226 73) rotate(93)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(270 106) rotate(142)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(288 149) rotate(161)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(239 180) rotate(207)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(157 185) rotate(223)"/><path d="M-7 5 0-9 7 5 0 2Z" transform="translate(93 164) rotate(293)"/></g><circle cx="180" cy="126" r="22" fill="#ed6545"/><path d="M180 153v48m0-32-12 13m12-13 12 13" stroke="#ed6545" fill="none"/></svg></div>
+          <span class="card-body">
+            <span class="card-topic">Space · Crowd Avoidance</span>
+            <strong class="card-title">How does a crowd make room?</strong>
+            <span class="card-description">Reach towards the moving pyramids to part the group. Those nearing your headset turn coral and pulse faster.</span>
+            <span class="card-link">Try this example</span>
+          </span>
+        </button>
+        <button class="scenario-card" type="button" data-open-scene="music">
+          <div class="scenario-art music"><svg viewBox="0 0 360 240" aria-hidden="true"><g fill="none" stroke="#f4ca83"><circle cx="179" cy="114" r="75" opacity=".25"/><ellipse cx="179" cy="114" rx="75" ry="28" opacity=".5"/><ellipse cx="179" cy="114" rx="28" ry="75" opacity=".4"/></g><circle cx="179" cy="114" r="14" fill="#f4ca83"/><path d="m225 120 29-16 28 17-28 17z" fill="#f37957"/><path d="m225 120 29 18v33l-29-18z" fill="#c64e36"/><path d="m254 138 28-17v33l-28 17z" fill="#e96440"/><circle cx="222" cy="119" r="4" fill="#fff0bb"/></svg></div>
+          <span class="card-body">
+            <span class="card-topic">Sound · Musical Encounters</span>
+            <strong class="card-title">Can a gesture hold a note?</strong>
+            <span class="card-description">Bring two objects together to sustain a note. Pull them apart to let it fade.</span>
+            <span class="card-link">Try this example</span>
+          </span>
+        </button>
+        <button class="scenario-card" type="button" data-open-scene="swarm">
+          <div class="scenario-art swarm"><svg id="swarm-art" viewBox="0 0 360 240" aria-hidden="true"></svg></div>
+          <span class="card-body">
+            <span class="card-topic">Rhythm · Swarmalators</span>
+            <strong class="card-title">When does a group fall into rhythm?</strong>
+            <span class="card-description">Pick up a cube in a moving swarm. Explore how the group’s colours and rhythms line up.</span>
+            <span class="card-link">Try this example</span>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section id="resources" class="section resources">
+      <div class="resources-copy">
+        <div class="section-label">SESSION RECORDINGS</div>
+        <h2>How close did the hand get?</h2>
+        <p class="section-intro">SpatialMAS can record where your hands and the virtual objects were at the same moment. These two Crowd Avoidance recordings show the distance between the right hand and the nearest object as someone reached towards the group or stood back to observe.</p>
+        <div class="resource-links">
+          <button type="button" data-detail="handbook"><span><strong>Lab handbook</strong><small>Learn how to make a figure from a recording</small></span><span class="resource-tag">Planned</span></button>
+          <button type="button" data-detail="osc"><span><strong>Connect your own software</strong><small>Control a scene or receive feedback with OSC</small></span><span class="resource-tag">Planned</span></button>
+        </div>
+      </div>
+      <figure class="recorded-figure"><img src="recorded-reach.svg" alt="The right hand came within 19 cm of a virtual object while reaching and 36 cm while watching. The two panels show how the distance changed over time."><figcaption>Two example sessions recorded in SpatialMAS. Distances are measured to the centre of the nearest object.</figcaption></figure>
+      <p class="resource-support">Help with setup and recordings <span>support@spatialmas.com <small>(planned mailbox)</small></span></p>
+    </section>
+
+    <section id="project" class="section about-project">
+      <div><div class="section-label">ABOUT SPATIALMAS</div><h2>Who could use it?</h2></div>
+      <div class="project-facts">
+        <div><h3>Research labs</h3><p>Change how a crowd responds to a person. Compare movement across sessions and ask participants how much control they felt.</p></div>
+        <div><h3>Artists and sound designers</h3><p>Explore how a gesture can shape a piece of music. In Musical Encounters, the position of a cube helps determine which note plays.</p></div>
+        <div><h3>Pilot and funding partners</h3><p>SpatialMAS grew out of doctoral research at the University of Oslo. The project is developing a standalone headset prototype and exploring how labs could use and license it.</p></div>
+      </div>
+      <div class="project-credits" id="funding">
+        <h3>Project and funding</h3>
+        <p>The University of Oslo is developing SpatialMAS with support from the Research Council of Norway’s Qualification programme for the commercialisation of research.
+          <a class="inline-link" href="https://www.forskningsradet.no/en/call-for-proposals/2026/qualification-research-commercialisation-publicly-funded-research/#:~:text=365744">View award 365744</a></p>
+        <dl class="credit-list">
+          <div><dt>Project institution</dt><dd><a href="https://www.uio.no/english/"><img src="credits/university-of-oslo.svg" alt="University of Oslo"></a></dd></div>
+          <div><dt>Qualification funding</dt><dd><a href="https://www.forskningsradet.no/en/"><img src="credits/research-council-support.svg" alt="Funded by the Research Council of Norway"></a></dd></div>
+        </dl>
+      </div>
+    </section>
+    <section id="evaluate" class="evaluate">
+      <h2>See SpatialMAS<br>in a guided demo.</h2>
+      <p>Bring an experiment, a creative idea or a question about a pilot. We’ll show you the headset experience and what you can learn from a session recording.</p>
+      <button class="button primary" type="button" data-detail="demo">Request a demo</button>
+    </section>
+  </main>
+  <footer>
+    <a class="brand" href="index.html"><span>Spatial<span class="word-mas">MAS</span></span></a>
+    <p>Technical support (planned) · <strong>support@spatialmas.com</strong></p>
+    <a href="#funding">Project and funding</a><a href="identity.html">Identity sketch</a>
+  </footer>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <button class="dialog-close" aria-label="Close dialog">×</button>
+    <div class="section-label" id="detail-label"></div>
+    <h2 id="detail-title"></h2><p id="detail-body"></p><p class="dialog-note" id="detail-note"></p>
+    <button type="button" class="button primary dialog-close">Continue exploring</button>
+  </dialog>
+</body></html>
