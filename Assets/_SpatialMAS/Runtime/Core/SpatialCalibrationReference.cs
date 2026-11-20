@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
@@ -37,8 +38,10 @@ namespace SpatialMAS.Core
         private CalibrationSnapshot _snapshot;
         private Quaternion _defaultRotation;
         private Transform _axisHighlight;
-        private LineRenderer _highlightLine;
-        private TextMesh _highlightLabel;
+        private MeshRenderer _highlightLine;
+        private TextMeshProUGUI _highlightLabel;
+        private Mesh _axisMesh;
+        private MaterialPropertyBlock _axisColor;
         private readonly LineRenderer[] _rings = new LineRenderer[3];
         private static readonly Vector3[] Axes = { Vector3.right, Vector3.up, Vector3.forward };
         private static readonly Color[] AxisColors = { new Color(1f, 0.3f, 0.3f), new Color(0.3f, 1f, 0.4f), new Color(0.35f, 0.65f, 1f) };
@@ -205,9 +208,7 @@ namespace SpatialMAS.Core
             _axisHighlight.gameObject.SetActive(RotateMode);
             _axisHighlight.rotation = WorldAxes ? Quaternion.identity : _snapshot.Rotation;
             Vector3 axis = Axes[RotationAxis];
-            _highlightLine.SetPosition(0, -axis * 0.25f);
-            _highlightLine.SetPosition(1, axis * 0.25f);
-            _highlightLine.startColor = _highlightLine.endColor = AxisColors[RotationAxis];
+            SetAxisMesh(_highlightLine, Vector3.zero, axis, 0.5f, 0.009f, AxisColors[RotationAxis]);
             _highlightLabel.transform.localPosition = axis * 0.27f;
             _highlightLabel.text = RotationAxisLabel;
             _highlightLabel.color = AxisColors[RotationAxis];
@@ -229,18 +230,20 @@ namespace SpatialMAS.Core
             _visualRoot = new GameObject("Calibration Marker Graphics");
             _visualRoot.transform.SetParent(transform, false);
             _material = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default"));
-            MakeAxis("X", Vector3.right, Color.red);
-            MakeAxis("Y", Vector3.up, Color.green);
-            MakeAxis("Z", Vector3.forward, Color.blue);
-            BuildRotationGraphics();
+            _axisColor = new MaterialPropertyBlock();
             var origin = GameObject.CreatePrimitive(PrimitiveType.Cube);
             origin.name = "Reference Origin";
             origin.transform.SetParent(_visualRoot.transform, false);
             origin.transform.localScale = Vector3.one * 0.045f;
+            _axisMesh = origin.GetComponent<MeshFilter>().sharedMesh;
             var collider = origin.GetComponent<Collider>();
             collider.enabled = false;
             if (Application.isPlaying) Destroy(collider); else DestroyImmediate(collider);
             origin.GetComponent<Renderer>().sharedMaterial = _material;
+            MakeAxis("X", Vector3.right, Color.red);
+            MakeAxis("Y", Vector3.up, Color.green);
+            MakeAxis("Z", Vector3.forward, Color.blue);
+            BuildRotationGraphics();
 
             _grab = GetComponent<XRGrabInteractable>();
             if (_grab == null) _grab = gameObject.AddComponent<XRGrabInteractable>();
@@ -256,14 +259,8 @@ namespace SpatialMAS.Core
         {
             _axisHighlight = new GameObject("Rotation Axis Preview").transform;
             _axisHighlight.SetParent(_visualRoot.transform, false);
-            _highlightLine = MakeLine(_axisHighlight, 0.009f);
-            _highlightLine.positionCount = 2;
-            var label = new GameObject("Selected Rotation Axis");
-            label.transform.SetParent(_axisHighlight, false);
-            _highlightLabel = label.AddComponent<TextMesh>();
-            _highlightLabel.anchor = TextAnchor.MiddleCenter;
-            _highlightLabel.characterSize = 0.018f;
-            _highlightLabel.fontSize = 48;
+            _highlightLine = CreateAxisMesh(_axisHighlight, "Selected Axis Line");
+            _highlightLabel = CreateAxisLabel(_axisHighlight, "Selected Rotation Axis");
             for (int i = 0; i < Axes.Length; i++)
             {
                 var ring = new GameObject($"{"XYZ"[i]} Rotation Ring");
@@ -289,25 +286,51 @@ namespace SpatialMAS.Core
 
         private void MakeAxis(string axis, Vector3 direction, Color color)
         {
-            var go = new GameObject(axis + " Axis");
-            go.transform.SetParent(_visualRoot.transform, false);
-            var line = go.AddComponent<LineRenderer>();
-            line.useWorldSpace = false;
-            line.positionCount = 2;
-            line.SetPosition(0, Vector3.zero);
-            line.SetPosition(1, direction * 0.15f);
-            line.startWidth = line.endWidth = 0.006f;
-            line.sharedMaterial = _material;
-            line.startColor = line.endColor = color;
-            var label = new GameObject(axis + " Label");
-            label.transform.SetParent(_visualRoot.transform, false);
-            label.transform.localPosition = direction * 0.18f;
-            var text = label.AddComponent<TextMesh>();
+            var line = CreateAxisMesh(_visualRoot.transform, axis + " Axis");
+            SetAxisMesh(line, direction * 0.075f, direction, 0.15f, 0.006f, color);
+            var text = CreateAxisLabel(_visualRoot.transform, axis + " Label");
+            text.transform.localPosition = direction * 0.18f;
             text.text = axis;
-            text.characterSize = 0.025f;
-            text.fontSize = 48;
-            text.anchor = TextAnchor.MiddleCenter;
             text.color = color;
+        }
+
+        private MeshRenderer CreateAxisMesh(Transform parent, string name)
+        {
+            var axis = new GameObject(name);
+            axis.transform.SetParent(parent, false);
+            axis.AddComponent<MeshFilter>().sharedMesh = _axisMesh;
+            var renderer = axis.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = _material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return renderer;
+        }
+
+        private void SetAxisMesh(MeshRenderer renderer, Vector3 center, Vector3 direction, float length, float width, Color color)
+        {
+            renderer.transform.localPosition = center;
+            renderer.transform.localRotation = Quaternion.FromToRotation(Vector3.forward, direction);
+            renderer.transform.localScale = new Vector3(width, width, length);
+            _axisColor.SetColor("_BaseColor", color);
+            _axisColor.SetColor("_Color", color);
+            renderer.SetPropertyBlock(_axisColor);
+        }
+
+        private static TextMeshProUGUI CreateAxisLabel(Transform parent, string name)
+        {
+            var canvasObject = new GameObject(name + " Canvas", typeof(RectTransform), typeof(Canvas));
+            canvasObject.transform.SetParent(parent, false);
+            canvasObject.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            var label = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+            label.transform.SetParent(canvasObject.transform, false);
+            var text = label.GetComponent<TextMeshProUGUI>();
+            text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            text.fontSharedMaterial = Resources.Load<Material>("Mat_SpatialMAS_WorldUISdf");
+            text.fontSize = 22;
+            text.alignment = TextAlignmentOptions.Center;
+            text.raycastTarget = false;
+            text.rectTransform.sizeDelta = new Vector2(160f, 35f);
+            text.rectTransform.localScale = Vector3.one * 0.001f;
+            return text;
         }
 
         private static bool IsFinite(Vector3 value)

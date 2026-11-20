@@ -155,6 +155,7 @@ namespace SpatialMAS.Tests.PlayMode
             var rig = new GameObject("Unit XR Origin");
             rig.transform.SetParent(root.transform);
             var origin = rig.AddComponent<XROrigin>();
+            origin.CameraYOffset = 0f;
             offset = new GameObject("Camera Offset").transform;
             offset.SetParent(rig.transform);
             origin.CameraFloorOffsetObject = offset.gameObject;
