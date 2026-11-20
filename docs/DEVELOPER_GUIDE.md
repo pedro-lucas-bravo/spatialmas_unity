@@ -101,6 +101,8 @@ To add a new scenario (or commercial Logic Pack):
 
 Scenarios store world-meter state and use `ScenarioContext.ScenarioCenter` plus `ScenarioContext.Layout` for the next spawn. Layouts contain literal physical dimensions and motion defaults. There is no global scale or frame-rebasing interface. Calibration reference changes must not affect simulation state. `ScenarioManager.ParameterApplied` and `PresetApplied` record direct UI/module changes as session events. See [the coordinate and recording contract](ARCHITECTURE.md#5-physical-coordinate-and-calibration-contract).
 
+Calibration manipulation settings live on `SpatialCalibrationReference`. The selected mode configures the XR grab axes, and desktop rotation captures a ring plane and starting orientation at mouse down. The manipulation revision invalidates a desktop capture when the marker is locked, hidden, or switched to another mode. The pose setter remains the shared entry point for XR, desktop, and OSC, and publishes the existing calibration snapshot when the pose changes. Axis selection and manipulation mode are UI state.
+
 ---
 
 ## 5. Plugging in an Optional Custom Audio Engine (e.g., `CsoundUnity` or `FMOD`)

@@ -368,13 +368,15 @@ namespace SpatialMAS.Tests.PlayMode
             FindWorldButton(panel, "Reference Lock / Unlock").onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
             Assert.IsTrue(reference.Locked);
+            Assert.IsFalse(setup.Find("Place Reference Ahead").GetComponent<Button>().interactable);
             setup.Find("Place Reference Ahead").GetComponent<Button>().onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
             Assert.AreEqual(Vector3.zero, reference.Snapshot.Position, "A locked reference must reject UI placement.");
             FindWorldButton(panel, "Reference Lock / Unlock").onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
             setup.Find("Place Reference Ahead").GetComponent<Button>().onClick.Invoke();
-            setup.Find("Rotate Reference 90°").GetComponent<Button>().onClick.Invoke();
+            FindWorldButton(panel, "Reference Move / Rotate").onClick.Invoke();
+            setup.Find("Reference Rotation/+90°").GetComponent<Button>().onClick.Invoke();
             Invoke(hud, "ProcessDeferredUiActions");
             Assert.That(Vector3.Distance(reference.Snapshot.Position, requestedCenter), Is.LessThan(0.0001f));
             Assert.That(Quaternion.Angle(reference.Snapshot.Rotation, Quaternion.Euler(0, 90, 0)), Is.LessThan(0.001f));
@@ -530,6 +532,66 @@ namespace SpatialMAS.Tests.PlayMode
             Assert.That(Vector3.Angle(cue.forward, expectedForward), Is.LessThan(0.01f));
             rig.enabled = false;
             Assert.IsFalse(cue.gameObject.activeSelf);
+        }
+
+        [Test]
+        public void CalibrationRotation_UsesSelectedAxesAndRetainsOriginWhenHidden()
+        {
+            var reference = NewObject("Calibration").AddComponent<SpatialCalibrationReference>();
+            var position = new Vector3(2f, 1f, 3f);
+            var initial = Quaternion.Euler(0f, 30f, 0f);
+            reference.Initialize(new SimulationCommandBus(), position, initial, false, false);
+            var grab = reference.GetComponent<XRGrabInteractable>();
+            Assert.IsTrue(grab.trackPosition);
+            Assert.IsFalse(grab.trackRotation);
+            Assert.IsFalse(grab.enabled);
+
+            reference.SetManipulation(true, false, 0);
+            Assert.IsFalse(grab.trackPosition);
+            Assert.IsTrue(grab.trackRotation);
+            Assert.IsTrue(reference.TryRotateStep(90));
+            var localResult = reference.Snapshot.Rotation;
+            Assert.That(Quaternion.Angle(initial * Quaternion.AngleAxis(90, Vector3.right), localResult), Is.LessThan(0.05f));
+            Assert.IsTrue(reference.TryRotateStep(-90));
+            reference.SetManipulation(true, true, 0);
+            Assert.IsTrue(reference.TryRotateStep(90));
+            Assert.That(Quaternion.Angle(Quaternion.AngleAxis(90, Vector3.right) * initial, reference.Snapshot.Rotation), Is.LessThan(0.05f));
+            Assert.That(Quaternion.Angle(localResult, reference.Snapshot.Rotation), Is.GreaterThan(10f));
+            Assert.AreEqual(position, reference.Snapshot.Position);
+            Assert.IsTrue(reference.TryResetRotation());
+            Assert.That(Quaternion.Angle(initial, reference.Snapshot.Rotation), Is.LessThan(0.05f));
+            Assert.AreEqual(position, reference.Snapshot.Position);
+            reference.Visible = true;
+            Assert.IsTrue(grab.enabled);
+            reference.Locked = true;
+            Assert.IsFalse(grab.enabled);
+            Assert.IsFalse(reference.TryRotateStep(-90));
+            Assert.IsFalse(reference.TryResetRotation());
+        }
+
+        [Test]
+        public void MouseCalibrationRing_RotatesInPlaceAndStopsWhenLocked()
+        {
+            var bus = new SimulationCommandBus();
+            var rig = CreateDesktopRig(bus, out var camera);
+            var reference = NewObject("Reference").AddComponent<SpatialCalibrationReference>();
+            var center = new Vector3(0f, 0f, 3f);
+            reference.Initialize(bus, center, Quaternion.identity, true, false);
+            rig.SetCalibrationReference(reference);
+            reference.SetDesktopRings(true);
+            reference.SetManipulation(true, true, 2);
+            Physics.SyncTransforms();
+            Vector2 start = camera.WorldToScreenPoint(center + Vector3.right * 0.19f);
+            Vector2 end = camera.WorldToScreenPoint(center + Vector3.up * 0.19f);
+            ProcessMouse(rig, new MouseState { position = start }.WithButton(MouseButton.Left));
+            Assert.IsTrue(rig.IsDraggingObject);
+            ProcessMouse(rig, new MouseState { position = end }.WithButton(MouseButton.Left));
+            Assert.AreEqual(center, reference.Snapshot.Position);
+            Assert.That(Quaternion.Angle(reference.Snapshot.Rotation, Quaternion.Euler(0, 0, 90)), Is.LessThan(0.05f));
+            reference.Locked = true;
+            ProcessMouse(rig, new MouseState { position = start }.WithButton(MouseButton.Left));
+            Assert.IsFalse(rig.IsDraggingObject);
+            Assert.That(Quaternion.Angle(reference.Snapshot.Rotation, Quaternion.Euler(0, 0, 90)), Is.LessThan(0.05f));
         }
 
         [Test]

@@ -35,10 +35,74 @@ namespace SpatialMAS.Core
         private Material _material;
         private bool _initialized;
         private CalibrationSnapshot _snapshot;
+        private Quaternion _defaultRotation;
+        private Transform _axisHighlight;
+        private LineRenderer _highlightLine;
+        private TextMesh _highlightLabel;
+        private readonly LineRenderer[] _rings = new LineRenderer[3];
+        private static readonly Vector3[] Axes = { Vector3.right, Vector3.up, Vector3.forward };
+        private static readonly Color[] AxisColors = { new Color(1f, 0.3f, 0.3f), new Color(0.3f, 1f, 0.4f), new Color(0.35f, 0.65f, 1f) };
+        private const float RingRadius = 0.19f;
+        private bool _desktopRings;
+        public bool RotateMode { get; private set; }
+        public bool WorldAxes { get; private set; }
+        public int RotationAxis { get; private set; } = 1;
+        public int ManipulationRevision { get; private set; }
+        public string RotationAxisLabel => $"{(WorldAxes ? "World" : "Local")} {"XYZ"[RotationAxis]}";
 
         public CalibrationSnapshot Snapshot => _snapshot;
         public event Action<CalibrationSnapshot> Changed;
         public bool CanManipulate => _initialized && _snapshot.Visible && !_snapshot.Locked;
+
+        public void SetManipulation(bool rotate, bool worldAxes, int axis)
+        {
+            if (!_initialized || Locked || axis < 0 || axis > 2) return;
+            if (RotateMode == rotate && WorldAxes == worldAxes && RotationAxis == axis) return;
+            if (_grab != null) _grab.enabled = false;
+            RotateMode = rotate;
+            WorldAxes = worldAxes;
+            RotationAxis = axis;
+            ManipulationRevision++;
+            UpdateManipulation();
+        }
+
+        public void SetDesktopRings(bool enabled)
+        {
+            if (_desktopRings == enabled) return;
+            _desktopRings = enabled;
+            UpdateManipulation();
+        }
+
+        public Vector3 GetRotationAxis(int axis)
+            => WorldAxes ? Axes[axis] : Snapshot.Rotation * Axes[axis];
+
+        public bool TryRotateStep(float degrees)
+            => RotateMode && TrySetPose(Snapshot.Position,
+                Quaternion.AngleAxis(degrees, GetRotationAxis(RotationAxis)) * Snapshot.Rotation);
+
+        public bool TryResetRotation() => RotateMode && TrySetPose(Snapshot.Position, _defaultRotation);
+
+        public bool TryPickRing(Ray ray, out Vector3 axis, out Vector3 radial, out float distance)
+        {
+            axis = radial = Vector3.zero;
+            distance = float.PositiveInfinity;
+            if (!CanManipulate || !RotateMode || !_desktopRings) return false;
+            float bestError = 0.025f;
+            for (int i = 0; i < Axes.Length; i++)
+            {
+                Vector3 normal = GetRotationAxis(i);
+                if (Mathf.Abs(Vector3.Dot(normal, ray.direction)) < 0.05f ||
+                    !new Plane(normal, Snapshot.Position).Raycast(ray, out float enter)) continue;
+                Vector3 candidate = ray.GetPoint(enter) - Snapshot.Position;
+                float error = Mathf.Abs(candidate.magnitude - RingRadius);
+                if (error >= bestError) continue;
+                bestError = error;
+                axis = normal;
+                radial = candidate.normalized;
+                distance = enter;
+            }
+            return distance < float.PositiveInfinity;
+        }
 
         public bool Visible
         {
@@ -61,7 +125,11 @@ namespace SpatialMAS.Core
                 throw new ArgumentException("Calibration pose must be finite with a nonzero quaternion.");
             transform.localScale = Vector3.one;
             transform.SetPositionAndRotation(initialPosition, initialRotation);
+            _defaultRotation = initialRotation;
             _snapshot = new CalibrationSnapshot(Guid.NewGuid().ToString("N"), 0, initialPosition, initialRotation, visible, locked);
+            RotateMode = WorldAxes = false;
+            RotationAxis = 1;
+            ManipulationRevision++;
             BuildMarker();
             _initialized = true;
             UpdateManipulation();
@@ -94,12 +162,22 @@ namespace SpatialMAS.Core
             if (!_initialized) return;
             // Guard Inspector/XRI changes as well as the API. Scale belongs only on marker graphics.
             transform.localScale = Vector3.one;
-            if (_snapshot.Locked || !TrySetPose(transform.position, transform.rotation))
+            Vector3 position = transform.position;
+            Quaternion rotation = transform.rotation;
+            if (_grab != null && _grab.isSelected)
+            {
+                if (RotateMode) position = _snapshot.Position;
+                else rotation = _snapshot.Rotation;
+            }
+            if (_snapshot.Locked || !TrySetPose(position, rotation))
                 transform.SetPositionAndRotation(_snapshot.Position, _snapshot.Rotation);
+            if (RotateMode && _snapshot.Visible && Camera.main != null)
+                _highlightLabel.transform.rotation = Camera.main.transform.rotation;
         }
 
         private void Publish(Vector3 position, Quaternion rotation, bool visible, bool locked)
         {
+            if (visible != _snapshot.Visible || locked != _snapshot.Locked) ManipulationRevision++;
             transform.localScale = Vector3.one;
             transform.SetPositionAndRotation(position, rotation);
             _snapshot = new CalibrationSnapshot(_snapshot.CalibrationId, _snapshot.Revision + 1, position, rotation, visible, locked);
@@ -117,7 +195,24 @@ namespace SpatialMAS.Core
         {
             if (_visualRoot != null) _visualRoot.SetActive(_snapshot.Visible);
             if (_collider != null) _collider.enabled = _snapshot.Visible;
-            if (_grab != null) _grab.enabled = _snapshot.Visible && !_snapshot.Locked;
+            if (_grab != null)
+            {
+                _grab.trackPosition = !RotateMode;
+                _grab.trackRotation = RotateMode;
+                _grab.enabled = CanManipulate;
+            }
+            if (_axisHighlight == null) return;
+            _axisHighlight.gameObject.SetActive(RotateMode);
+            _axisHighlight.rotation = WorldAxes ? Quaternion.identity : _snapshot.Rotation;
+            Vector3 axis = Axes[RotationAxis];
+            _highlightLine.SetPosition(0, -axis * 0.25f);
+            _highlightLine.SetPosition(1, axis * 0.25f);
+            _highlightLine.startColor = _highlightLine.endColor = AxisColors[RotationAxis];
+            _highlightLabel.transform.localPosition = axis * 0.27f;
+            _highlightLabel.text = RotationAxisLabel;
+            _highlightLabel.color = AxisColors[RotationAxis];
+            for (int i = 0; i < _rings.Length; i++)
+                _rings[i].gameObject.SetActive(RotateMode && _desktopRings && CanManipulate);
         }
 
         private void BuildMarker()
@@ -137,6 +232,7 @@ namespace SpatialMAS.Core
             MakeAxis("X", Vector3.right, Color.red);
             MakeAxis("Y", Vector3.up, Color.green);
             MakeAxis("Z", Vector3.forward, Color.blue);
+            BuildRotationGraphics();
             var origin = GameObject.CreatePrimitive(PrimitiveType.Cube);
             origin.name = "Reference Origin";
             origin.transform.SetParent(_visualRoot.transform, false);
@@ -151,6 +247,44 @@ namespace SpatialMAS.Core
             _grab.movementType = XRGrabInteractable.MovementType.Instantaneous;
             _grab.throwOnDetach = false;
             _grab.useDynamicAttach = true;
+            _grab.matchAttachRotation = true;
+            _grab.trackScale = false;
+            _grab.attachEaseInTime = 0f;
+        }
+
+        private void BuildRotationGraphics()
+        {
+            _axisHighlight = new GameObject("Rotation Axis Preview").transform;
+            _axisHighlight.SetParent(_visualRoot.transform, false);
+            _highlightLine = MakeLine(_axisHighlight, 0.009f);
+            _highlightLine.positionCount = 2;
+            var label = new GameObject("Selected Rotation Axis");
+            label.transform.SetParent(_axisHighlight, false);
+            _highlightLabel = label.AddComponent<TextMesh>();
+            _highlightLabel.anchor = TextAnchor.MiddleCenter;
+            _highlightLabel.characterSize = 0.018f;
+            _highlightLabel.fontSize = 48;
+            for (int i = 0; i < Axes.Length; i++)
+            {
+                var ring = new GameObject($"{"XYZ"[i]} Rotation Ring");
+                ring.transform.SetParent(_axisHighlight, false);
+                var line = _rings[i] = MakeLine(ring.transform, 0.005f);
+                line.loop = true;
+                line.positionCount = 48;
+                line.startColor = line.endColor = AxisColors[i];
+                Vector3 start = Axes[(i + 1) % 3] * RingRadius;
+                for (int point = 0; point < line.positionCount; point++)
+                    line.SetPosition(point, Quaternion.AngleAxis(360f * point / line.positionCount, Axes[i]) * start);
+            }
+        }
+
+        private LineRenderer MakeLine(Transform owner, float width)
+        {
+            var line = owner.gameObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.startWidth = line.endWidth = width;
+            line.sharedMaterial = _material;
+            return line;
         }
 
         private void MakeAxis(string axis, Vector3 direction, Color color)

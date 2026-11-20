@@ -74,7 +74,12 @@ Use the researcher panel on the headset or the keyboard shortcuts below on deskt
 - **Key `H` (or `[Hide]` button)**: Show / Hide the Researcher Control Panel.
 - **Next Compact / Next Room Layout**: Choose a physical configuration for the next scenario load/reset. These presets specify sizes and speeds in meters and meters/second; they do not resize the current scene or participant.
 - **Spawn Next Scenario Here**: Sets the next spawn center ahead of you. Load/reset to apply it.
-- **Reference controls**: The reference starts visible and locked at world zero. Unlock it, use Reference Ahead or drag the marker (desktop scroll adjusts depth; R rotates 90 degrees), then lock it again. XR users can grab the unlocked marker. Hide/Show changes only its graphics. Reference movement leaves all raw world coordinates and existing objects unchanged.
+
+### Calibration reference
+
+In **Setup**, the calibration section shows the marker's visibility and lock state. The marker starts visible and locked at world zero. **Unlock** enables pose controls. **Hide** removes the marker and prevents grabbing. An unlocked hidden marker can still be placed, stepped, or reset from the panel. **Pose details** shows world position in meters and orientation in degrees, including while locked.
+
+**Move** lets you drag the marker without changing its orientation. Desktop scroll adjusts drag depth. In **Rotate**, twist your hand while holding the marker in XR or drag a colored axis ring on desktop. Both rotate around the marker's origin. For exact steps, select **Local** or **World**, choose **X**, **Y**, or **Z**, then press **−90°** or **+90°**. The selected axis appears as a colored, labeled line. Local axes follow the marker orientation. World axes follow the scene. Locking ends a drag at the last applied pose.
 
 ---
 

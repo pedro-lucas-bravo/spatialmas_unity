@@ -186,7 +186,14 @@ namespace SpatialMAS.UI
         private bool _pendingToggleReferenceLocked;
         private bool _pendingPlaceReference;
         private bool _pendingResetReference;
-        private bool _pendingRotateReference;
+        private int _pendingReferenceDegrees;
+        private bool _pendingResetReferenceRotation;
+        private bool _showReferencePose;
+        private Vector2 _desktopHudScroll;
+        private TextMeshProUGUI _referenceHint, _referencePose, _referenceAxis, _referenceVisibility, _referenceLock;
+        private TextMeshProUGUI _referenceMode, _referenceSpace, _referenceDetails;
+        private readonly System.Collections.Generic.List<Button> _referenceEdits = new();
+        private GameObject _referenceRotationActions;
         private bool _pendingSetScenarioCenter;
         private int _pendingLayout = -1;
 
@@ -286,6 +293,7 @@ namespace SpatialMAS.UI
             }
             BuildRunTab(_tabPages[0].transform);
             BuildSetupTab(_tabPages[1].transform);
+            RefreshReferenceControls();
             BuildSessionTab(_tabPages[2].transform);
             SelectPanelTab(0);
 
@@ -333,17 +341,81 @@ namespace SpatialMAS.UI
             CreateWorldButton(page, "Next: Compact", new Rect(18, 257, 288, 48), () => _pendingLayout = 0);
             CreateWorldButton(page, "Next: Room Layout", new Rect(314, 257, 288, 48), () => _pendingLayout = 1);
             CreateWorldButton(page, "Spawn Next Scenario Here", new Rect(18, 313, 584, 48), () => _pendingSetScenarioCenter = true);
-            _calibrationStatus = CreatePanelLabel(page, "", new Rect(18, 380, 584, 31), 20, palette => palette.secondaryText);
-            CreateWorldButton(page, "Reference Show / Hide", new Rect(18, 419, 288, 48), () => _pendingToggleReferenceVisible = true);
-            CreateWorldButton(page, "Reference Lock / Unlock", new Rect(314, 419, 288, 48), () => _pendingToggleReferenceLocked = true);
-            CreateWorldButton(page, "Place Reference Ahead", new Rect(18, 475, 288, 48), () => _pendingPlaceReference = true);
-            CreateWorldButton(page, "Rotate Reference 90°", new Rect(314, 475, 288, 48), () => _pendingRotateReference = true);
-            CreateWorldButton(page, "Reset Reference Pose", new Rect(18, 531, 288, 48), () => _pendingResetReference = true);
-            _displayStatus = CreatePanelLabel(page, "", new Rect(18, 605, 584, 31), 20, palette => palette.secondaryText);
-            CreateWorldButton(page, "MR / VR", new Rect(18, 645, 288, 48), () => _pendingToggleDisplayMode = true);
-            CreateWorldButton(page, "Agent IDs", new Rect(314, 645, 288, 48), () => _pendingToggleAgentIds = true);
+            CreatePanelLabel(page, "Calibration reference", new Rect(18, 367, 584, 26), 22, palette => palette.primaryText);
+            _calibrationStatus = CreatePanelLabel(page, "", new Rect(18, 394, 584, 26), 19, palette => palette.secondaryText);
+            _referenceVisibility = ReferenceButton(page, "Reference Show / Hide", 18, 424, 184,
+                () => _pendingToggleReferenceVisible = true, false);
+            _referenceLock = ReferenceButton(page, "Reference Lock / Unlock", 216, 424, 184,
+                () => _pendingToggleReferenceLocked = true, false);
+            _referenceMode = ReferenceButton(page, "Reference Move / Rotate", 414, 424, 188,
+                () => _calibration?.SetManipulation(!_calibration.RotateMode, _calibration.WorldAxes, _calibration.RotationAxis));
+            _referenceHint = CreatePanelLabel(page, "", new Rect(18, 466, 584, 25), 18, palette => palette.secondaryText);
+            ReferenceButton(page, "Place Reference Ahead", 18, 494, 288, () => _pendingPlaceReference = true);
+            ReferenceButton(page, "Reset Reference Pose", 314, 494, 288, () => _pendingResetReference = true);
+            _referenceRotationActions = CreatePanelGroup(page, "Reference Rotation");
+            var rotation = _referenceRotationActions.transform;
+            _referenceAxis = CreatePanelLabel(rotation, "", new Rect(18, 537, 584, 25), 18, palette => palette.primaryText);
+            _referenceSpace = ReferenceButton(rotation, "Reference Axis Space", 18, 563, 125,
+                () => _calibration?.SetManipulation(true, !_calibration.WorldAxes, _calibration.RotationAxis));
+            for (int axis = 0; axis < 3; axis++)
+            {
+                int chosen = axis;
+                ReferenceButton(rotation, "XYZ"[axis].ToString(), 151 + 53 * axis, 563, 46,
+                    () => _calibration?.SetManipulation(true, _calibration.WorldAxes, chosen));
+            }
+            ReferenceButton(rotation, "−90°", 314, 563, 60, () => _pendingReferenceDegrees = -90);
+            ReferenceButton(rotation, "+90°", 380, 563, 60, () => _pendingReferenceDegrees = 90);
+            ReferenceButton(rotation, "Reset Rotation", 446, 563, 156, () => _pendingResetReferenceRotation = true);
+            _referenceDetails = ReferenceButton(page, "Pose details", 18, 606, 200,
+                () => _showReferencePose = !_showReferencePose, false);
+            _referencePose = CreatePanelLabel(page, "", new Rect(230, 605, 373, 70), 16, palette => palette.secondaryText);
+            _displayStatus = CreatePanelLabel(page, "", new Rect(18, 648, 208, 32), 15, palette => palette.secondaryText);
+            CreateWorldButton(page, "MR / VR", new Rect(230, 677, 180, 40), () => _pendingToggleDisplayMode = true);
+            CreateWorldButton(page, "Agent IDs", new Rect(422, 677, 180, 40), () => _pendingToggleAgentIds = true);
             BuildSecondaryActions(page);
         }
+
+        private TextMeshProUGUI ReferenceButton(Transform page, string name, float x, float y, float width,
+            UnityAction action, bool editsPose = true)
+        {
+            var button = CreateWorldButton(page, name, new Rect(x, y, width, 38), action);
+            if (editsPose)
+            {
+                _referenceEdits.Add(button);
+                button.gameObject.AddComponent<CanvasGroup>();
+            }
+            return button.GetComponentInChildren<TextMeshProUGUI>();
+        }
+
+        private void RefreshReferenceControls()
+        {
+            if (_calibrationStatus == null) return;
+            bool available = _calibration != null;
+            var state = available ? _calibration.Snapshot : default;
+            _calibrationStatus.text = available
+                ? $"{(state.Visible ? "Visible" : "Hidden")} · {(state.Locked ? "Locked" : "Unlocked")}"
+                : "Reference unavailable";
+            _referenceVisibility.text = state.Visible ? "Hide" : "Show";
+            _referenceLock.text = state.Locked ? "Unlock" : "Lock";
+            _referenceMode.text = available && _calibration.RotateMode ? "Mode: Rotate" : "Mode: Move";
+            _referenceHint.text = state.Locked ? "Unlock to edit the reference" :
+                available && !state.Visible ? "Show the marker to grab it" : "";
+            _referenceRotationActions.SetActive(available && (_calibration.RotateMode || state.Locked));
+            _referenceAxis.text = available ? $"Rotation axis: {_calibration.RotationAxisLabel}" : "";
+            _referenceSpace.text = available && _calibration.WorldAxes ? "World" : "Local";
+            _referenceDetails.text = _showReferencePose ? "Hide pose details" : "Pose details";
+            _referencePose.text = available && _showReferencePose ? ReferencePoseText(state) : "";
+            foreach (var button in _referenceEdits)
+            {
+                bool enabled = available && !state.Locked &&
+                    (!button.transform.IsChildOf(_referenceRotationActions.transform) || _calibration.RotateMode);
+                button.interactable = enabled;
+                button.GetComponent<CanvasGroup>().alpha = enabled ? 1f : 0.45f;
+            }
+        }
+
+        private static string ReferencePoseText(CalibrationSnapshot state)
+            => $"World position (m)  {state.Position:F3}\nWorld orientation (°)  {state.Rotation.eulerAngles:F1}";
 
         private void BuildSessionTab(Transform page)
         {
@@ -477,7 +549,9 @@ namespace SpatialMAS.UI
             _pendingCenterCamera = _pendingToggleFpsLook = false;
             _pendingToggleAgentIds = _pendingToggleRecording = false;
             _pendingToggleReferenceVisible = _pendingToggleReferenceLocked = false;
-            _pendingPlaceReference = _pendingResetReference = _pendingRotateReference = false;
+            _pendingPlaceReference = _pendingResetReference = false;
+            _pendingReferenceDegrees = 0;
+            _pendingResetReferenceRotation = false;
             _pendingSetScenarioCenter = false;
         }
 
@@ -903,7 +977,17 @@ namespace SpatialMAS.UI
             if (_pendingToggleReferenceLocked) { _pendingToggleReferenceLocked = false; if (_calibration != null) _bus?.SetCalibrationLocked(!_calibration.Locked); }
             if (_pendingPlaceReference) { _pendingPlaceReference = false; if (_calibration != null) _bus?.SetCalibrationPose(PositionAhead(), _calibration.Snapshot.Rotation); }
             if (_pendingResetReference) { _pendingResetReference = false; _bus?.SetCalibrationPose(Vector3.zero, Quaternion.identity); }
-            if (_pendingRotateReference) { _pendingRotateReference = false; if (_calibration != null) _bus?.SetCalibrationPose(_calibration.Snapshot.Position, Quaternion.AngleAxis(90f, Vector3.up) * _calibration.Snapshot.Rotation); }
+            if (_pendingReferenceDegrees != 0)
+            {
+                _calibration?.TryRotateStep(_pendingReferenceDegrees);
+                _pendingReferenceDegrees = 0;
+            }
+            if (_pendingResetReferenceRotation)
+            {
+                _pendingResetReferenceRotation = false;
+                _calibration?.TryResetRotation();
+            }
+            RefreshReferenceControls();
         }
 
         private void HandleKeyboardShortcuts()
@@ -982,8 +1066,6 @@ namespace SpatialMAS.UI
 
             _layoutStatus.text = _scenarioManager == null ? "Next load layout · unavailable" :
                 $"Active layout · {_scenarioManager.ActiveLayout}\nNext load layout · {_scenarioManager.NextLayout}";
-            _calibrationStatus.text = _calibration == null ? "Calibration reference · unavailable" :
-                $"Calibration reference · {(_calibration.Visible ? "Visible" : "Hidden")} / {(_calibration.Locked ? "Locked" : "Unlocked")}";
             _displayStatus.text = $"{_modeSwitcher?.DisplayStatus ?? "MR preview"}  ·  Agent IDs {(_agentManager?.ShowAgentIds == true ? "on" : "off")}";
             string session = _recorder?.SessionId;
             string sessionLabel = string.IsNullOrEmpty(session) ? "No recording session" :
@@ -1031,6 +1113,7 @@ namespace SpatialMAS.UI
                 GUILayout.EndArea();
                 return;
             }
+            _desktopHudScroll = GUILayout.BeginScrollView(_desktopHudScroll);
             GUILayout.BeginHorizontal();
             GUILayout.Label("<b>SpatialMAS Researcher Control Panel</b>");
             if (GUILayout.Button("Hide [H]", GUILayout.Width(70f)))
@@ -1099,18 +1182,39 @@ namespace SpatialMAS.UI
             if (_calibration != null)
             {
                 var state = _calibration.Snapshot;
-                GUILayout.Label($"Reference #{state.Revision}: {state.Position:F3} m | {(state.Locked ? "LOCKED" : "UNLOCKED (drag marker; R rotates)")}");
+                GUILayout.Label($"Calibration reference  ·  {(state.Visible ? "Visible" : "Hidden")}  ·  {(state.Locked ? "Locked" : "Unlocked")}");
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button(state.Visible ? "Hide Reference" : "Show Reference")) _pendingToggleReferenceVisible = true;
-                if (GUILayout.Button(state.Locked ? "Unlock Reference" : "Lock Reference")) _pendingToggleReferenceLocked = true;
+                if (GUILayout.Button(state.Visible ? "Hide" : "Show")) _pendingToggleReferenceVisible = true;
+                if (GUILayout.Button(state.Locked ? "Unlock" : "Lock")) _pendingToggleReferenceLocked = true;
+                if (GUILayout.Button(_showReferencePose ? "Hide pose details" : "Pose details")) _showReferencePose = !_showReferencePose;
                 GUILayout.EndHorizontal();
+                if (_showReferencePose) GUILayout.Label(ReferencePoseText(state));
+                if (state.Locked) GUILayout.Label("Unlock to edit the reference");
+                else if (!state.Visible) GUILayout.Label("Show the marker to grab it");
+                bool previousGui = GUI.enabled;
+                GUI.enabled = previousGui && !state.Locked;
                 GUILayout.BeginHorizontal();
-                GUI.enabled = !state.Locked;
-                if (GUILayout.Button("Reference Ahead")) _pendingPlaceReference = true;
-                if (GUILayout.Button("Rotate 90°")) _pendingRotateReference = true;
-                if (GUILayout.Button("Reset Reference")) _pendingResetReference = true;
-                GUI.enabled = true;
+                if (GUILayout.Button(_calibration.RotateMode ? "Mode: Rotate" : "Mode: Move"))
+                    _calibration.SetManipulation(!_calibration.RotateMode, _calibration.WorldAxes, _calibration.RotationAxis);
+                if (GUILayout.Button("Place ahead")) _pendingPlaceReference = true;
+                if (GUILayout.Button("Reset pose")) _pendingResetReference = true;
                 GUILayout.EndHorizontal();
+                if (_calibration.RotateMode || state.Locked)
+                {
+                    GUILayout.Label($"Rotation axis: {_calibration.RotationAxisLabel}");
+                    GUILayout.BeginHorizontal();
+                    GUI.enabled = previousGui && !state.Locked && _calibration.RotateMode;
+                    if (GUILayout.Button(_calibration.WorldAxes ? "World" : "Local"))
+                        _calibration.SetManipulation(true, !_calibration.WorldAxes, _calibration.RotationAxis);
+                    for (int axis = 0; axis < 3; axis++)
+                        if (GUILayout.Button("XYZ"[axis].ToString()))
+                            _calibration.SetManipulation(true, _calibration.WorldAxes, axis);
+                    if (GUILayout.Button("−90°")) _pendingReferenceDegrees = -90;
+                    if (GUILayout.Button("+90°")) _pendingReferenceDegrees = 90;
+                    if (GUILayout.Button("Reset Rotation")) _pendingResetReferenceRotation = true;
+                    GUILayout.EndHorizontal();
+                }
+                GUI.enabled = previousGui;
             }
 
             // Row 4: Built-In Scenarios (0..5)
@@ -1143,6 +1247,7 @@ namespace SpatialMAS.UI
             GUILayout.EndHorizontal();
 
             GUILayout.Label("<i>Navigation: WASD/Arrows + E/Q Move (Shift=Fast) | Hold RMB or [F] Look | MMB Pan | Scroll Zoom | LMB Drag Cubes (Alt+LMB Any)</i>");
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
 

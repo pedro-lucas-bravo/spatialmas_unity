@@ -42,6 +42,12 @@ namespace SpatialMAS.XR
         private AgentEntity _hoveredAgent;
         private AgentEntity _grabbedAgent;
         private SpatialCalibrationReference _grabbedReference;
+        private SpatialCalibrationReference _calibrationReference;
+        private int _referenceManipulationRevision;
+        private Vector3 _ringAxis, _ringStart;
+        private Quaternion _ringRotation;
+
+        public void SetCalibrationReference(SpatialCalibrationReference reference) => _calibrationReference = reference;
         private BoundaryHandle _grabbedBoundaryHandle;
         private int _leftPressedAgentId = -1;
         private int _rightPressedAgentId = -1;
@@ -258,6 +264,7 @@ namespace SpatialMAS.XR
         {
             if (_camera == null) _camera = Camera.main;
             UpdateDesktopView();
+            if (_calibrationReference != null) _calibrationReference.SetDesktopRings(IsDesktop);
             if (_camera == null || !IsDesktop) return;
 
             var mouse = Mouse.current;
@@ -704,12 +711,24 @@ namespace SpatialMAS.XR
                     var hit = _agentHits[i];
                     if (hit.distance >= distance) continue;
                     var candidate = hit.collider.GetComponentInParent<SpatialCalibrationReference>();
+                    if (candidate != null && candidate.RotateMode) continue;
                     var handle = hit.collider.GetComponentInParent<BoundaryHandle>();
                     if ((candidate == null || !candidate.CanManipulate) && (handle == null || !handle.isActiveAndEnabled)) continue;
                     nearestReference = candidate;
                     nearestHandle = handle;
                     distance = hit.distance;
                     hitPoint = hit.point;
+                }
+                Vector3 ringAxis = Vector3.zero, ringStart = Vector3.zero;
+                if (_calibrationReference != null && _calibrationReference.TryPickRing(ray,
+                        out Vector3 axis, out Vector3 radial, out float ringDistance) && ringDistance < distance)
+                {
+                    nearestReference = _calibrationReference;
+                    nearestHandle = null;
+                    ringAxis = axis;
+                    ringStart = radial;
+                    distance = ringDistance;
+                    hitPoint = ray.GetPoint(distance);
                 }
                 if ((nearestReference != null || nearestHandle != null) &&
                     (!TryRaycastAgent(ray, out _, out Vector3 agentPoint) || Vector3.Distance(ray.origin, agentPoint) >= distance))
@@ -727,6 +746,13 @@ namespace SpatialMAS.XR
                             nearestHandle.Shape == BoundaryHandleShape.Cube,
                             exactBounds: nearestHandle.Shape == BoundaryHandleShape.Diamond)) return true;
                     _grabbedReference = nearestReference;
+                    if (nearestReference != null)
+                    {
+                        _referenceManipulationRevision = nearestReference.ManipulationRevision;
+                        _ringAxis = ringAxis;
+                        _ringStart = ringStart;
+                        _ringRotation = nearestReference.Snapshot.Rotation;
+                    }
                     _grabbedBoundaryHandle = nearestHandle;
                     _grabDepthMeters = Mathf.Max(0.01f, Vector3.Dot(hitPoint - _camera.transform.position, _camera.transform.forward));
                     if (_capturedFace.Target == null)
@@ -736,11 +762,26 @@ namespace SpatialMAS.XR
                 }
             }
             if (_grabbedReference == null && _grabbedBoundaryHandle == null) return false;
-            if (!mouse.leftButton.isPressed || (_grabbedReference != null && !_grabbedReference.CanManipulate) ||
+            if (!mouse.leftButton.isPressed || (_grabbedReference != null && (!_grabbedReference.CanManipulate ||
+                _referenceManipulationRevision != _grabbedReference.ManipulationRevision)) ||
                 (_grabbedBoundaryHandle != null && !_grabbedBoundaryHandle.isActiveAndEnabled))
             {
                 _grabbedReference = null;
                 _grabbedBoundaryHandle = null;
+                return true;
+            }
+            if (_grabbedReference != null && _grabbedReference.RotateMode)
+            {
+                Vector3 center = _grabbedReference.Snapshot.Position;
+                if (new Plane(_ringAxis, center).Raycast(ray, out float ringHit))
+                {
+                    Vector3 radial = ray.GetPoint(ringHit) - center;
+                    if (radial.sqrMagnitude > 0.0001f)
+                    {
+                        float degrees = Vector3.SignedAngle(_ringStart, radial, _ringAxis);
+                        _grabbedReference.TrySetPose(center, Quaternion.AngleAxis(degrees, _ringAxis) * _ringRotation);
+                    }
+                }
                 return true;
             }
             if (_grabbedBoundaryHandle != null && _capturedFace.Target != null)
@@ -756,11 +797,7 @@ namespace SpatialMAS.XR
             if (_grabbedBoundaryHandle != null)
                 _grabbedBoundaryHandle.MoveByUser(position);
             else
-            {
-                Quaternion rotation = _grabbedReference.Snapshot.Rotation;
-                if (keyboard != null && keyboard[Key.R].wasPressedThisFrame) rotation *= Quaternion.Euler(0f, 90f, 0f);
-                _grabbedReference.TrySetPose(position, rotation);
-            }
+                _grabbedReference.TrySetPose(position, _grabbedReference.Snapshot.Rotation);
             return true;
         }
 
